@@ -257,7 +257,10 @@ describe('nextStep()', () => {
       expect(nextStep(borrow({}, { native: true, amount: ETH(1) }))).toEqual({ step: 'delegate', amount: ETH(1) });
       expect(nextStep(borrow({}, { native: true, amount: ETH(1), allowance: ETH(1) - 1n }))).toEqual({ step: 'delegate', amount: ETH(1) });
       expect(nextStep(borrow({}, { native: true, amount: ETH(1), allowance: ETH(1) }))).toEqual({ step: 'borrow' });
-      expect(nextStep(borrow({}, { native: true, amount: ETH(1), approvalMode: 'unlimited' }))).toEqual({ step: 'delegate', amount: maxUint256 });
+    });
+
+    it('always delegates the exact borrow amount, even in unlimited mode (open delegation = anyone could borrow on your behalf)', () => {
+      expect(nextStep(borrow({}, { native: true, amount: ETH(1), approvalMode: 'unlimited' }))).toEqual({ step: 'delegate', amount: ETH(1) });
     });
 
     it('asks for the delegation only after the risk checks', () => {

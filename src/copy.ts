@@ -230,14 +230,13 @@ export const GRANT = {
   },
   delegation: {
     cta: (_symbol: string, action: string) => `Izinkan gateway berutang, lalu ${action}`,
-    title: (amount: string, _symbol: string, unlimited: boolean) =>
-      unlimited ? 'Izinkan gateway berutang atas nama Anda (tanpa batas)' : `Izinkan gateway berutang ${amount} ETH atas nama Anda`,
-    detail: (amount: string, _symbol: string, unlimited: boolean) =>
-      `Credit delegation: Aave meminjamkan WETH ke gateway resmi Aave, tetapi utangnya dicatat atas nama Anda. Gateway membukanya jadi ETH lalu mengirimkannya ke wallet Anda. Izin ini membolehkan gateway berutang ${unlimited ? 'berapa pun' : `paling banyak ${amount} ETH`} atas nama Anda. Ada biaya jaringan.`,
+    title: (amount: string) => `Izinkan gateway berutang ${amount} ETH atas nama Anda`,
+    detail: (amount: string) =>
+      `Credit delegation: Aave meminjamkan WETH ke gateway resmi Aave, tetapi utangnya dicatat atas nama Anda. Gateway membukanya jadi ETH lalu mengirimkannya ke wallet Anda. Izin ini membolehkan gateway berutang paling banyak ${amount} ETH atas nama Anda. Ada biaya jaringan.`,
     legend: () => 'Izin berutang ETH untuk Aave WrappedTokenGateway',
-    exactNote: (amount: string) => `Hanya ${amount} ETH, habis terpakai oleh borrow ini. Borrow ETH berikutnya perlu izin lagi.`,
-    unlimitedWarning: () =>
-      'Gateway boleh berutang ETH berapa pun atas nama Anda, tanpa batas waktu. Gateway hanya meminjam untuk wallet yang memanggilnya, tetapi izin terbuka tetap risiko kalau kontraknya bermasalah.',
+    exactNote: (amount: string) => `Tepat ${amount} ETH. Izin ini habis terpakai otomatis setelah pinjam; borrow ETH berikutnya minta izin lagi.`,
+    // Tanpa pilihan Unlimited: delegation terbuka = pihak lain bisa berutang atas nama Anda (keputusan tiket 07).
+    unlimitedWarning: null,
     // Credit delegation bukan allowance ERC20 biasa; revoke.cash belum tentu menampilkannya.
     revocable: false,
   },

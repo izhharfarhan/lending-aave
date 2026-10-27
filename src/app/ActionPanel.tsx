@@ -498,24 +498,28 @@ function ApprovalSettings(props: {
   chainId: number;
 }) {
   const text = GRANT[props.kind];
+  // Delegation nggak punya pilihan Unlimited (selalu exact, keputusan tiket 07).
+  const warning = text.unlimitedWarning;
   return (
     <fieldset className="flex flex-col gap-2.5 rounded-md border border-line p-4 text-sm">
       <legend className="px-1 text-xs text-muted">{text.legend(props.symbol)}</legend>
-      <div role="radiogroup" aria-label={APPROVAL.ariaMode} className="flex w-fit gap-1 rounded-md bg-raised p-1">
-        {(['exact', 'unlimited'] as const).map((mode) => (
-          <label
-            key={mode}
-            className={`cursor-pointer rounded px-3 py-1 text-xs font-medium ${props.mode === mode ? 'bg-panel-hover text-ink' : 'text-muted'}`}
-          >
-            <input type="radio" className="sr-only" name="approvalMode" checked={props.mode === mode} onChange={() => props.onChange(mode)} />
-            {mode === 'exact' ? APPROVAL.exact : APPROVAL.unlimited}
-          </label>
-        ))}
-      </div>
-      {props.mode === 'exact' ? (
-        <p className="text-xs text-muted">{text.exactNote(props.amount || '…', props.symbol)}</p>
+      {warning && (
+        <div role="radiogroup" aria-label={APPROVAL.ariaMode} className="flex w-fit gap-1 rounded-md bg-raised p-1">
+          {(['exact', 'unlimited'] as const).map((mode) => (
+            <label
+              key={mode}
+              className={`cursor-pointer rounded px-3 py-1 text-xs font-medium ${props.mode === mode ? 'bg-panel-hover text-ink' : 'text-muted'}`}
+            >
+              <input type="radio" className="sr-only" name="approvalMode" checked={props.mode === mode} onChange={() => props.onChange(mode)} />
+              {mode === 'exact' ? APPROVAL.exact : APPROVAL.unlimited}
+            </label>
+          ))}
+        </div>
+      )}
+      {warning && props.mode === 'unlimited' ? (
+        <p className="rounded-md bg-warn-soft px-3 py-2 text-xs text-warn">{warning(props.symbol)}</p>
       ) : (
-        <p className="rounded-md bg-warn-soft px-3 py-2 text-xs text-warn">{text.unlimitedWarning(props.symbol)}</p>
+        <p className="text-xs text-muted">{text.exactNote(props.amount || '…', props.symbol)}</p>
       )}
       {props.owner && text.revocable && (
         <a

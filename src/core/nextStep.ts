@@ -117,7 +117,8 @@ export function nextStep(input: NextStepInput): NextStep {
   if (action.action === 'borrow') {
     const risk = riskStep(action);
     if (risk) return risk;
-    if (input.native && allowance < amount) return { step: 'delegate', amount: permitAmount(input, amount) };
+    // Delegation selalu exact, abaikan approvalMode: delegation terbuka = pihak lain bisa berutang atas nama user.
+    if (input.native && allowance < amount) return { step: 'delegate', amount };
     return { step: 'borrow' };
   }
   if (action.action === 'withdraw') {
