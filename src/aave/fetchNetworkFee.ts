@@ -6,6 +6,13 @@ import { isOpStack, networkFee, plannedGas, typicalActionFee } from '@/core/netw
 import type { PanelTx } from '@/core/panel';
 import { plannedSteps, requestFor, type WalletStep } from './poolTx';
 
+export type FeeEstimate = {
+  /** Total semua transaksi yang tersisa, wei: gas × (baseFee + priority fee) + L1 fee. */
+  wei: bigint;
+  /** Bagian L1 fee (OP Stack / Base) dari `wei`; 0 di chain lain. */
+  l1Fee: bigint;
+};
+
 // DECISIONS.md Q10 (pola Q12 swap-web): semua bacaan on-chain untuk biaya jaringan, hitungannya di `core/networkFee`.
 // Langkah pertama diestimasi atas calldata asli (estimasi polos, tanpa margin gas limit); langkah sesudahnya pakai
 // `STEP_GAS`, karena transaksi utama revert di estimateGas selama izinnya belum ada. OP Stack (Base) dikenali dari
@@ -13,7 +20,7 @@ import { plannedSteps, requestFor, type WalletStep } from './poolTx';
 export async function fetchNetworkFee(
   client: PublicClient,
   args: { chainId: number; contracts: AaveContracts; account: Address; asset: Address; step: WalletStep; plan: PanelTx },
-): Promise<bigint> {
+): Promise<FeeEstimate> {
   const { chainId, account, step, plan } = args;
   const ctx = { contracts: args.contracts, asset: args.asset, user: account, plan };
   const steps = plannedSteps(step, plan.main);
@@ -37,12 +44,13 @@ export async function fetchNetworkFee(
   if (block.baseFeePerGas === null) throw new Error(`Chain ${chainId} belum EIP-1559 (blok tanpa baseFee)`);
 
   const gas = plannedGas(steps, firstGas);
-  return networkFee({
+  const wei = networkFee({
     chainId,
     txs: gas.map((g, i) => (l1Fees ? { gas: g, l1Fee: l1Fees[i] } : { gas: g })),
     baseFeePerGas: block.baseFeePerGas,
     maxPriorityFeePerGas,
   });
+  return { wei, l1Fee: l1Fees?.reduce((sum, fee) => sum + fee, 0n) ?? 0n };
 }
 
 /** Badge kartu chain (Q10): perkiraan kasar biaya satu aksi Aave dari gasPrice chain itu saat ini, wei. */

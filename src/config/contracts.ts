@@ -1,8 +1,8 @@
-import { AaveV3Ethereum } from '@bgd-labs/aave-address-book';
 import type { Address } from 'viem';
 
-// Semua alamat Aave dari @bgd-labs/aave-address-book (DECISIONS.md Q9, V6); mode fork = alamat mainnet.
-// Jangan ditulis tangan: tanda "alamat resmi Aave" di UI bersandar pada sumber ini.
+import { SUPPORTED_CHAINS } from './chains';
+
+// Alamat Aave per chain; sumbernya entri `SUPPORTED_CHAINS` (address-book, DECISIONS.md Q9, V6).
 export type AaveContracts = {
   pool: Address;
   /** Argumen `provider` untuk semua fungsi UiPoolDataProviderV3. */
@@ -17,15 +17,4 @@ export type AaveContracts = {
   aclAdmin: Address;
 };
 
-export const AAVE: Record<number, AaveContracts> = {
-  1: {
-    pool: AaveV3Ethereum.POOL,
-    poolAddressesProvider: AaveV3Ethereum.POOL_ADDRESSES_PROVIDER,
-    wrappedTokenGateway: AaveV3Ethereum.WETH_GATEWAY,
-    aWeth: AaveV3Ethereum.ASSETS.WETH.A_TOKEN,
-    variableDebtWeth: AaveV3Ethereum.ASSETS.WETH.V_TOKEN,
-    uiPoolDataProvider: AaveV3Ethereum.UI_POOL_DATA_PROVIDER,
-    oracle: AaveV3Ethereum.ORACLE,
-    aclAdmin: AaveV3Ethereum.ACL_ADMIN,
-  },
-};
+export const AAVE: Record<number, AaveContracts> = Object.fromEntries(SUPPORTED_CHAINS.map((c) => [c.chainId, c.aave]));

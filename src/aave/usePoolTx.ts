@@ -8,7 +8,8 @@ import type { LocalTxEntry } from '@/core/localHistory';
 import type { PanelTx } from '@/core/panel';
 import { aaveErrorName, walletErrorKind, type WalletErrorKind } from '@/core/walletError';
 import { gasLimitFor } from './gasLimit';
-import { isWalletStep, plannedSteps, requestFor, type WalletStep } from './poolTx';
+import { isWalletStep } from '@/core/nextStep';
+import { plannedSteps, requestFor, type WalletStep } from './poolTx';
 import { useAddLocalHistory } from './useLocalHistory';
 
 /** Hash tiap langkah yang sudah terkirim, untuk tautan explorer per langkah. */

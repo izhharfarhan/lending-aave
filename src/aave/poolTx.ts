@@ -107,17 +107,6 @@ export function requestFor(step: Extract<NextStep, { step: WalletStepName }>, ct
 
 export type WalletStep = Extract<NextStep, { step: WalletStepName }>;
 
-const WALLET_STEPS: ReadonlySet<string> = new Set<WalletStepName>([
-  'resetApproval',
-  'approve',
-  'delegate',
-  'supply',
-  'withdraw',
-  'borrow',
-  'repay',
-  'setCollateral',
-]);
-export const isWalletStep = (step: NextStep): step is WalletStep => WALLET_STEPS.has(step.step);
 
 // Langkah yang akan diminta wallet, diturunkan dari langkah sekarang (bukan diingat UI).
 export function plannedSteps(step: WalletStep, main: MainStep): WalletStepName[] {

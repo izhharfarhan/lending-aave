@@ -42,6 +42,8 @@ const evaluate = (label: string | ChainRead, input: Partial<PanelInput>) => {
     riskChecked: false,
     riskTyped: false,
     networkFee: null,
+    chainId: 1,
+    walletChainId: 1,
     ...input,
   });
 };

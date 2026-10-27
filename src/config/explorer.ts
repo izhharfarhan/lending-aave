@@ -1,14 +1,8 @@
 import type { Address, Hash } from 'viem';
 
-const EXPLORERS: Record<number, string> = {
-  1: 'https://etherscan.io',
-};
+import { supportedChain } from './chains';
 
-function explorerBase(chainId: number): string {
-  const base = EXPLORERS[chainId];
-  if (!base) throw new Error(`Explorer chain ${chainId} belum didaftarkan`);
-  return base;
-}
+const explorerBase = (chainId: number): string => supportedChain(chainId).explorer;
 
 // Alamat kontrak: mode fork pakai alamat mainnet (Q9), jadi tautannya tetap bisa dicocokkan user di explorer publik.
 export function explorerAddressUrl(chainId: number, address: Address): string {

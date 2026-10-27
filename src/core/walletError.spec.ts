@@ -1,4 +1,4 @@
-import { aaveErrorName, walletErrorKind } from './walletError';
+import { aaveErrorName, switchChainErrorKind, walletErrorKind } from './walletError';
 
 // Bentuk error kayak dari wagmi/viem: dibungkus berlapis, aslinya ada di `cause`.
 const wrapped = (inner: object) => Object.assign(new Error('Request failed'), { name: 'TransactionExecutionError', cause: inner });
@@ -56,3 +56,14 @@ describe('aaveErrorName()', () => {
     });
   });
 });
+
+describe('switchChainErrorKind()', () => {
+  it('tells a rejected network switch from one the wallet could not do', () => {
+    expect(switchChainErrorKind(wrapped({ name: 'UserRejectedRequestError' }))).toBe('rejected');
+    expect(switchChainErrorKind(wrapped({ name: 'RpcRequestError', code: 4001 }))).toBe('rejected');
+    // Mis. wallet belum kenal chain itu (4902) atau connector nggak mendukung ganti network.
+    expect(switchChainErrorKind(wrapped({ name: 'SwitchChainError', code: 4902 }))).toBe('failed');
+    expect(switchChainErrorKind(new Error('boom'))).toBe('failed');
+  });
+});
+

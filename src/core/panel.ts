@@ -40,7 +40,7 @@ export type PanelAsset =
 
 type AssetOf<T extends PanelTab> = Extract<PanelAsset, { tab: T }>;
 
-export type PanelInput = Pick<NextStepInput, 'connected' | 'txLocked' | 'txRunning' | 'approvalMode'> & {
+export type PanelInput = Pick<NextStepInput, 'connected' | 'txLocked' | 'txRunning' | 'approvalMode' | 'chainId' | 'walletChainId'> & {
   tab: PanelTab;
   asset: Address;
   /** `null` = input kosong atau bukan jumlah yang valid. */
@@ -275,6 +275,8 @@ export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: White
     txRunning: input.txRunning,
     amount: input.amount,
     approvalMode: input.approvalMode,
+    chainId: input.chainId,
+    walletChainId: input.walletChainId,
     ethBalance,
     networkFee: input.networkFee,
     capacity: capacityOf(read, input.asset),
@@ -282,7 +284,8 @@ export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: White
   // Cek biaya dinetralkan: ETH yang kurang nggak mengubah transaksi apa saja yang tersisa.
   const withGasCheck = (stepInput: NextStepInput) => ({
     step: nextStep(stepInput),
-    stepBeforeGasCheck: nextStep({ ...stepInput, ethBalance: maxUint256, networkFee: null }),
+    // Network wallet juga dinetralkan: biaya dihitung di chain terpilih, sebelum wallet pindah ke sana.
+    stepBeforeGasCheck: nextStep({ ...stepInput, ethBalance: maxUint256, networkFee: null, walletChainId: stepInput.chainId }),
     ethBalance,
   });
   // Aset hilang dari tab (mis. utang sudah lunas): panel cuma menampilkan pesan kosong tanpa tombol utama, jadi yang

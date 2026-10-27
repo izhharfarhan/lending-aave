@@ -73,6 +73,10 @@ export type NextStepInput = {
   networkFee: bigint | null;
   /** Sisa kapasitas pool reserve ini (Q27): supply cap, borrow cap, likuiditas. */
   capacity: Capacity;
+  /** Chain terpilih (`?chain=`, Q5). */
+  chainId: number;
+  /** Network wallet saat ini; `undefined` = network yang nggak dikenal app. */
+  walletChainId: number | undefined;
 };
 
 export type NextStep =
@@ -100,6 +104,8 @@ export type NextStep =
   /** Melewati kapasitas pool (Q27): "Kuota supply/pinjaman aset ini penuh" / "Likuiditas pool tidak cukup, tersedia X". */
   | { step: 'overCapacity'; limit: keyof Capacity; available: bigint }
   | { step: 'confirmRisk'; gate: 'check' | 'type' }
+  /** Wallet di network lain: "Ganti ke <chain>" (`switchChain`, bisa ditolak) sebelum langkah wallet pertama. */
+  | { step: 'switchChain'; chainId: number }
   /** `approve(Pool, 0)` dulu: approve langsung bakal revert selama izin lama ≠ 0. */
   | { step: 'resetApproval' }
   | { step: 'approve'; amount: bigint }
@@ -111,10 +117,30 @@ export type NextStep =
   | { step: 'repay' }
   | { step: 'setCollateral' };
 
+const WALLET_STEP_NAMES: ReadonlySet<NextStep['step']> = new Set<WalletStepName>([
+  'resetApproval',
+  'approve',
+  'delegate',
+  'supply',
+  'withdraw',
+  'borrow',
+  'repay',
+  'setCollateral',
+]);
+/** Langkah yang dikirim ke wallet (bukan tombol yang cuma mengunci / mengarahkan). */
+export const isWalletStep = (step: NextStep): step is Extract<NextStep, { step: WalletStepName }> => WALLET_STEP_NAMES.has(step.step);
+
 // Tombol utama dan langkah wallet berikutnya, dihitung dari state on-chain, bukan dari "langkah ke berapa" yang
 // diingat UI (pola swap-web Q6). Urutan prioritas: spec "nextStep". Error wallet terakhir ditampilkan panel lewat
 // status tx, jadi nggak ikut di sini.
 export function nextStep(input: NextStepInput): NextStep {
+  const step = stepOnSelectedChain(input);
+  // Q5/spec #12: ganti network baru diminta tepat sebelum permintaan wallet pertama, sesudah semua cek lain lolos.
+  if (isWalletStep(step) && input.walletChainId !== input.chainId) return { step: 'switchChain', chainId: input.chainId };
+  return step;
+}
+
+function stepOnSelectedChain(input: NextStepInput): NextStep {
   if (!input.connected) return { step: 'connect' };
   if (input.data === 'loading') return { step: 'loading' };
   if (input.data === 'error') return { step: 'loadFailed' };

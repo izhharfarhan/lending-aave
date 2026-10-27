@@ -9,7 +9,7 @@ import { fundErc20 } from '../../test/fork/fund';
 import { contracts, panelState, read, runLikeTheApp, whitelist } from '../../test/fork/likeTheApp';
 import { units, USDC, WETH } from '../../test/fork/position';
 import { fetchNetworkFee, fetchTypicalActionFee } from './fetchNetworkFee';
-import { isWalletStep } from './poolTx';
+import { isWalletStep } from '@/core/nextStep';
 
 const confirmed = { riskChecked: true, riskTyped: true };
 
@@ -19,7 +19,10 @@ async function appFee(tab: PanelTab, asset: typeof USDC, amount: bigint) {
   const row = panelAssets(buildChainView(await read(), whitelist), tab).find((r) => r.asset === asset)!;
   const step = state.stepBeforeGasCheck;
   if (!isWalletStep(step)) throw new Error(`Bukan langkah wallet: ${step.step}`);
-  return fetchNetworkFee(publicClient, { chainId: 1, contracts, account: TEST_ACCOUNT, asset, step, plan: panelTx(row, state, amount) });
+  const fee = await fetchNetworkFee(publicClient, { chainId: 1, contracts, account: TEST_ACCOUNT, asset, step, plan: panelTx(row, state, amount) });
+  // Ethereum: tanpa L1 fee terpisah.
+  expect(fee.l1Fee).toBe(0n);
+  return fee.wei;
 }
 
 describe('Biaya jaringan (fork Ethereum)', () => {

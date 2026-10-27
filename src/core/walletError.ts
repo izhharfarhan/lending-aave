@@ -16,6 +16,14 @@ export function walletErrorKind(error: unknown): WalletErrorKind {
   return 'failed';
 }
 
+/**
+ * Ganti network (langkah "Ganti ke <chain>"): ditolak user, atau wallet nggak bisa pindah (chain belum dikenal wallet,
+ * connector tanpa dukungan ganti network). Network wallet tetap yang lama di dua-duanya.
+ */
+export function switchChainErrorKind(error: unknown): Extract<WalletErrorKind, 'rejected' | 'failed'> {
+  return walletErrorKind(error) === 'rejected' ? 'rejected' : 'failed';
+}
+
 // Nama custom error Aave (Errors.sol v3.7, mis. `SupplyCapExceeded`) dari revert yang sudah di-decode viem lewat ABI
 // Pool. `undefined` = bukan revert kontrak, atau error-nya nggak ada di ABI.
 export function aaveErrorName(error: unknown): string | undefined {

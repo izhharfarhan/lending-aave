@@ -25,6 +25,8 @@ const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
   networkFee: null,
   // Pool tanpa cap dan likuiditasnya berlimpah, kecuali test kapasitas.
   capacity: NO_CAPACITY_LIMIT,
+  chainId: 1,
+  walletChainId: 1,
   action: { action: 'supply' },
   ...overrides,
 });
@@ -375,6 +377,32 @@ describe('nextStep()', () => {
       expect(nextStep(repay(undefined, { capacity: full }))).toEqual({ step: 'approve', amount: USDC(100) });
       const toggle: NextStepInput['action'] = { action: 'collateral', enable: false, canEnable: true, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false };
       expect(nextStep(input({ amount: null, action: toggle, capacity: full }))).toEqual({ step: 'setCollateral' });
+    });
+  });
+
+  describe('ganti network', () => {
+    const elsewhere = { chainId: 8453, walletChainId: 1 };
+
+    it('asks to switch the wallet to the selected chain right before the first wallet request', () => {
+      expect(nextStep(input(elsewhere))).toEqual({ step: 'switchChain', chainId: 8453 });
+      expect(nextStep(input({ ...elsewhere, allowance: USDC(100) }))).toEqual({ step: 'switchChain', chainId: 8453 });
+      expect(nextStep(borrow({ gate: 'none' }, elsewhere))).toEqual({ step: 'switchChain', chainId: 8453 });
+    });
+
+    it('treats a wallet on an unknown network the same way', () => {
+      expect(nextStep(input({ chainId: 42161, walletChainId: undefined }))).toEqual({ step: 'switchChain', chainId: 42161 });
+    });
+
+    it('only after the amount, balance, gas and risk checks: switching network is pointless when nothing can be sent', () => {
+      expect(nextStep(input({ ...elsewhere, amount: null }))).toEqual({ step: 'enterAmount' });
+      expect(nextStep(input({ ...elsewhere, amount: USDC(600) }))).toEqual({ step: 'insufficientBalance' });
+      expect(nextStep(borrow({ gate: 'check' }, elsewhere))).toEqual({ step: 'confirmRisk', gate: 'check' });
+      expect(nextStep(input({ ...elsewhere, ethBalance: 0n }))).toEqual({ step: 'needsEthForGas', needed: null });
+    });
+
+    it('covers the collateral toggle too', () => {
+      const toggle: NextStepInput['action'] = { action: 'collateral', enable: true, canEnable: true, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false };
+      expect(nextStep(input({ ...elsewhere, amount: null, action: toggle }))).toEqual({ step: 'switchChain', chainId: 8453 });
     });
   });
 });

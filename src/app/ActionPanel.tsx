@@ -4,10 +4,10 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatUnits, maxUint256, type Address, type Hash } from 'viem';
-import { useAccount } from 'wagmi';
+import { useAccount, useSwitchChain } from 'wagmi';
 
 import { useNetworkFee } from '@/aave/useNetworkFee';
-import { isWalletStep, plannedSteps } from '@/aave/poolTx';
+import { plannedSteps } from '@/aave/poolTx';
 import { usePoolTx, type TxState } from '@/aave/usePoolTx';
 import { IS_FORK } from '@/config/appMode';
 import { WHITELIST } from '@/config/assets';
@@ -15,11 +15,12 @@ import { chainName, minGasReserve } from '@/config/chains';
 import { AAVE, type AaveContracts } from '@/config/contracts';
 import { explorerAddressUrl, explorerTxUrl, revokeCashUrl } from '@/config/explorer';
 import type { ChainRead, ChainView, SupplyRow } from '@/core/chainPosition';
-import type { NextStep, NextStepInput, WalletStepName } from '@/core/nextStep';
+import { isWalletStep, type NextStep, type NextStepInput, type WalletStepName } from '@/core/nextStep';
 import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelMax, panelTx, routeOf, type PanelAsset, type PanelTab, type Route } from '@/core/panel';
 import { parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
-import { APPROVAL, CTA, GAS, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
+import { APPROVAL, CHAIN_PICKER, CTA, GAS, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
+import { switchChainErrorKind, type WalletErrorKind } from '@/core/walletError';
 import { useForkGuard } from '@/wallet/useForkGuard';
 import { hf, pct, tokenAmount, usd } from './format';
 import { HealthFactor } from './HealthFactor';
@@ -81,7 +82,11 @@ type Props = {
 // (dari switch di "Supply Anda"). Panel cuma dirender sesudah data posisi siap (sebelumnya skeleton / "gagal dimuat"),
 // jadi `data` selalu `ready` di sini.
 export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Props) {
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chainId: walletChainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  // Penolakan / kegagalan ganti network terakhir; dibuang begitu wallet pindah atau user mencoba lagi.
+  const [switchError, setSwitchError] = useState<Extract<WalletErrorKind, 'rejected' | 'failed'> | null>(null);
+  useEffect(() => setSwitchError(null), [walletChainId]);
   const { openConnectModal } = useConnectModal();
   const guard = useForkGuard(chainId);
   const whitelist = WHITELIST[chainId];
@@ -113,6 +118,8 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       riskChecked,
       riskTyped: riskTyped.trim().toLowerCase() === RISK_CONFIRM.word,
       networkFee,
+      chainId,
+      walletChainId,
     });
 
   // Biaya jaringan dihitung dari langkah yang tersisa kalau ETH dianggap cukup (`stepBeforeGasCheck` nggak bergantung
@@ -344,6 +351,11 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
               </span>
             </p>
           )}
+          {step.step === 'switchChain' && switchError && (
+            <p role="alert" className="rounded-md bg-warn-soft px-4 py-3 text-sm text-warn">
+              {(switchError === 'rejected' ? CHAIN_PICKER.switchRejected : CHAIN_PICKER.switchFailed)(chainName(step.chainId))}
+            </p>
+          )}
           {step.step === 'needsEthForGas' && (
             <p className="rounded-md bg-warn-soft px-4 py-3 text-sm text-warn">
               {step.needed === null ? GAS.empty(chainName(chainId)) : GAS.needed(tokenAmount(step.needed, ETH_DECIMALS), tokenAmount(state.ethBalance, ETH_DECIMALS))}{' '}
@@ -374,6 +386,10 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
           onClick={() => {
             if (step.step === 'connect') openConnectModal?.();
             else if (step.step === 'needCollateral') onSelect('supply');
+            else if (step.step === 'switchChain') {
+              setSwitchError(null);
+              switchChainAsync({ chainId: step.chainId }).catch((error: unknown) => setSwitchError(switchChainErrorKind(error)));
+            }
             else if (isWalletStep(step)) void poolTx.run(step);
           }}
         >
@@ -414,6 +430,8 @@ function ctaFor(step: NextStep, tab: PanelTab, c: StepCopy): { label: string; en
       return { label: CTA.connect, enabled: true };
     case 'needCollateral':
       return { label: CTA.needCollateral, enabled: true };
+    case 'switchChain':
+      return { label: CTA.switchChain(chainName(step.chainId)), enabled: true };
     case 'insufficientBalance':
       return { label: CTA.insufficientBalance(c.symbol), enabled: false };
     case 'overCapacity':

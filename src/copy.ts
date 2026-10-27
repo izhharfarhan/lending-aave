@@ -6,6 +6,13 @@ export const PAGE = {
   description: 'Lending di atas Aave V3, semua chain dalam satu dashboard.',
 };
 
+// Pilih chain (Q5): cuma mengganti tampilan (`?chain=`), wallet baru diminta ganti network saat bertransaksi.
+export const CHAIN_PICKER = {
+  label: 'Pilih chain',
+  switchRejected: (chain: string) => `Anda menolak ganti network. Wallet tetap di network lama; tekan "Ganti ke ${chain}" untuk mencoba lagi.`,
+  switchFailed: (chain: string) => `Wallet tidak bisa pindah ke ${chain}. Ganti network langsung di wallet, lalu coba lagi.`,
+};
+
 export const NAV = {
   section: 'Umum',
   dashboard: 'Dashboard',
@@ -155,6 +162,7 @@ export const CTA = {
   busy: 'Sedang diproses…',
   enterAmount: 'Masukkan jumlah',
   needsEthForGas: 'ETH kurang untuk biaya jaringan',
+  switchChain: (chain: string) => `Ganti ke ${chain}`,
   /** Q27; kuota yang masih tersisa sebagian ditulis jumlahnya, bukan "penuh". */
   overCapacity: {
     supplyCap: (available: string, symbol: string) =>
@@ -363,7 +371,7 @@ export const TX = {
 // Error wallet & kontrak dalam bahasa yang bisa dipahami (spec 100–101, pola walletError swap-web).
 export const TX_ERROR = {
   rejected: 'Anda menolak permintaan di wallet. Tidak ada biaya terpakai.',
-  wrong_network: 'Wallet Anda sedang di network lain. Ganti ke Ethereum di wallet, lalu coba lagi.',
+  wrong_network: 'Wallet Anda sedang di network lain. Ganti network di wallet, lalu coba lagi.',
   insufficient_funds: 'ETH di wallet tidak cukup untuk biaya jaringan.',
   failed: 'Transaksi tidak terkirim. Posisi Anda tidak berubah.',
   reverted: 'Transaksi gagal di jaringan. Posisi Anda tidak berubah, tetapi biaya jaringan tetap terpakai.',

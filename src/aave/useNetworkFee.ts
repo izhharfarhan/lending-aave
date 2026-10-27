@@ -6,7 +6,7 @@ import { AAVE } from '@/config/contracts';
 import type { NextStep } from '@/core/nextStep';
 import type { PanelTx } from '@/core/panel';
 import { fetchNetworkFee } from './fetchNetworkFee';
-import { isWalletStep } from './poolTx';
+import { isWalletStep } from '@/core/nextStep';
 
 type Args = {
   chainId: number;
@@ -36,5 +36,5 @@ export function useNetworkFee({ chainId, user, asset, step, plan }: Args): { fee
     retry: false,
   });
   if (!first) return { fee: null, failed: false };
-  return { fee: query.data ?? null, failed: query.isError };
+  return { fee: query.data?.wei ?? null, failed: query.isError };
 }

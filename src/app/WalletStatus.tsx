@@ -3,21 +3,17 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 
-import { SUPPORTED_CHAINS } from '@/config/chains';
 import { FORK_GUARD, WALLET } from '@/copy';
 import { useForkGuard } from '@/wallet/useForkGuard';
-
-// Tiket 01: satu chain (Ethereum). Pemilihan chain masuk di tiket 10.
-const CHAIN_ID = SUPPORTED_CHAINS[0].chainId;
 
 export function WalletButton() {
   return <ConnectButton label={WALLET.connect} chainStatus="none" showBalance={false} accountStatus="address" />;
 }
 
 // Peringatan pengaman fork + ajakan connect (Q6). Saldo wallet tampil di tabel "Pasar supply".
-export function WalletOverview() {
+export function WalletOverview({ chainId }: { chainId: number }) {
   const { isConnected } = useAccount();
-  const guard = useForkGuard(CHAIN_ID);
+  const guard = useForkGuard(chainId);
 
   if (guard.safe && isConnected) return null;
   return (
