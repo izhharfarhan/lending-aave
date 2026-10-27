@@ -2,6 +2,7 @@
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 
+import { chainName } from '@/config/chains';
 import { FORK_GUARD, WALLET } from '@/copy';
 import { useForkGuard } from '@/wallet/useForkGuard';
 
@@ -17,7 +18,7 @@ export function WalletOverview({ chainId }: { chainId: number }) {
   return (
     <section className="surface flex flex-col gap-4 p-6">
       <p role="alert" className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">
-        {FORK_GUARD[guard.reason]}
+        {FORK_GUARD[guard.reason](chainName(chainId))}
       </p>
     </section>
   );

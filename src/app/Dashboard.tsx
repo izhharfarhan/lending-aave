@@ -11,8 +11,9 @@ import { WHITELIST } from '@/config/assets';
 import { SUPPORTED_CHAINS, type SupportedChain } from '@/config/chains';
 import { RISK_THRESHOLD, type ChainRead, type ChainView, type RiskLevel } from '@/core/chainPosition';
 import { liquidationPrice } from '@/core/simulate';
-import { chainSegment, summarizeChains, type ChainAccount, type DashboardSummary } from '@/core/summary';
-import { CHAIN_PICKER, DANGER, DASHBOARD, POSITION, RISK } from '@/copy';
+import { elapsed } from '@/core/relativeTime';
+import { chainSegment, summarizeChains, type ChainAccount, type DashboardSummary, type UnreadChain } from '@/core/summary';
+import { AGE, CHAIN_PICKER, DANGER, DASHBOARD, POSITION, RISK } from '@/copy';
 import { hf, list, pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
 import { liquidationText } from './LiquidationText';
@@ -20,6 +21,20 @@ import { liquidationText } from './LiquidationText';
 type Loaded = { chain: SupportedChain; read: ChainRead; view: ChainView };
 
 const hrefOf = (chain: SupportedChain) => `/?chain=${chain.slug}`;
+const ageText = (seconds: number) => {
+  const { amount, unit } = elapsed(seconds);
+  return AGE[unit](amount);
+};
+
+// Jam perangkat yang diperbarui berkala, untuk umur data yang terus bertambah.
+function useNow(intervalMs: number) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
 // Animasi masuk bertahap (Q20): hero 0 → segmen 1 → tabel 2 (page.tsx).
 const stagger = (i: number) => ({ ['--i' as string]: i }) as CSSProperties;
 
@@ -31,27 +46,33 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
   const queries = useAllChainViews();
   const fees = useTypicalActionFees(isConnected);
 
-  const loaded = SUPPORTED_CHAINS.flatMap((chain, i): Loaded[] => {
+  // Semua chain yang punya data, termasuk data terakhir chain yang bacaan terbarunya gagal (dipakai banner Bahaya).
+  const withData = SUPPORTED_CHAINS.flatMap((chain, i): Loaded[] => {
     const data = queries[i].data;
-    return data && !queries[i].isError ? [{ chain, ...data }] : [];
+    return data ? [{ chain, ...data }] : [];
   });
-  const connected = loaded.filter(({ view }) => view.account !== null);
   // "Gagal" = bacaan terakhir error, walau data lama masih ada: sama dengan detail chain, dan ringkasan nggak pernah
-  // tampil lengkap dengan data basi (Q4).
+  // tampil lengkap dengan data basi (Q4). Banner Bahaya tetap dari data terakhir, dengan umur datanya.
   const failed = (i: number) => queries[i].isError;
-  const unread = SUPPORTED_CHAINS.filter((_, i) => failed(i)).map((c) => c.chainId);
+  const loaded = withData.filter(({ chain }) => !failed(SUPPORTED_CHAINS.indexOf(chain)));
+  const connected = loaded.filter(({ view }) => view.account !== null);
+  const unread = SUPPORTED_CHAINS.flatMap((chain, i): UnreadChain[] => {
+    if (!failed(i)) return [];
+    const account = queries[i].data?.view.account;
+    return [{ chainId: chain.chainId, lastRead: account ? { account, readAt: queries[i].dataUpdatedAt } : null }];
+  });
   const summary = summarizeChains(
     connected.map(({ chain, view }): ChainAccount => ({ chainId: chain.chainId, account: view.account!, totalSupplyUsd: view.totalSupplyUsd })),
     unread,
   );
-  const loadedOf = (chainId: number) => loaded.find(({ chain }) => chain.chainId === chainId)!;
+  const dataOf = (chainId: number) => withData.find(({ chain }) => chain.chainId === chainId)!;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="reveal" style={stagger(0)}>
         {isConnected ? (
           <>
-            <DangerBanner summary={summary} loadedOf={loadedOf} />
+            <DangerBanner summary={summary} dataOf={dataOf} />
             <Hero
               summary={summary}
               loading={queries.some((q) => q.isLoading)}
@@ -147,17 +168,12 @@ function HeroFrame({ attached = false, children }: { attached?: boolean; childre
   );
 }
 
-function DangerBanner({
-  summary,
-  loadedOf,
-}: {
-  summary: DashboardSummary;
-  loadedOf: (chainId: number) => Loaded;
-}) {
-  const [firstId, ...others] = summary.dangerChains;
-  if (firstId === undefined) return null;
-  const { chain, read, view } = loadedOf(firstId);
-  const liquidation = liquidationText(liquidationPrice(read, WHITELIST[firstId]));
+function DangerBanner({ summary, dataOf }: { summary: DashboardSummary; dataOf: (chainId: number) => Loaded }) {
+  const now = useNow(15_000);
+  const [first, ...others] = summary.dangerChains;
+  if (first === undefined) return null;
+  const { chain, read } = dataOf(first.chainId);
+  const liquidation = liquidationText(liquidationPrice(read, WHITELIST[first.chainId]));
   return (
     <div
       role="alert"
@@ -165,7 +181,8 @@ function DangerBanner({
     >
       <span className="display text-xs font-medium tracking-wide">{DANGER.tag}</span>
       <p className="flex-1 text-sm">
-        {DANGER.hf(chain.name)} <b className="num">{hf(view.account!.healthFactor!)}</b>.
+        {DANGER.hf(chain.name)} <b className="num">{hf(first.healthFactor)}</b>
+        {first.readAt !== null && <span className="text-ink/80"> {DANGER.stale(ageText((now - first.readAt) / 1000))}</span>}.
         {liquidation && <span className="text-ink/80"> {liquidation.text}.</span>}
         {others.length > 0 && <span className="text-ink/80"> {DANGER.more(others.length)}</span>}
       </p>

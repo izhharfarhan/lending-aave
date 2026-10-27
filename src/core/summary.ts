@@ -3,6 +3,12 @@ import type { AccountView, ChainView, RiskLevel } from './chainPosition';
 /** Satu chain yang berhasil dibaca dengan wallet terhubung: `account` + `totalSupplyUsd` dari `ChainView`. */
 export type ChainAccount = { chainId: number; account: AccountView; totalSupplyUsd: number };
 
+/**
+ * Chain yang bacaan terakhirnya gagal. `lastRead` = bacaan terakhir yang berhasil (`readAt` = ms jam perangkat), cuma
+ * dipakai banner Bahaya; ringkasan tetap menganggapnya belum terbaca (klarifikasi Q4). `null` = belum pernah terbaca.
+ */
+export type UnreadChain = { chainId: number; lastRead: { account: AccountView; readAt: number } | null };
+
 export type DashboardSummary = {
   /** `null` = tidak ada utang di chain mana pun. */
   lowestHealthFactor: { chainId: number; healthFactor: number; risk: RiskLevel } | null;
@@ -15,8 +21,12 @@ export type DashboardSummary = {
    * tier HF chain itu (warna bar). `used` bisa ∞ (utang dengan jaminan LTV 0). `null` = tidak ada utang (bar disembunyikan).
    */
   highestBorrowLimitUsed: { chainId: number; used: number; availableUsd: number; risk: RiskLevel } | null;
-  /** Chain Bahaya (HF < 1,5), HF terendah dulu: banner menyebut yang pertama lalu "+N chain lain" (Q2). */
-  dangerChains: number[];
+  /**
+   * Chain Bahaya (HF < 1,5), HF terendah dulu: banner menyebut yang pertama lalu "+N chain lain" (Q2). Chain yang gagal
+   * dibaca ikut dari data terakhirnya (`readAt` ≠ null, banner menulis umur datanya), biar banner nggak hilang cuma karena
+   * satu bacaan gagal.
+   */
+  dangerChains: { chainId: number; healthFactor: number; readAt: number | null }[];
   /**
    * "Belum lengkap (n/3 chain)" (Q4): ada chain yang gagal dibaca, jadi HF terendah cuma batas atas ("≤ x") dan batas
    * pinjam tertinggi "bisa saja lebih tinggi" (Q24). `null` = semua chain terbaca.
@@ -25,7 +35,7 @@ export type DashboardSummary = {
 };
 
 // Ringkasan semua chain untuk hero (ADR 0001, Q3).
-export function summarizeChains(chains: ChainAccount[], unreadChains: number[] = []): DashboardSummary {
+export function summarizeChains(chains: ChainAccount[], unread: UnreadChain[] = []): DashboardSummary {
   // Chain tanpa utang nggak punya HF, jadi nggak ikut HF terendah (Q3).
   const byHealth = chains
     .flatMap(({ chainId, account }) =>
@@ -47,10 +57,20 @@ export function summarizeChains(chains: ChainAccount[], unreadChains: number[] =
     totalDebtUsd,
     netUsd: totalSupplyUsd - totalDebtUsd,
     highestBorrowLimitUsed: highest,
-    dangerChains: byHealth.filter((chain) => chain.risk === 'bahaya').map((chain) => chain.chainId),
+    dangerChains: [
+      ...byHealth.map(({ chainId, healthFactor, risk }) => ({ chainId, healthFactor, risk, readAt: null })),
+      ...unread.flatMap(({ chainId, lastRead }) =>
+        lastRead && lastRead.account.healthFactor !== null && lastRead.account.risk !== null
+          ? [{ chainId, healthFactor: lastRead.account.healthFactor, risk: lastRead.account.risk, readAt: lastRead.readAt }]
+          : [],
+      ),
+    ]
+      .filter((chain) => chain.risk === 'bahaya')
+      .sort((a, b) => a.healthFactor - b.healthFactor)
+      .map(({ chainId, healthFactor, readAt }) => ({ chainId, healthFactor, readAt })),
     incomplete:
-      unreadChains.length > 0
-        ? { readCount: chains.length, totalCount: chains.length + unreadChains.length, unreadChains }
+      unread.length > 0
+        ? { readCount: chains.length, totalCount: chains.length + unread.length, unreadChains: unread.map((u) => u.chainId) }
         : null,
   };
 }

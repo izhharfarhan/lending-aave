@@ -124,6 +124,15 @@ Pola sama: tingkatan peringatan, detail collapsible, status tx multi-tahap
   tertulis "≥", terbalik, karena chain yang belum terbaca bisa saja HF-nya lebih rendah). Ringkasan nggak pernah tampil lengkap kalau ada
   chain yang gagal.
 - Auto-refresh berkala (±30 detik) + saat tab difokuskan.
+- **Klarifikasi 2026-10-28** (permintaan user setelah review tiket 12): chain dianggap
+  gagal kalau bacaan **terakhir** error, walau data lama masih ada; ringkasan
+  menghitungnya "belum terbaca" (Belum lengkap, "≤", "bisa saja lebih tinggi"), sama
+  dengan detail chain. **Banner Bahaya tetap tampil** dari bacaan terakhir yang berhasil,
+  dengan umur datanya: "(data 2 menit lalu, belum bisa diperbarui)". Banner nggak boleh
+  hilang atau berganti chain cuma karena satu bacaan gagal.
+- Umur data itu dihitung dari jam perangkat sejak bacaan terakhir berhasil, bukan dari
+  timestamp blok (pengecualian Q30): yang diukur kapan app terakhir berhasil membaca, dan
+  chain yang gagal dibaca memang nggak punya timestamp blok baru.
 
 ### Q5 — Pilih chain vs network wallet
 - Klik kartu cuma memilih chain di app (URL `?chain=`), tanpa `switchChain`.

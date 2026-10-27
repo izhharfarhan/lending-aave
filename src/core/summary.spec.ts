@@ -74,7 +74,7 @@ describe('summarizeChains()', () => {
         chain(ARBITRUM, { healthFactor: 1.12, risk: 'bahaya', totalDebtUsd: 700 }, 900),
       ]);
 
-      expect(summary.dangerChains).toEqual([ARBITRUM, ETHEREUM]);
+      expect(summary.dangerChains.map((d) => d.chainId)).toEqual([ARBITRUM, ETHEREUM]);
     });
   });
 
@@ -85,7 +85,7 @@ describe('summarizeChains()', () => {
           chain(ETHEREUM, { healthFactor: 2.6, risk: 'aman', totalDebtUsd: 400, borrowLimitUsed: 0.3, availableBorrowsUsd: 900 }, 2_000),
           chain(ARBITRUM, { healthFactor: 1.7, risk: 'waspada', totalDebtUsd: 600, borrowLimitUsed: 0.6, availableBorrowsUsd: 400 }, 1_300),
         ],
-        [BASE],
+        [{ chainId: BASE, lastRead: null }],
       );
 
       // HF terendah yang terbaca 1,7 → ditulis "≤ 1,7"; batas pinjam tertinggi 60% "bisa saja lebih tinggi".
@@ -95,10 +95,42 @@ describe('summarizeChains()', () => {
     });
 
     it('is never complete while a chain is unread, even when the read chains have no debt', () => {
-      const summary = summarizeChains([chain(ETHEREUM, { totalCollateralUsd: 500 }, 500)], [BASE, ARBITRUM]);
+      const summary = summarizeChains([chain(ETHEREUM, { totalCollateralUsd: 500 }, 500)], [
+        { chainId: BASE, lastRead: null },
+        { chainId: ARBITRUM, lastRead: null },
+      ]);
 
       expect(summary.lowestHealthFactor).toBeNull();
       expect(summary.incomplete).toEqual({ readCount: 1, totalCount: 3, unreadChains: [BASE, ARBITRUM] });
+    });
+  });
+
+  describe('positive: banner dari data terakhir (klarifikasi Q4)', () => {
+    it('keeps a Bahaya chain in the banner from its last successful read, while the summary still counts it unread', () => {
+      const READ_AT = 1_761_600_000_000;
+      const summary = summarizeChains(
+        [chain(ARBITRUM, { healthFactor: 1.44, risk: 'bahaya', totalDebtUsd: 1_400 }, 2_400)],
+        [{ chainId: BASE, lastRead: { account: account({ healthFactor: 1.38, risk: 'bahaya', totalDebtUsd: 1_442 }), readAt: READ_AT } }],
+      );
+
+      // Banner: Base 1,38 dari data terakhir tetap paling depan; Arbitrum segar di belakangnya.
+      expect(summary.dangerChains).toEqual([
+        { chainId: BASE, healthFactor: 1.38, readAt: READ_AT },
+        { chainId: ARBITRUM, healthFactor: 1.44, readAt: null },
+      ]);
+      // Ringkasan tetap tanpa Base: "≤ 1,44", Belum lengkap 1/2.
+      expect(summary.lowestHealthFactor).toMatchObject({ chainId: ARBITRUM });
+      expect(summary.totalDebtUsd).toBe(1_400);
+      expect(summary.incomplete).toEqual({ readCount: 1, totalCount: 2, unreadChains: [BASE] });
+    });
+
+    it('leaves a stale chain that was not Bahaya out of the banner', () => {
+      const summary = summarizeChains(
+        [],
+        [{ chainId: BASE, lastRead: { account: account({ healthFactor: 1.7, risk: 'waspada', totalDebtUsd: 500 }), readAt: 1 } }],
+      );
+
+      expect(summary.dangerChains).toEqual([]);
     });
   });
 

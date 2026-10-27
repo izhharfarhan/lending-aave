@@ -34,11 +34,14 @@ export const WALLET = {
 };
 
 // Pengaman fork (pola swap-web): kalau nggak aman, semua aksi transaksi dikunci.
+// Dicek per chain terpilih: Anvil satu chain mati cuma mengunci transaksi di chain itu.
 export const FORK_GUARD = {
-  checking: 'Memeriksa Anvil fork…',
-  not_local_connector: `Mode fork hanya boleh memakai wallet "${WALLET.forkConnector}". Aksi transaksi dikunci.`,
-  not_a_fork: 'RPC lokal bukan Anvil fork atau tidak bisa dihubungi. Jalankan `pnpm anvil:up`. Aksi transaksi dikunci.',
-  fork_block_mismatch: 'Anvil berjalan di blok yang berbeda dari blok pin. Jalankan ulang `pnpm anvil:up`. Aksi transaksi dikunci.',
+  checking: (chain: string) => `Memeriksa Anvil fork ${chain}…`,
+  not_local_connector: () => `Mode fork hanya boleh memakai wallet "${WALLET.forkConnector}". Aksi transaksi dikunci.`,
+  not_a_fork: (chain: string) =>
+    `RPC lokal ${chain} bukan Anvil fork atau tidak bisa dihubungi. Jalankan \`pnpm anvil:up\`. Aksi transaksi di ${chain} dikunci.`,
+  fork_block_mismatch: (chain: string) =>
+    `Anvil ${chain} berjalan di blok yang berbeda dari blok pin. Jalankan ulang \`pnpm anvil:up\`. Aksi transaksi di ${chain} dikunci.`,
 };
 
 export const RISK = { aman: 'Aman', waspada: 'Waspada', bahaya: 'Bahaya' } as const;
@@ -109,12 +112,22 @@ export const DASHBOARD = {
   failed: 'Gagal dimuat',
 };
 
+// Umur relatif ("2 menit"), dipakai dengan "… lalu".
+export const AGE = {
+  second: (n: number) => (n < 10 ? 'beberapa detik' : `${n} detik`),
+  minute: (n: number) => `${n} menit`,
+  hour: (n: number) => `${n} jam`,
+  day: (n: number) => `${n} hari`,
+};
+
 // Banner Bahaya di atas hero (Q2): chain HF terendah dulu, sisanya "+N chain lain".
 export const DANGER = {
   tag: 'BAHAYA',
   hf: (chain: string) => `Health factor ${chain}`,
   more: (n: number) => `+${n} chain lain.`,
   view: (chain: string) => `Lihat ${chain} →`,
+  /** Klarifikasi Q4: chain yang bacaan terakhirnya gagal tetap di banner dari data terakhir yang berhasil. */
+  stale: (age: string) => `(data ${age} lalu, belum bisa diperbarui)`,
 };
 
 // Harga likuidasi (Q14, Q15): "saat ini" = harga oracle chain ini di blok yang dibaca.
