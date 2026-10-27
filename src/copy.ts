@@ -100,7 +100,7 @@ export const PANEL = {
   soon: 'Menyusul',
   amount: 'Jumlah',
   max: 'MAX',
-  maxInfo: 'Isi jumlah terbesar yang bisa dijalankan: saldo, batas LTV, kuota pool, likuiditas, dan cadangan gas untuk ETH.',
+  maxInfo: 'Isi jumlah terbesar yang bisa dijalankan: saldo, batas LTV, kapasitas pool, dan cadangan gas untuk ETH.',
   asset: 'Aset',
   wallet: 'Wallet',
   interest: (usdPerYear: string, apy: string) => `bunga ≈ ${usdPerYear} per tahun (APY ${apy})`,
