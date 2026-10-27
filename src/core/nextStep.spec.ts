@@ -4,6 +4,8 @@ import { nextStep, type NextStepInput } from './nextStep';
 import type { RepayPlan, WithdrawPlan } from './simulate';
 
 const USDC = (n: number) => BigInt(n) * 1_000_000n;
+const GWEI = (n: number) => BigInt(n) * 10n ** 9n;
+const ETH = (n: number) => BigInt(n) * 10n ** 18n;
 
 // Supply 100 USDC, saldo 500, belum ada izin ke Pool.
 const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
@@ -18,6 +20,8 @@ const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
   requiresApprovalReset: false,
   paused: false,
   native: false,
+  ethBalance: 10n ** 18n,
+  networkFee: null,
   action: { action: 'supply' },
   ...overrides,
 });
@@ -210,8 +214,8 @@ describe('nextStep()', () => {
 
   describe('ETH lewat gateway', () => {
     // Saldo 500 ETH (helper `input`), jumlah dalam wei.
-    const ETH = (n: number) => BigInt(n) * 10n ** 18n;
-    const eth = (overrides: Partial<NextStepInput> = {}) => input({ native: true, amount: ETH(100), balance: ETH(500), ...overrides });
+    const eth = (overrides: Partial<NextStepInput> = {}) =>
+      input({ native: true, amount: ETH(100), balance: ETH(500), ethBalance: ETH(500), ...overrides });
     it('supplies ETH straight away: no approve, no reset, whatever the allowance', () => {
       expect(nextStep(eth())).toEqual({ step: 'supply' });
       expect(nextStep(eth({ requiresApprovalReset: true, allowance: ETH(30) }))).toEqual({ step: 'supply' });
@@ -273,6 +277,53 @@ describe('nextStep()', () => {
       expect(nextStep(eth({ amount: ETH(501) }))).toEqual({ step: 'insufficientBalance' });
       const full: RepayPlan = { full: true, send: maxUint256, spend: ETH(600), required: ETH(600) };
       expect(nextStep(eth({ action: { action: 'repay', plan: full } }))).toEqual({ step: 'insufficientBalance' });
+    });
+  });
+
+  describe('ETH kurang untuk biaya jaringan', () => {
+    // Biaya semua transaksi yang tersisa (izin + aksi utama), wei.
+    const fee = GWEI(300_000);
+
+    it('locks the button when the wallet ETH cannot pay the network fee, with the ETH needed', () => {
+      expect(nextStep(input({ networkFee: fee, ethBalance: fee - 1n }))).toEqual({ step: 'needsEthForGas', needed: fee });
+      expect(nextStep(input({ networkFee: fee, ethBalance: fee }))).toEqual({ step: 'approve', amount: USDC(100) });
+    });
+
+    it('locks with 0 ETH even before the fee is known, before asking for an amount or collateral', () => {
+      expect(nextStep(input({ ethBalance: 0n, amount: null }))).toEqual({ step: 'needsEthForGas', needed: null });
+      expect(nextStep(input({ ethBalance: 0n, networkFee: fee }))).toEqual({ step: 'needsEthForGas', needed: fee });
+      expect(nextStep(borrow({ hasCollateral: false }, { ethBalance: 0n }))).toEqual({ step: 'needsEthForGas', needed: null });
+    });
+
+    it('skips the check while the fee is unknown and there is some ETH', () => {
+      expect(nextStep(input({ ethBalance: 1n, networkFee: null }))).toEqual({ step: 'approve', amount: USDC(100) });
+    });
+
+    it('still lets connect, loading, busy, paused and the fork guard win', () => {
+      const broke = { ethBalance: 0n, networkFee: fee };
+      expect(nextStep(input({ ...broke, connected: false }))).toEqual({ step: 'connect' });
+      expect(nextStep(input({ ...broke, data: 'loading' }))).toEqual({ step: 'loading' });
+      expect(nextStep(input({ ...broke, txRunning: true }))).toEqual({ step: 'busy' });
+      expect(nextStep(input({ ...broke, paused: true }))).toEqual({ step: 'paused' });
+      expect(nextStep(input({ ...broke, txLocked: true }))).toEqual({ step: 'locked' });
+    });
+
+    it('checks withdraw, borrow and the collateral toggle too (they pay gas but send no ETH)', () => {
+      const broke = { ethBalance: fee - 1n, networkFee: fee };
+      expect(nextStep(borrow({}, broke))).toEqual({ step: 'needsEthForGas', needed: fee });
+      const toggle: NextStepInput['action'] = { action: 'collateral', enable: false, canEnable: true, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false };
+      expect(nextStep(input({ ...broke, amount: null, action: toggle }))).toEqual({ step: 'needsEthForGas', needed: fee });
+    });
+
+    it('supply/repay ETH: the amount sent plus the fee must fit in the ETH balance', () => {
+      const eth = (overrides: Partial<NextStepInput>) => input({ native: true, balance: ETH(1), ethBalance: ETH(1), networkFee: fee, ...overrides });
+      expect(nextStep(eth({ amount: ETH(1) - fee }))).toEqual({ step: 'supply' });
+      expect(nextStep(eth({ amount: ETH(1) - fee + 1n }))).toEqual({ step: 'needsEthForGas', needed: ETH(1) + 1n });
+      // Lebih dari saldo tetap "saldo tidak cukup", bukan masalah biaya jaringan.
+      expect(nextStep(eth({ amount: ETH(1) + 1n }))).toEqual({ step: 'insufficientBalance' });
+
+      const full: RepayPlan = { full: true, send: maxUint256, spend: ETH(1) - fee + 5n, required: ETH(1) - fee };
+      expect(nextStep(eth({ amount: ETH(1) - fee, action: { action: 'repay', plan: full } }))).toEqual({ step: 'needsEthForGas', needed: ETH(1) + 5n });
     });
   });
 });

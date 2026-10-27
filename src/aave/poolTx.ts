@@ -2,7 +2,7 @@ import { erc20Abi, type Address, type ContractFunctionParameters } from 'viem';
 
 import type { AaveContracts } from '@/config/contracts';
 import type { NextStep, WalletStepName } from '@/core/nextStep';
-import type { PanelTx } from '@/core/panel';
+import type { MainStep, PanelTx } from '@/core/panel';
 import { debtTokenAbi, gatewayAbi, poolAbi } from './abis';
 
 /** `value` = ETH yang ikut dikirim (supply/repay ETH lewat gateway). */
@@ -103,4 +103,25 @@ export function requestFor(step: Extract<NextStep, { step: WalletStepName }>, ct
         }
       : undefined,
   });
+}
+
+export type WalletStep = Extract<NextStep, { step: WalletStepName }>;
+
+const WALLET_STEPS: ReadonlySet<string> = new Set<WalletStepName>([
+  'resetApproval',
+  'approve',
+  'delegate',
+  'supply',
+  'withdraw',
+  'borrow',
+  'repay',
+  'setCollateral',
+]);
+export const isWalletStep = (step: NextStep): step is WalletStep => WALLET_STEPS.has(step.step);
+
+// Langkah yang akan diminta wallet, diturunkan dari langkah sekarang (bukan diingat UI).
+export function plannedSteps(step: WalletStep, main: MainStep): WalletStepName[] {
+  if (step.step === 'resetApproval') return ['resetApproval', 'approve', main];
+  if (step.step === 'approve' || step.step === 'delegate') return [step.step, main];
+  return [main];
 }

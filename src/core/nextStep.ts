@@ -63,6 +63,13 @@ export type NextStepInput = {
    * butuh izin aWETH ke gateway, borrow butuh credit delegation ke gateway.
    */
   native: boolean;
+  /** Saldo ETH wallet di chain ini, yang membayar biaya jaringan. */
+  ethBalance: bigint;
+  /**
+   * Biaya jaringan semua transaksi yang tersisa (izin + aksi utama), wei. `null` = belum diketahui (belum ada jumlah,
+   * sedang dimuat, atau estimasi gagal): cek dilewati, kecuali ETH 0 (pola Q19 swap).
+   */
+  networkFee: bigint | null;
 };
 
 export type NextStep =
@@ -73,6 +80,11 @@ export type NextStep =
   | { step: 'busy' }
   | { step: 'paused' }
   | { step: 'enterAmount' }
+  /**
+   * ETH kurang untuk biaya jaringan (supply/repay ETH: jumlah + biaya). `needed` = perkiraan total ETH yang dibutuhkan,
+   * `null` kalau biayanya belum diketahui (cuma mungkin di ETH 0).
+   */
+  | { step: 'needsEthForGas'; needed: bigint | null }
   /** Borrow tanpa jaminan: "Supply jaminan dulu" membuka tab Supply (Q11). */
   | { step: 'needCollateral' }
   /** Melewati batas LTV: "Melebihi batas pinjam" / "Jaminan ini masih dibutuhkan". */
@@ -104,6 +116,11 @@ export function nextStep(input: NextStepInput): NextStep {
   if (input.txRunning) return { step: 'busy' };
   if (input.paused) return { step: 'paused' };
   if (input.txLocked) return { step: 'locked' };
+  // Sebelum langkah lain: tiap transaksi (termasuk izin) dibayar dari saldo ETH.
+  // ETH 0 pasti kurang walau biayanya belum diketahui (spec 85: tetap tampilkan perkiraannya kalau sudah ada).
+  if (input.ethBalance === 0n || (input.networkFee !== null && input.ethBalance < input.networkFee)) {
+    return { step: 'needsEthForGas', needed: input.networkFee };
+  }
 
   const { action } = input;
   if (action.action === 'borrow' && !action.hasCollateral) return { step: 'needCollateral' };
@@ -140,6 +157,10 @@ export function nextStep(input: NextStepInput): NextStep {
   const spend = plan ? plan.spend : amount;
   // Sebelum approve: approve cuma buang gas kalau transaksinya nggak mungkin jalan.
   if (spend > input.balance) return { step: 'insufficientBalance' };
+  // Supply/repay ETH: jumlah yang dikirim dan biaya jaringan diambil dari saldo ETH yang sama.
+  if (input.native && input.networkFee !== null && spend + input.networkFee > input.ethBalance) {
+    return { step: 'needsEthForGas', needed: spend + input.networkFee };
+  }
 
   if (!input.native && allowance < (plan ? plan.required : amount)) {
     if (input.requiresApprovalReset && allowance > 0n) return { step: 'resetApproval' };

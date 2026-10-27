@@ -1,4 +1,4 @@
-import type { Address } from 'viem';
+import { maxUint256, type Address } from 'viem';
 
 import type { ChainRead, ChainView, WhitelistAsset } from './chainPosition';
 import type { LocalTxEntry } from './localHistory';
@@ -46,10 +46,19 @@ export type PanelInput = Pick<NextStepInput, 'connected' | 'txLocked' | 'txRunni
   /** Pernyataan risiko dicentang / "confirm" diketik; masing-masing cuma berlaku untuk tier-nya. */
   riskChecked: boolean;
   riskTyped: boolean;
+  /** Biaya jaringan langkah-langkah `stepBeforeGasCheck` (lihat `nextStep`); `null` = belum diketahui. */
+  networkFee: bigint | null;
 };
 
 export type PanelState = {
   step: NextStep;
+  /**
+   * Langkah kalau ETH untuk biaya jaringan dianggap cukup: transaksi yang biayanya perlu diestimasi. Dipisah dari `step`
+   * supaya biaya tetap bisa dihitung walau tombolnya sedang terkunci "ETH kurang" (pola `remainingTxs` swap).
+   */
+  stepBeforeGasCheck: NextStep;
+  /** Saldo ETH wallet di chain ini (yang membayar biaya jaringan); 0 kalau belum connect. */
+  ethBalance: bigint;
   /** Posisi sesudah aksi; `null` untuk supply, jumlah kosong, atau belum connect. */
   sim: Simulation | null;
   /** Rencana repay / withdraw untuk jumlah yang diisi; `null` di tab lain. */
@@ -179,6 +188,9 @@ export const panelAssets = (view: ChainView, tab: PanelTab): PanelAsset[] => spe
 export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: WhitelistAsset[], input: PanelInput): PanelState {
   const spec = specOf(input.tab);
   const source = spec.assets(view).find((r) => r.asset === input.asset);
+  // Saldo ETH wallet = baris aset native di whitelist (ETH dibaca lewat `getEthBalance`).
+  const nativeAsset = whitelist.find((a) => a.native);
+  const ethBalance = (nativeAsset && read.user?.walletBalances[nativeAsset.address]) ?? 0n;
   const common = {
     connected: input.connected,
     txLocked: input.txLocked,
@@ -186,16 +198,23 @@ export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: White
     txRunning: input.txRunning,
     amount: input.amount,
     approvalMode: input.approvalMode,
+    ethBalance,
+    networkFee: input.networkFee,
   };
+  // Cek biaya dinetralkan: ETH yang kurang nggak mengubah transaksi apa saja yang tersisa.
+  const withGasCheck = (stepInput: NextStepInput) => ({
+    step: nextStep(stepInput),
+    stepBeforeGasCheck: nextStep({ ...stepInput, ethBalance: maxUint256, networkFee: null }),
+    ethBalance,
+  });
   // Aset hilang dari tab (mis. utang sudah lunas): panel cuma menampilkan pesan kosong tanpa tombol utama, jadi yang
   // tersisa urutan umumnya saja.
   if (!source) {
-    const step = nextStep({ ...common, amount: null, paused: false, native: false, ...noWallet, action: { action: 'supply' } });
-    return { step, ...noSim };
+    return { ...withGasCheck({ ...common, amount: null, paused: false, native: false, ...noWallet, action: { action: 'supply' } }), ...noSim };
   }
   const { sim, repay, withdraw, ...rest } = spec.prepare(source, { read, view, whitelist, ...input });
   const native = spec.gateway && source.native;
-  return { step: nextStep({ ...common, paused: source.paused, native, ...rest }), sim, repay, withdraw };
+  return { ...withGasCheck({ ...common, paused: source.paused, native, ...rest }), sim, repay, withdraw };
 }
 
 export type PanelTx = {

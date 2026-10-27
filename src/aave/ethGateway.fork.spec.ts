@@ -84,8 +84,9 @@ describe('ETH lewat WrappedTokenGateway (fork Ethereum)', () => {
 
       expect(sent).toEqual([{ step: 'approve', approveAmount: parseEther('0.4') }, { step: 'withdraw' }]);
       expect((await ethBalance()) - approved + (await lastTxFee())).toBe(parseEther('0.4'));
-      // Izin exact habis terpakai (paling banyak sisa 1 wei pembulatan aToken).
-      expect(parseEther('0.6') - (await ethSupplied())).toBeLessThanOrEqual(1n);
+      // Sisa supply bisa kurang 2 wei: supply membulatkan aToken ke bawah (≤ 1 wei) dan withdraw membakar ke atas (≤ 1 wei);
+      // indeks bunga ikut jam Anvil, jadi kadang dua-duanya kena. Izin exact habis terpakai (sisa ≤ 1 wei pembulatan).
+      expect(parseEther('0.6') - (await ethSupplied())).toBeLessThanOrEqual(2n);
       expect(await aWethAllowance()).toBeLessThanOrEqual(1n);
     });
 

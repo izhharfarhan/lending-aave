@@ -5,13 +5,11 @@ import { usePublicClient, useWriteContract } from 'wagmi';
 import { AAVE } from '@/config/contracts';
 import type { NextStep, WalletStepName } from '@/core/nextStep';
 import type { LocalTxEntry } from '@/core/localHistory';
-import type { MainStep, PanelTx } from '@/core/panel';
+import type { PanelTx } from '@/core/panel';
 import { aaveErrorName, walletErrorKind, type WalletErrorKind } from '@/core/walletError';
 import { gasLimitFor } from './gasLimit';
-import { requestFor } from './poolTx';
+import { isWalletStep, plannedSteps, requestFor, type WalletStep } from './poolTx';
 import { useAddLocalHistory } from './useLocalHistory';
-
-export type WalletStep = Extract<NextStep, { step: WalletStepName }>;
 
 /** Hash tiap langkah yang sudah terkirim, untuk tautan explorer per langkah. */
 type Sent = Partial<Record<WalletStepName, Hash>>;
@@ -29,25 +27,6 @@ export type TxState =
    * `failed` juga dipakai kalau RPC putus waktu menunggu receipt / membaca ulang posisi.
    */
   | { status: 'error'; steps: WalletStepName[]; index: number; kind: WalletErrorKind | 'reverted'; aaveError?: string; sent: Sent };
-
-const WALLET_STEPS: ReadonlySet<string> = new Set<WalletStepName>([
-  'resetApproval',
-  'approve',
-  'delegate',
-  'supply',
-  'withdraw',
-  'borrow',
-  'repay',
-  'setCollateral',
-]);
-export const isWalletStep = (step: NextStep): step is WalletStep => WALLET_STEPS.has(step.step);
-
-// Langkah yang akan diminta wallet, diturunkan dari langkah sekarang (bukan diingat UI).
-export function plannedSteps(step: WalletStep, main: MainStep): WalletStepName[] {
-  if (step.step === 'resetApproval') return ['resetApproval', 'approve', main];
-  if (step.step === 'approve' || step.step === 'delegate') return [step.step, main];
-  return [main];
-}
 
 type PoolTxArgs = {
   chainId: number;

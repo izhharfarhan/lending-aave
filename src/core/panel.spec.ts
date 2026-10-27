@@ -23,6 +23,12 @@ const WHITELIST: WhitelistAsset[] = [
   { address: USDT, symbol: 'USDT', native: false, requiresApprovalReset: true },
 ];
 
+// Saldo ETH wallet (yang membayar biaya jaringan) diganti, sisanya sama dengan fixture.
+const withEth = (label: string, eth: bigint): ChainRead => {
+  const base = read(label);
+  return { ...base, user: { ...base.user!, walletBalances: { ...base.user!.walletBalances, [WETH]: eth } } };
+};
+
 const evaluate = (label: string | ChainRead, input: Partial<PanelInput>) => {
   const r = typeof label === 'string' ? read(label) : label;
   return evaluatePanel(r, buildChainView(r, WHITELIST), WHITELIST, {
@@ -35,6 +41,7 @@ const evaluate = (label: string | ChainRead, input: Partial<PanelInput>) => {
     amount: null,
     riskChecked: false,
     riskTyped: false,
+    networkFee: null,
     ...input,
   });
 };
@@ -91,7 +98,35 @@ describe('evaluatePanel()', () => {
   });
 
   it('asks for collateral first on a position without any', () => {
-    expect(evaluate('empty', {}).step).toEqual({ step: 'needCollateral' });
+    // Wallet `empty` nggak punya ETH sama sekali; diberi sedikit supaya cek biaya jaringan lolos.
+    expect(evaluate(withEth('empty', 10n ** 15n), {}).step).toEqual({ step: 'needCollateral' });
+  });
+
+  describe('biaya jaringan', () => {
+    const fee = 2n * 10n ** 15n;
+
+    it('locks the button when the wallet ETH cannot pay the fee, and still says which transactions the fee is for', () => {
+      // Wallet bahayaWithOutsideAssets: 200 USDC tanpa izin ke Pool → supply 100 USDC butuh approve dulu.
+      const state = evaluate(withEth('bahayaWithOutsideAssets', fee - 1n), { tab: 'supply', amount: 100_000_000n, networkFee: fee });
+      expect(state.step).toEqual({ step: 'needsEthForGas', needed: fee });
+      expect(state.stepBeforeGasCheck).toEqual({ step: 'approve', amount: 100_000_000n });
+    });
+
+    it('locks a wallet with 0 ETH before the fee is known (wallet `empty`)', () => {
+      const state = evaluate('empty', {});
+      expect(state.step).toEqual({ step: 'needsEthForGas', needed: null });
+      expect(state.stepBeforeGasCheck).toEqual({ step: 'needCollateral' });
+    });
+
+    it('supply ETH: amount + fee must fit in the ETH balance', () => {
+      // Wallet noDebt: 0,088035438238165435 ETH.
+      const balance = 88_035_438_238_165_435n;
+      expect(evaluate('noDebt', { tab: 'supply', asset: WETH, amount: balance - fee, networkFee: fee }).step).toEqual({ step: 'supply' });
+      expect(evaluate('noDebt', { tab: 'supply', asset: WETH, amount: balance - fee + 1n, networkFee: fee }).step).toEqual({
+        step: 'needsEthForGas',
+        needed: balance + 1n,
+      });
+    });
   });
 
   it('plans a partial repay with an exact approve, and blocks a repay the wallet cannot pay', () => {

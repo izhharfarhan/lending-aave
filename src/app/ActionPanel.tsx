@@ -1,11 +1,14 @@
 'use client';
 
 import { useConnectModal } from '@rainbow-me/rainbowkit';
+import Link from 'next/link';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { formatUnits, maxUint256, type Address, type Hash } from 'viem';
 import { useAccount } from 'wagmi';
 
-import { isWalletStep, plannedSteps, usePoolTx, type TxState } from '@/aave/usePoolTx';
+import { useNetworkFee } from '@/aave/useNetworkFee';
+import { isWalletStep, plannedSteps } from '@/aave/poolTx';
+import { usePoolTx, type TxState } from '@/aave/usePoolTx';
 import { IS_FORK } from '@/config/appMode';
 import { WHITELIST } from '@/config/assets';
 import { chainName } from '@/config/chains';
@@ -16,13 +19,15 @@ import type { NextStep, NextStepInput, WalletStepName } from '@/core/nextStep';
 import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelTx, routeOf, type PanelAsset, type PanelTab, type Route } from '@/core/panel';
 import { parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
-import { APPROVAL, CTA, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
+import { APPROVAL, CTA, GAS, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
 import { useForkGuard } from '@/wallet/useForkGuard';
 import { hf, pct, tokenAmount, usd } from './format';
 import { HealthFactor } from './HealthFactor';
 import { LiquidationText, liquidationText } from './LiquidationText';
 import { TokenIcon } from './TokenIcon';
 
+/** Biaya jaringan selalu dalam ETH (juga di Base dan Arbitrum). */
+const ETH_DECIMALS = 18;
 const SMART_ACCOUNT_NOTE_KEY = 'lending-web:smartAccountNoteDismissed';
 const TABS = ['supply', 'withdraw', 'borrow', 'repay'] as const;
 
@@ -96,7 +101,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   const amount = parsed?.ok ? parsed.value : null;
 
   // Semua yang bergantung pada data posisi dihitung ulang dari data segar sesudah tiap langkah wallet.
-  const evaluate = (fresh: ChainData, txRunning: boolean) =>
+  const evaluate = (fresh: ChainData, txRunning: boolean, networkFee: bigint | null) =>
     evaluatePanel(fresh.read, fresh.view, whitelist, {
       connected: isConnected,
       txLocked: !guard.safe,
@@ -107,9 +112,12 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       amount,
       riskChecked,
       riskTyped: riskTyped.trim().toLowerCase() === RISK_CONFIRM.word,
+      networkFee,
     });
 
-  const state = evaluate(data, false);
+  // Biaya jaringan dihitung dari langkah yang tersisa kalau ETH dianggap cukup (`stepBeforeGasCheck` nggak bergantung
+  // pada biaya), lalu tombol utama dihitung ulang dengan biaya itu.
+  const state = evaluate(data, false, null);
   const { sim, repay, withdraw } = state;
   const ptx = row ? panelTx(row, state, amount) : null;
   const poolTx = usePoolTx({
@@ -117,10 +125,12 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
     user: address,
     asset: { address: row?.asset ?? '0x', symbol: row?.symbol ?? '', decimals: row?.decimals ?? 0 },
     plan: ptx ?? idleTx(tab),
-    refreshStep: async () => evaluate(await refetch(), false).step,
+    // Di tengah rangkaian langkah biayanya belum dihitung ulang: cuma ETH 0 yang menghentikannya.
+    refreshStep: async () => evaluate(await refetch(), false, null).step,
   });
   const { tx } = poolTx;
-  const { step } = evaluate(data, tx.status === 'running');
+  const networkFee = useNetworkFee({ chainId, user: address, asset: row?.asset ?? '0x', step: state.stepBeforeGasCheck, plan: ptx ?? idleTx(tab) });
+  const { step } = evaluate(data, tx.status === 'running', networkFee.fee);
 
   // Sesudah sukses jumlah dikosongkan, biar tombol nggak langsung menawarkan transaksi yang sama lagi, dan izin kembali
   // ke exact (unlimited hanya pilihan sadar per transaksi, #8). Pesan sukses tetap tampil sampai user mengisi jumlah
@@ -295,6 +305,28 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
               owner={address}
               chainId={chainId}
             />
+          )}
+          {isWalletStep(state.stepBeforeGasCheck) && tx.status === 'idle' && (
+            <p className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-muted" title={PANEL.networkFeeInfo}>
+                {PANEL.networkFee}
+              </span>
+              <span className="num">
+                {networkFee.fee !== null
+                  ? PANEL.networkFeeValue(tokenAmount(networkFee.fee, ETH_DECIMALS))
+                  : networkFee.failed
+                    ? PANEL.networkFeeFailed
+                    : PANEL.networkFeePending}
+              </span>
+            </p>
+          )}
+          {step.step === 'needsEthForGas' && (
+            <p className="rounded-md bg-warn-soft px-4 py-3 text-sm text-warn">
+              {step.needed === null ? GAS.empty(chainName(chainId)) : GAS.needed(tokenAmount(step.needed, ETH_DECIMALS), tokenAmount(state.ethBalance, ETH_DECIMALS))}{' '}
+              <Link href="/cara-mendapatkan-eth" className="link">
+                {GAS.howTo}
+              </Link>
+            </p>
           )}
           {showSteps && <WalletSteps {...copy} chainId={chainId} steps={plannedSteps(step, PANEL_TABS[tab].main)} token={row.asset} />}
         </>

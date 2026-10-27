@@ -133,6 +133,11 @@ export const PANEL = {
   noBorrowAssets: 'Tidak ada aset yang bisa dipinjam dari panel ini.',
   arrow: '→',
   pendingAfter: '…',
+  networkFee: 'Biaya jaringan',
+  networkFeeValue: (eth: string) => `~${eth} ETH`,
+  networkFeePending: 'Menghitung…',
+  networkFeeFailed: 'Tidak dapat diperkirakan',
+  networkFeeInfo: 'Perkiraan biaya semua transaksi yang tersisa (izin + transaksi utama), dibayar dengan ETH di chain ini.',
   invalid: {
     not_a_number: 'Jumlah tidak valid.',
     too_many_decimals: (decimals: number) => `Maksimal ${decimals} angka di belakang koma.`,
@@ -147,6 +152,7 @@ export const CTA = {
   locked: 'Transaksi dikunci (pengaman fork)',
   busy: 'Sedang diproses…',
   enterAmount: 'Masukkan jumlah',
+  needsEthForGas: 'ETH kurang untuk biaya jaringan',
   insufficientBalance: (symbol: string) => `Saldo ${symbol} tidak cukup`,
   needCollateral: 'Supply jaminan dulu',
   overLtv: 'Melebihi batas pinjam',
@@ -163,6 +169,32 @@ export const CTA = {
   withdraw: (amount: string, symbol: string) => `Withdraw ${amount} ${symbol}`,
   withdrawAll: (symbol: string) => `Withdraw semua ${symbol}`,
   setCollateral: (enable: boolean, symbol: string) => (enable ? `Aktifkan jaminan ${symbol}` : `Matikan jaminan ${symbol}`),
+};
+
+// ETH kurang untuk biaya jaringan (spec 85–86, DECISIONS.md Q10).
+export const GAS = {
+  needed: (needed: string, balance: string) => `Perkiraan ETH yang dibutuhkan ~${needed} ETH; saldo ETH Anda ${balance} ETH.`,
+  empty: (chain: string) => `Wallet ini tidak punya ETH di ${chain}. Setiap transaksi, termasuk approve, dibayar dengan ETH.`,
+  howTo: 'Cara mendapatkan ETH',
+};
+
+// Halaman bantuan "Cara mendapatkan ETH" (spec 86).
+export const GET_ETH = {
+  title: 'Cara mendapatkan ETH',
+  back: '← Kembali ke dashboard',
+  intro:
+    'Setiap transaksi di Aave (approve, supply, borrow, repay, withdraw, dan mengubah jaminan) dibayar dengan ETH di chain tempat transaksi itu dijalankan. Di Ethereum, Base, dan Arbitrum, biaya jaringannya sama-sama dibayar dengan ETH.',
+  sections: [
+    {
+      title: 'Beli di exchange',
+      body: 'Beli ETH di exchange kripto yang Anda percaya, lalu tarik ke alamat wallet Anda. Saat menarik, pilih jaringan yang sama dengan chain yang ingin Anda pakai (Ethereum, Base, atau Arbitrum). Jaringan yang salah bisa membuat ETH tidak sampai.',
+    },
+    {
+      title: 'Pindahkan lewat bridge resmi',
+      body: 'Kalau Anda sudah punya ETH di chain lain, pindahkan lewat bridge resmi: Arbitrum Bridge (bridge.arbitrum.io) untuk Arbitrum, atau bridge yang tercantum di dokumentasi resmi Base (docs.base.org) untuk Base. Periksa alamat situsnya sebelum menghubungkan wallet.',
+    },
+  ],
+  fork: 'Mode fork: ETH di sini bukan ETH asli. Isi saldo ETH lewat faucet di Dev Tools.',
 };
 
 // Konfirmasi risiko #9 sesuai HF sesudah aksi.
