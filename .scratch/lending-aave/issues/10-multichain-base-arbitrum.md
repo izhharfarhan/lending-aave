@@ -28,7 +28,7 @@
   - Fork: `forkChains.json` Base 52.975.000 (port 8556) dan Arbitrum 517.470.000 (port 8557), blok pin sama dengan swap-web supaya cache RPC Foundry kepake bareng. `anvil:up` sudah generik per entri (termasuk `anvil_setCode` akun tes). Test fork satu project Jest per chain (pola swap-web 17b): `*.base.fork.spec.ts`, `*.arbitrum.fork.spec.ts`, port test 18556/18557.
   - Test khusus chain: Base (whitelist tanpa USDT, USDbC sebagai aset luar, L1 fee > 0, supply ETH lewat gateway Base), Arbitrum (USDC native vs USDC.e Dibekukan sebagai aset luar, supply USDC native lewat app).
 - Catatan:
-  - Token tes L2 diambil dari aToken reserve-nya sendiri (belum ada holder EOA yang dicek di L2); cukup untuk jumlah kecil.
+  - Token tes L2 diambil dari aToken reserve-nya sendiri (belum ada holder EOA yang dicek di L2); cukup untuk jumlah kecil. **Aturan (user, 2026-10-28):** sebelum menambah test L2 yang bergantung pada likuiditas pool (withdraw/borrow besar, kapasitas, likuiditas), ganti dulu ke holder EOA yang dicek di blok pin (`HOLDERS` di `test/fork/fund.ts`), karena mengambil dari aToken membuat saldo underlying-nya lebih kecil dari `virtualUnderlyingBalance`.
   - `ACL_ADMIN` terbukti pool admin juga di Arbitrum (fork test `setReserveFreeze` lolos); helper `asPoolAdmin` tetap mengeceknya lewat ACLManager.
   - USDbC Base: kuota supply-nya sudah lewat (`SupplyCapExceeded`) selain sedang dihapus bertahap; posisi test disiapkan dengan membuka cap sebentar lalu mengembalikannya (`supplyToReserve`).
   - Fork Base & Arbitrum dingin (run pertama) makan >10 menit per file; sesudah cache Foundry hangat jauh lebih cepat.
