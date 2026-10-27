@@ -43,7 +43,7 @@
   - Review, yang sengaja nggak diubah:
     - Nama "Pasar supply/pinjam" tetap, karena itu nama di tiket dan spec.
     - Smell lain (duplikasi baris tabel, `buildChainView` panjang) dibiarkan sampai panel aksi (tiket 03) memperjelas bentuknya.
-  - Fork dingin: `getReservesData` pertama bisa makan beberapa menit (storage diambil dari Alchemy), jadi timeout transport fork dinaikkan ke 120 detik.
+  - Fork dingin: `getReservesData` pertama bisa makan beberapa menit (storage diambil dari RPC upstream; waktu itu `eth.drpc.org`, bukan Alchemy), jadi timeout transport fork dinaikkan ke 120 detik.
   - Sengaja belum:
     - Baris yang bisa diklik dan panel aksi (03).
     - Toggle jaminan (05).
