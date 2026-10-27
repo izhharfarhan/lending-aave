@@ -17,9 +17,9 @@ const RAY = 10n ** 27n;
 const BPS = 10_000n;
 const SECONDS_PER_YEAR = 365n * 24n * 60n * 60n;
 
-/** Aksi yang disimulasikan; supply menyusul (panel supply belum menampilkan HF sesudah). */
+/** Aksi yang disimulasikan; supply dipakai panel penyelamatan (Q29), panel supply belum menampilkan HF sesudah. */
 export type PositionChange =
-  | { action: 'borrow' | 'repay' | 'withdraw'; asset: Address; amount: bigint }
+  | { action: 'supply' | 'borrow' | 'repay' | 'withdraw'; asset: Address; amount: bigint }
   /** Menyalakan / mematikan aset sebagai jaminan. */
   | { action: 'collateral'; asset: Address; enable: boolean };
 
@@ -224,6 +224,11 @@ function applyChange(read: ChainRead, list: Holding[], change: PositionChange): 
   const before = existing ?? { reserve, supplied: 0n, collateral: false, debt: 0n };
   const changed = ((): Holding => {
     switch (change.action) {
+      case 'supply': {
+        // Supply pertama aset ber-LTV ≠ 0 otomatis jadi jaminan (validateAutomaticUseAsCollateral); sesudahnya flag tetap.
+        const collateral = before.supplied === 0n ? reserve.baseLTVasCollateral !== 0n : before.collateral;
+        return { ...before, supplied: before.supplied + change.amount, collateral };
+      }
       case 'borrow':
         return { ...before, debt: before.debt + change.amount };
       case 'repay':

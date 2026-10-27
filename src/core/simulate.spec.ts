@@ -201,6 +201,44 @@ describe('simulate(): withdraw & toggle jaminan', () => {
   });
 });
 
+// Supply (HF sesudah "Supply jaminan" di panel penyelamatan, Q29). Supply pertama aset ber-LTV ≠ 0 otomatis jadi
+// jaminan (`validateAutomaticUseAsCollateral`); supply berikutnya mengikuti flag jaminan yang sudah ada.
+describe('simulate(): supply', () => {
+  describe('positive', () => {
+    it('counts a first stablecoin supply as collateral and raises HF', () => {
+      // (13.148,60476537 × 0,83 + 1.000 × 0,99979651 × 0,78) ÷ 1.999,60115935 = 5,847758.
+      const sim = simulate(read('ethCollateralUsdcDebt'), WHITELIST, { action: 'supply', asset: USDC, amount: usdc(1_000) });
+
+      expect(sim.account.healthFactor).toBeCloseTo(5.847758, 4);
+      expect(sim.account.totalDebtUsd).toBeCloseTo(1_999.60116, 4);
+      expect(sim.gate).toBe('none');
+    });
+
+    it('adds to collateral that is already on', () => {
+      // 1 ETH lagi = $2.306,77 × 0,83 di atas HF 5,457759 sekarang.
+      const sim = simulate(read('ethCollateralUsdcDebt'), WHITELIST, { action: 'supply', asset: WETH, amount: eth(1) });
+
+      expect(sim.account.healthFactor).toBeCloseTo(5.457759 + (2_306.77 * 0.83) / 1_999.60116, 3);
+    });
+  });
+
+  describe('edge case', () => {
+    it('does not count a supply on top of a balance whose collateral is off', () => {
+      const off = withUserReserve(read('ethCollateralUsdcDebt'), USDC, { scaledATokenBalance: 1_000_000n, usageAsCollateralEnabledOnUser: false });
+
+      const sim = simulate(off, WHITELIST, { action: 'supply', asset: USDC, amount: usdc(1_000) });
+      expect(sim.account.healthFactor).toBeCloseTo(5.457759, 5);
+    });
+
+    it('does not turn a first supply of an LTV-0 asset into collateral', () => {
+      const ltvZero = withReserve(read('ethCollateralUsdcDebt'), USDC, { baseLTVasCollateral: 0n });
+
+      const sim = simulate(ltvZero, WHITELIST, { action: 'supply', asset: USDC, amount: usdc(1_000) });
+      expect(sim.account.healthFactor).toBeCloseTo(5.457759, 5);
+    });
+  });
+});
+
 describe('withdrawPlan()', () => {
   const supplied = usdc(1_000);
   // Bantalan = bunga supply 1 hari: APR 3,7743% → 1.000 × 0,037743 ÷ 365 ≈ 0,103406 USDC; 1 jam ≈ 0,004309 USDC.

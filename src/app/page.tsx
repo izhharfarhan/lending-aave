@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-import { chainFromParam } from '@/config/chains';
+import { chainFromParam, RESCUE_PANEL } from '@/config/chains';
 import { NAV } from '@/copy';
 
 import { ChainDetail } from './ChainDetail';
@@ -11,7 +11,7 @@ import { WalletButton, WalletOverview } from './WalletStatus';
 // Chain terpilih dari `?chain=` (Q5): ganti chain = ganti URL, tanpa popup wallet. Wallet baru diminta ganti network
 // saat bertransaksi (langkah "Ganti ke <chain>" di panel aksi). Segmen chain di dashboard = pemilih chain.
 export default async function Home({ searchParams }: PageProps<'/'>) {
-  const { chain } = await searchParams;
+  const { chain, panel } = await searchParams;
   const selected = chainFromParam(typeof chain === 'string' ? chain : null);
   return (
     <div className="flex min-h-screen">
@@ -27,7 +27,7 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
           {/* Langkah ketiga animasi masuk; di luar `key` biar ganti chain nggak memutarnya lagi. `key`: pilihan
               baris/tab panel milik chain sebelumnya dibuang saat ganti chain. */}
           <div className="reveal" style={{ ['--i' as string]: 2 } as CSSProperties}>
-            <ChainDetail key={selected.chainId} chainId={selected.chainId} />
+            <ChainDetail key={selected.chainId} chainId={selected.chainId} rescue={panel === RESCUE_PANEL} />
           </div>
         </main>
       </div>

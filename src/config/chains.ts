@@ -118,6 +118,13 @@ export function chainFromParam(slug: string | null | undefined): SupportedChain 
   return SUPPORTED_CHAINS.find((c) => c.slug === slug) ?? DEFAULT_CHAIN;
 }
 
+/** `?panel=` yang membuka panel penyelamatan (Q29) di detail chain. */
+export const RESCUE_PANEL = 'penyelamatan';
+
+/** URL chain terpilih (Q5); `rescue` = langsung buka panel penyelamatan. */
+export const chainHref = (chain: Pick<SupportedChain, 'slug'>, rescue = false) =>
+  `/?chain=${chain.slug}${rescue ? `&panel=${RESCUE_PANEL}` : ''}`;
+
 export const minGasReserve = (chainId: number): bigint => supportedChain(chainId).minGasReserve;
 
 export function chainName(chainId: number): string {

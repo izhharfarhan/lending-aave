@@ -130,6 +130,23 @@ export const DANGER = {
   stale: (age: string) => `(data ${age} lalu, belum bisa diperbarui)`,
 };
 
+// Panel penyelamatan (Q29, J3): dibuka dari "Lihat <chain>" di banner Bahaya.
+export const RESCUE = {
+  title: (chain: string) => `Selamatkan posisi ${chain}`,
+  intro: 'Dua cara menaikkan Health factor. Angkanya memakai jumlah terbesar yang bisa Anda jalankan sekarang; jumlah sebenarnya Anda isi sendiri.',
+  now: 'Health factor sekarang',
+  repayNote: 'Kurangi utang dari saldo wallet',
+  supply: 'Supply jaminan',
+  supplyNote: 'Tambah jaminan dari saldo wallet',
+  using: (amount: string, symbol: string) => `MAX ${amount} ${symbol}`,
+  hfAfter: 'Health factor sesudah',
+  paidOff: 'Lunas',
+  /** Tanpa pilihan: saldo wallet kosong, reserve Dijeda, atau aksinya nggak menaikkan Health factor. */
+  noRepay: (chain: string) => `Belum ada saldo di wallet Anda (${chain}) yang bisa dipakai repay untuk menaikkan Health factor.`,
+  noSupply: (chain: string) => `Belum ada saldo di wallet Anda (${chain}) yang bisa jadi jaminan untuk menaikkan Health factor.`,
+  choose: (action: string) => `Pilih ${action}`,
+};
+
 // Harga likuidasi (Q14, Q15): "saat ini" = harga oracle chain ini di blok yang dibaca.
 export const LIQUIDATION = {
   price: (dir: 'turun' | 'naik', price: string, pct: string) => `Dilikuidasi kalau ETH ${dir} ke ${price} (${pct})`,

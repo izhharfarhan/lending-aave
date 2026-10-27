@@ -1,12 +1,13 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 import type { Address } from 'viem';
 import { useAccount } from 'wagmi';
 
 import { useChainView } from '@/aave/useChainView';
 import { WHITELIST } from '@/config/assets';
-import { chainName } from '@/config/chains';
+import { chainHref, chainName, supportedChain } from '@/config/chains';
 import {
   visibleSupplyMarket,
   type AccountView,
@@ -20,20 +21,33 @@ import { ActionPanel } from './ActionPanel';
 import { pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
 import { LiquidationText } from './LiquidationText';
+import { RescuePanel } from './RescuePanel';
 import { TokenIcon } from './TokenIcon';
 
 const AAVE_APP_URL = 'https://app.aave.com/';
 
-/** Baris yang dibuka di panel: tab + aset. `asset` kosong = aset pertama tab itu (belum dipilih dari tabel). */
-type Picked = { tab: PanelTab; asset?: Address };
+/**
+ * Baris yang dibuka di panel: tab + aset. `asset` kosong = aset pertama tab itu (belum dipilih dari tabel). `rescue` =
+ * panel penyelamatan (Q29), dibuka dari "Lihat <chain>" di banner Bahaya.
+ */
+type Picked = { tab: PanelTab; asset?: Address } | { tab: 'rescue'; asset?: undefined };
+const initialPick = (rescue: boolean): Picked => ({ tab: rescue ? 'rescue' : 'supply' });
 
 // Detail chain terpilih (Q20, prototype): kepala HF + harga likuidasi + sisa batas pinjam, empat tabel datar, dan panel
 // aksi di kanan. Klik baris membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Supply Anda →
-// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. ETH di semua tab lewat gateway.
-export function ChainDetail({ chainId }: { chainId: number }) {
+// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. ETH di semua tab lewat gateway. `rescue` = URL
+// berisi `panel=penyelamatan` (banner Bahaya): panel penyelamatan menggantikan panel aksi sampai user memilih.
+export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: boolean }) {
   const { data, isPending, isError, refetch } = useChainView(chainId);
   const { isConnected } = useAccount();
-  const [picked, setPicked] = useState<Picked>({ tab: 'supply' });
+  const router = useRouter();
+  const [picked, setPicked] = useState<Picked>(() => initialPick(rescue));
+  // Banner diklik lagi saat chain ini sudah terbuka: komponen nggak dipasang ulang, jadi buka panelnya dari sini.
+  const [prevRescue, setPrevRescue] = useState(rescue);
+  if (rescue !== prevRescue) {
+    setPrevRescue(rescue);
+    if (rescue) setPicked(initialPick(true));
+  }
   const name = chainName(chainId);
 
   if (isPending)
@@ -54,8 +68,13 @@ export function ChainDetail({ chainId }: { chainId: number }) {
     );
 
   const { view } = data;
+  // Keluar dari panel penyelamatan: buang `panel=` dari URL supaya banner bisa membukanya lagi.
+  const choose = (tab: PanelTab, asset?: Address) => {
+    setPicked({ tab, asset });
+    if (rescue) router.replace(chainHref(supportedChain(chainId)), { scroll: false });
+  };
   // Panel selalu ada di kanan (prototype); baris ditandai setelah user memilihnya dari tabel.
-  const pick = (tab: PanelTab) => (asset: Address) => setPicked({ tab, asset });
+  const pick = (tab: PanelTab) => (asset: Address) => choose(tab, asset);
   const active = (tab: PanelTab) => (picked.tab === tab ? picked.asset : undefined);
   const clickable = (tab: PanelTab) => new Set(panelAssets(view, tab).map((r) => r.asset));
 
@@ -90,19 +109,24 @@ export function ChainDetail({ chainId }: { chainId: number }) {
           />
         </div>
         <div className="xl:sticky xl:top-6">
-          <ActionPanel
-            chainId={chainId}
-            data={data}
-            tab={picked.tab}
-            asset={picked.asset}
-            onSelect={(tab, asset) => setPicked({ tab, asset })}
-            refetch={async () => {
-              const result = await refetch();
-              // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
-              if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
-              return result.data;
-            }}
-          />
+          {/* Tanpa utang (sudah lunas, atau URL dibuka tanpa posisi) nggak ada yang perlu diselamatkan. */}
+          {picked.tab === 'rescue' && view.account?.healthFactor != null ? (
+            <RescuePanel chainId={chainId} data={data} onChoose={choose} />
+          ) : (
+            <ActionPanel
+              chainId={chainId}
+              data={data}
+              tab={picked.tab === 'rescue' ? 'supply' : picked.tab}
+              asset={picked.asset}
+              onSelect={choose}
+              refetch={async () => {
+                const result = await refetch();
+                // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
+                if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
+                return result.data;
+              }}
+            />
+          )}
         </div>
       </div>
     </section>

@@ -8,7 +8,7 @@ import { useAccount } from 'wagmi';
 import { useAllChainViews } from '@/aave/useChainView';
 import { useTypicalActionFees } from '@/aave/useNetworkFee';
 import { WHITELIST } from '@/config/assets';
-import { SUPPORTED_CHAINS, type SupportedChain } from '@/config/chains';
+import { chainHref, SUPPORTED_CHAINS, type SupportedChain } from '@/config/chains';
 import { RISK_THRESHOLD, type ChainRead, type ChainView, type RiskLevel } from '@/core/chainPosition';
 import { liquidationPrice } from '@/core/simulate';
 import { elapsed } from '@/core/relativeTime';
@@ -20,7 +20,6 @@ import { liquidationText } from './LiquidationText';
 
 type Loaded = { chain: SupportedChain; read: ChainRead; view: ChainView };
 
-const hrefOf = (chain: SupportedChain) => `/?chain=${chain.slug}`;
 const ageText = (seconds: number) => {
   const { amount, unit } = elapsed(seconds);
   return AGE[unit](amount);
@@ -101,7 +100,7 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
               <span className="flex w-full items-center gap-2">
                 <ChainIcon chain={chain} />
                 <Link
-                  href={hrefOf(chain)}
+                  href={chainHref(chain)}
                   aria-current={chain.chainId === selectedChainId ? 'page' : undefined}
                   className="font-medium after:absolute after:inset-0"
                 >
@@ -186,8 +185,9 @@ function DangerBanner({ summary, dataOf }: { summary: DashboardSummary; dataOf: 
         {liquidation && <span className="text-ink/80"> {liquidation.text}.</span>}
         {others.length > 0 && <span className="text-ink/80"> {DANGER.more(others.length)}</span>}
       </p>
-      {/* Panel penyelamatan (Repay / Supply jaminan) menyusul di tiket 13; sementara cuma memilih chain itu. */}
-      <Link href={hrefOf(chain)} className="text-sm font-medium underline underline-offset-4">
+      {/* Q29: memilih chain itu dan membuka panel penyelamatan (Repay / Supply jaminan), bukan langsung tab Repay.
+          Panelnya sendiri yang menggulir ke layar. */}
+      <Link href={chainHref(chain, true)} scroll={false} className="text-sm font-medium underline underline-offset-4">
         {DANGER.view(chain.name)}
       </Link>
     </div>
@@ -340,7 +340,7 @@ function HfScale({ indebted, selectedChainId }: { indebted: Loaded[]; selectedCh
               <Fragment key={chain.slug}>
                 {i > 0 && <span className="text-faint">{DASHBOARD.markerJoin}</span>}
                 <Link
-                  href={hrefOf(chain)}
+                  href={chainHref(chain)}
                   aria-label={DASHBOARD.marker(chain.name, hf(value))}
                   aria-current={active ? 'page' : undefined}
                   className={active ? 'text-accent' : 'text-muted hover:text-ink'}

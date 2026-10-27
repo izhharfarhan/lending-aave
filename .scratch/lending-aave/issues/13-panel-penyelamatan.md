@@ -8,9 +8,9 @@
 
 **Blocked by:** 11 (Dashboard: hero + segmen chain + banner Bahaya), 08 (MAX per aksi + kapasitas pool)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] "Lihat <chain>" memilih chain itu dan membuka panel penyelamatan, bukan langsung tab Repay
-- [ ] HF sesudah untuk Repay dihitung dari MAX repay (Q26); untuk Supply jaminan dari saldo wallet aset jaminan yang tersedia
-- [ ] Memilih salah satu membuka tab aksinya dengan jumlah kosong
-- [ ] Test Jest modul domain untuk HF sesudah kedua pilihan
+- [x] "Lihat <chain>" memilih chain itu dan membuka panel penyelamatan, bukan langsung tab Repay
+- [x] HF sesudah untuk Repay dihitung dari MAX repay (Q26); untuk Supply jaminan dari saldo wallet aset jaminan yang tersedia
+- [x] Memilih salah satu membuka tab aksinya dengan jumlah kosong
+- [x] Test Jest modul domain untuk HF sesudah kedua pilihan
