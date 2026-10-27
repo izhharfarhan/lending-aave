@@ -29,7 +29,7 @@ type Picked = { tab: PanelTab; asset?: Address };
 
 // Detail chain terpilih (Q20, prototype): kepala HF + harga likuidasi + sisa batas pinjam, empat tabel datar, dan panel
 // aksi di kanan. Klik baris membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Supply Anda →
-// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. Withdraw & borrow ETH lewat gateway di tiket 07.
+// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. ETH di semua tab lewat gateway.
 export function ChainDetail({ chainId }: { chainId: number }) {
   const { data, isPending, isError, refetch } = useChainView(chainId);
   const [picked, setPicked] = useState<Picked>({ tab: 'supply' });
@@ -182,7 +182,6 @@ function PositionTables(props: {
           symbol: row.symbol,
           note: <AssetNote outside={row.outside} status={row.status} />,
           active: row.asset === props.activeSupply,
-          // ETH lewat gateway menyusul di tiket 07; toggle jaminannya sudah bisa (langsung ke Pool).
           onClick: props.withdrawable.has(row.asset) ? () => props.onWithdraw(row.asset) : undefined,
           cells: [
             <span key="apy" className="num">{pct(row.apy)}</span>,
@@ -282,7 +281,6 @@ function MarketTables(props: {
           key: row.asset,
           symbol: row.symbol,
           active: row.asset === props.activeBorrow,
-          // ETH lewat gateway menyusul di tiket 07.
           onClick: props.borrowable.has(row.asset) ? () => props.onBorrow(row.asset) : undefined,
           cells: [
             <span key="apy" className="num">{pct(row.apy)}</span>,

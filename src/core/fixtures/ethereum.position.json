@@ -3248,6 +3248,10 @@
       "allowances": {
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "0n",
         "0xdAC17F958D2ee523a2206206994597C13D831ec7": "0n"
+      },
+      "gatewayAllowances": {
+        "withdraw": "0n",
+        "borrow": "0n"
       }
     },
     "waspada": {
@@ -3673,6 +3677,10 @@
       "allowances": {
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "0n",
         "0xdAC17F958D2ee523a2206206994597C13D831ec7": "0n"
+      },
+      "gatewayAllowances": {
+        "withdraw": "0n",
+        "borrow": "0n"
       }
     },
     "bahayaWithOutsideAssets": {
@@ -4098,6 +4106,10 @@
       "allowances": {
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "0n",
         "0xdAC17F958D2ee523a2206206994597C13D831ec7": "115792089237316195423570985008687907853269984665640564039457584007913129639935n"
+      },
+      "gatewayAllowances": {
+        "withdraw": "0n",
+        "borrow": "0n"
       }
     },
     "ethDebtOutsideNonCollateral": {
@@ -4523,6 +4535,10 @@
       "allowances": {
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "115792089237316195423570985008687907853269984665640564039457584007875314663130n",
         "0xdAC17F958D2ee523a2206206994597C13D831ec7": "115792089237316195423570985008687907853269984665640564039457584007913129639935n"
+      },
+      "gatewayAllowances": {
+        "withdraw": "115792089237316195423570985008687907853269984665640564039457584007913129639935n",
+        "borrow": "0n"
       }
     },
     "noDebt": {
@@ -4948,6 +4964,10 @@
       "allowances": {
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "9007199253780510450702n",
         "0xdAC17F958D2ee523a2206206994597C13D831ec7": "9007199254204332829631n"
+      },
+      "gatewayAllowances": {
+        "withdraw": "9007199254740991000000000000000000n",
+        "borrow": "0n"
       }
     },
     "empty": {
@@ -5373,6 +5393,10 @@
       "allowances": {
         "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48": "0n",
         "0xdAC17F958D2ee523a2206206994597C13D831ec7": "0n"
+      },
+      "gatewayAllowances": {
+        "withdraw": "0n",
+        "borrow": "0n"
       }
     }
   }

@@ -33,6 +33,7 @@ export type TxState =
 const WALLET_STEPS: ReadonlySet<string> = new Set<WalletStepName>([
   'resetApproval',
   'approve',
+  'delegate',
   'supply',
   'withdraw',
   'borrow',
@@ -44,7 +45,7 @@ export const isWalletStep = (step: NextStep): step is WalletStep => WALLET_STEPS
 // Langkah yang akan diminta wallet, diturunkan dari langkah sekarang (bukan diingat UI).
 export function plannedSteps(step: WalletStep, main: MainStep): WalletStepName[] {
   if (step.step === 'resetApproval') return ['resetApproval', 'approve', main];
-  if (step.step === 'approve') return ['approve', main];
+  if (step.step === 'approve' || step.step === 'delegate') return [step.step, main];
   return [main];
 }
 
@@ -88,7 +89,7 @@ export function usePoolTx({ chainId, user, asset, plan, refreshStep }: PoolTxArg
         return;
       }
       sent[step.step] = hash;
-      if (step.step === 'approve') approved = step.amount;
+      if (step.step === 'approve' || step.step === 'delegate') approved = step.amount;
       setTx({ status: 'running', steps, index, phase: 'confirming', sent: { ...sent } });
       try {
         const receipt = await client.waitForTransactionReceipt({ hash });

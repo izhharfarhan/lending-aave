@@ -203,20 +203,28 @@ describe('simulate(): withdraw & toggle jaminan', () => {
 
 describe('withdrawPlan()', () => {
   const supplied = usdc(1_000);
-  // Bantalan = bunga supply 1 hari: APR 3,7743% → 1.000 × 0,037743 ÷ 365 ≈ 0,1034 USDC.
+  // Bantalan = bunga supply 1 hari: APR 3,7743% → 1.000 × 0,037743 ÷ 365 ≈ 0,103406 USDC; 1 jam ≈ 0,004309 USDC.
   const rate = 37_743_000_000_000_000_000_000_000n;
+  const max = 2n ** 256n - 1n;
 
   it('withdraws everything with type(uint256).max when the amount covers the supply (up to a day of interest)', () => {
-    expect(withdrawPlan({ supplied, amount: supplied, liquidityRate: rate })).toEqual({ all: true, send: 2n ** 256n - 1n });
-    expect(withdrawPlan({ supplied, amount: supplied - 100_000n, liquidityRate: rate })).toEqual({ all: true, send: 2n ** 256n - 1n });
+    const all = { all: true, send: max, spend: supplied + 103_406n, required: supplied + 4_309n };
+    expect(withdrawPlan({ supplied, amount: supplied, liquidityRate: rate })).toEqual(all);
+    expect(withdrawPlan({ supplied, amount: supplied - 100_000n, liquidityRate: rate })).toEqual(all);
   });
 
   it('does not turn a typo far above the supply into "withdraw everything"', () => {
-    expect(withdrawPlan({ supplied, amount: supplied * 10n, liquidityRate: rate })).toEqual({ all: false, send: supplied * 10n });
+    const typo = supplied * 10n;
+    expect(withdrawPlan({ supplied, amount: typo, liquidityRate: rate })).toEqual({ all: false, send: typo, spend: typo, required: typo });
   });
 
   it('withdraws exactly the typed amount otherwise', () => {
-    expect(withdrawPlan({ supplied, amount: supplied - 200_000n, liquidityRate: rate })).toEqual({ all: false, send: supplied - 200_000n });
+    const amount = supplied - 200_000n;
+    expect(withdrawPlan({ supplied, amount, liquidityRate: rate })).toEqual({ all: false, send: amount, spend: amount, required: amount });
+  });
+
+  it('still cushions the aWETH allowance by at least 1 wei when the supply rate is 0', () => {
+    expect(withdrawPlan({ supplied, amount: supplied, liquidityRate: 0n })).toMatchObject({ spend: supplied + 1n, required: supplied + 1n });
   });
 });
 

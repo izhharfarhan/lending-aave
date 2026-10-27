@@ -31,6 +31,10 @@ export async function supplyWethCollateral(eth: string) {
 }
 
 export async function advanceDays(days: number) {
-  await testClient.increaseTime({ seconds: days * 24 * 60 * 60 });
+  await advanceHours(days * 24);
+}
+
+export async function advanceHours(hours: number) {
+  await testClient.increaseTime({ seconds: hours * 60 * 60 });
   await testClient.mine({ blocks: 1 });
 }

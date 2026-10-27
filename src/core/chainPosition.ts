@@ -65,6 +65,11 @@ export type ChainRead = {
     walletBalances: Record<Address, bigint>;
     /** `allowance(user, Pool)` per alamat whitelist ERC20 (aset `native` lewat gateway, nggak ada di sini). */
     allowances: Record<Address, bigint>;
+    /**
+     * Izin ke WrappedTokenGateway untuk aset `native`: `aWETH.allowance(user, gateway)` (withdraw ETH) dan
+     * `variableDebtWETH.borrowAllowance(user, gateway)` (borrow ETH). `null` = whitelist chain ini tanpa aset `native`.
+     */
+    gatewayAllowances: { withdraw: bigint; borrow: bigint } | null;
   } | null;
 };
 
@@ -103,8 +108,10 @@ export type SupplyRow = PositionRowBase & {
   priceUsd: number;
   /** APR supply (ray), untuk kelonggaran "withdraw semua". */
   supplyRate: bigint;
-  /** ETH: withdraw lewat gateway (tiket 07); toggle jaminannya tetap langsung ke Pool. */
+  /** ETH: withdraw lewat gateway; toggle jaminannya tetap langsung ke Pool. */
   native: boolean;
+  /** Withdraw ETH: izin aWETH ke gateway. `null` = ERC20 (withdraw langsung dari Pool, tanpa izin). */
+  allowance: bigint | null;
 };
 export type DebtRow = PositionRowBase & {
   /** Saldo wallet & izin ke Pool untuk tab Repay. `null` = aset luar (tanpa aksi); izin juga `null` untuk aset `native`. */
@@ -134,8 +141,10 @@ export type BorrowMarketRow = MarketRowBase & {
   /** Sisa batas pinjam dalam token ini. `null` = wallet belum terhubung. */
   borrowable: bigint | null;
   priceUsd: number;
-  /** ETH dipinjam lewat gateway (tiket 07). */
+  /** ETH dipinjam lewat gateway. */
   native: boolean;
+  /** Borrow ETH: credit delegation ke gateway. `null` = belum terhubung, atau ERC20 (borrow langsung dari Pool). */
+  allowance: bigint | null;
 };
 
 export type ChainView = {
@@ -194,7 +203,7 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
       canBeCollateral: reserve.baseLTVasCollateral > 0n,
       priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
       supplyRate: reserve.liquidityRate,
-      native: listed.get(key(reserve.underlyingAsset))?.asset.native ?? false,
+      ...nativeOf(listed.get(key(reserve.underlyingAsset))?.asset, read.user?.gatewayAllowances?.withdraw),
     }))
     .sort(order);
   const borrows = rows
@@ -246,7 +255,7 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
         ? (user.account.availableBorrowsBase * 10n ** reserve.decimals) / reserve.priceInMarketReferenceCurrency
         : null,
       priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
-      native: asset.native,
+      ...nativeOf(asset, user?.gatewayAllowances?.borrow),
     }));
 
   return { account: user ? accountView(user.account, toUsd) : null, supplies, borrows, supplyMarket, borrowMarket };
@@ -258,6 +267,11 @@ export function visibleSupplyMarket(rows: SupplyMarketRow[], showAll: boolean): 
 }
 
 const key = (address: Address) => address.toLowerCase();
+// Aset `native` lewat gateway membawa izinnya ke gateway (aWETH / delegation); ERC20 nggak.
+const nativeOf = (asset: WhitelistAsset | undefined, gatewayAllowance: bigint | undefined) => {
+  const native = asset?.native ?? false;
+  return { native, allowance: native ? (gatewayAllowance ?? null) : null };
+};
 
 function reserveStatus(reserve: ReserveRead): ReserveStatus {
   if (reserve.isPaused) return 'dijeda';

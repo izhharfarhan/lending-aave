@@ -1,14 +1,18 @@
-import { parseEther } from 'viem';
+import { erc20Abi, maxUint256, parseEther } from 'viem';
 
 import { buildChainView } from '@/core/chainPosition';
 import { publicClient, TEST_ACCOUNT } from '../../test/fork/clients';
 import { fundErc20 } from '../../test/fork/fund';
 import { contracts, panelState, read, runLikeTheApp, whitelist } from '../../test/fork/likeTheApp';
-import { advanceDays, sendWithMargin, units, USDC, WETH } from '../../test/fork/position';
-import { poolAbi } from './abis';
+import { advanceDays, advanceHours, sendWithMargin, units, USDC, WETH } from '../../test/fork/position';
+import { debtTokenAbi, gatewayAbi, poolAbi } from './abis';
 
 const ethBalance = () => publicClient.getBalance({ address: TEST_ACCOUNT });
 const ethRow = async () => buildChainView(await read(), whitelist);
+const ethSupplied = async () => (await ethRow()).supplies.find((r) => r.symbol === 'ETH')?.amount ?? 0n;
+const scaledAWeth = async () => (await read()).user!.reserves.find((r) => r.underlyingAsset === WETH)!.scaledATokenBalance;
+const aWethAllowance = () =>
+  publicClient.readContract({ address: contracts.aWeth, abi: erc20Abi, functionName: 'allowance', args: [TEST_ACCOUNT, contracts.wrappedTokenGateway] });
 
 // Biaya gas tx terakhir (Anvil automine: satu tx per blok), untuk memisahkan ETH yang dibayar ke Aave dari biaya jaringan.
 async function lastTxFee() {
@@ -17,7 +21,7 @@ async function lastTxFee() {
   return receipt.gasUsed * receipt.effectiveGasPrice;
 }
 
-// Utang ETH disiapkan langsung lewat Pool (pinjam WETH): borrow ETH lewat gateway baru ada di tiket 07.
+// Utang ETH disiapkan langsung lewat Pool (pinjam WETH): setup cepat untuk test repay.
 async function ethDebt(eth: string) {
   await fundErc20(USDC, TEST_ACCOUNT, units(5_000));
   await runLikeTheApp('supply', USDC, units(5_000));
@@ -71,6 +75,65 @@ describe('ETH lewat WrappedTokenGateway (fork Ethereum)', () => {
       expect(paid).toBeLessThan(repay!.spend);
       expect(await publicClient.getBalance({ address: contracts.wrappedTokenGateway })).toBe(0n);
     });
+
+    it('withdraws part of the ETH supply: exact aWETH approve to the gateway, then ETH lands in the wallet', async () => {
+      await runLikeTheApp('supply', WETH, parseEther('1'));
+      let approved = 0n;
+
+      const sent = await runLikeTheApp('withdraw', WETH, parseEther('0.4'), { between: async () => void (approved = await ethBalance()) });
+
+      expect(sent).toEqual([{ step: 'approve', approveAmount: parseEther('0.4') }, { step: 'withdraw' }]);
+      expect((await ethBalance()) - approved + (await lastTxFee())).toBe(parseEther('0.4'));
+      // Izin exact habis terpakai (paling banyak sisa 1 wei pembulatan aToken).
+      expect(parseEther('0.6') - (await ethSupplied())).toBeLessThanOrEqual(1n);
+      expect(await aWethAllowance()).toBeLessThanOrEqual(1n);
+    });
+
+    it('withdraws all ETH with type(uint256).max after interest accrued, leaving no aWETH dust', async () => {
+      await runLikeTheApp('supply', WETH, parseEther('1'));
+      await advanceDays(30);
+      const supplied = await ethSupplied();
+      const { withdraw } = await panelState('withdraw', WETH, supplied);
+      expect(withdraw?.all).toBe(true);
+      let approved = 0n;
+
+      // Bunga terus bertambah antara approve dan withdraw (1 jam di sini): izin berbantalan tetap cukup.
+      const sent = await runLikeTheApp('withdraw', WETH, supplied, {
+        between: async () => {
+          await advanceHours(1);
+          approved = await ethBalance();
+        },
+      });
+
+      expect(sent).toEqual([{ step: 'approve', approveAmount: withdraw!.spend }, { step: 'withdraw' }]);
+      expect(await scaledAWeth()).toBe(0n);
+      // Yang diterima = seluruh saldo saat eksekusi, termasuk bunga 1 jam sesudah saldo dibaca.
+      const received = (await ethBalance()) - approved + (await lastTxFee());
+      expect(received).toBeGreaterThan(supplied);
+      expect(received).toBeLessThanOrEqual(withdraw!.spend);
+      expect(await publicClient.getBalance({ address: contracts.wrappedTokenGateway })).toBe(0n);
+    });
+
+    it('borrows ETH after a credit delegation to the gateway; the ETH lands in the wallet and the debt is the user\'s', async () => {
+      await fundErc20(USDC, TEST_ACCOUNT, units(5_000));
+      await runLikeTheApp('supply', USDC, units(5_000));
+      let delegated = 0n;
+
+      const sent = await runLikeTheApp('borrow', WETH, parseEther('0.3'), { between: async () => void (delegated = await ethBalance()) });
+
+      expect(sent).toEqual([{ step: 'delegate', approveAmount: parseEther('0.3') }, { step: 'borrow' }]);
+      expect((await ethBalance()) - delegated + (await lastTxFee())).toBe(parseEther('0.3'));
+      const debt = (await ethRow()).borrows.find((r) => r.symbol === 'ETH')!.amount;
+      expect(debt - parseEther('0.3')).toBeLessThanOrEqual(parseEther('0.000001'));
+      // Delegation exact habis terpakai: gateway nggak bisa berutang lagi atas nama user.
+      const left = await publicClient.readContract({
+        address: contracts.variableDebtWeth,
+        abi: debtTokenAbi,
+        functionName: 'borrowAllowance',
+        args: [TEST_ACCOUNT, contracts.wrappedTokenGateway],
+      });
+      expect(left).toBe(0n);
+    });
   });
 
   describe('edge case', () => {
@@ -90,6 +153,23 @@ describe('ETH lewat WrappedTokenGateway (fork Ethereum)', () => {
   });
 
   describe('negative', () => {
+    it('V2: withdrawETH(max) with an aWETH approve of exactly the current balance fails once interest accrues', async () => {
+      await runLikeTheApp('supply', WETH, parseEther('1'));
+      await advanceDays(1);
+      await sendWithMargin({ address: contracts.aWeth, abi: erc20Abi, functionName: 'approve', args: [contracts.wrappedTokenGateway, await ethSupplied()] });
+      await advanceDays(1);
+
+      await expect(
+        publicClient.simulateContract({
+          account: TEST_ACCOUNT,
+          address: contracts.wrappedTokenGateway,
+          abi: gatewayAbi,
+          functionName: 'withdrawETH',
+          args: [contracts.pool, maxUint256, TEST_ACCOUNT],
+        }),
+      ).rejects.toThrow();
+    });
+
     it('blocks supplying more ETH than the wallet holds before any wallet popup', async () => {
       const balance = await ethBalance();
 

@@ -9,14 +9,14 @@ import { isWalletStep, plannedSteps, usePoolTx, type TxState } from '@/aave/useP
 import { IS_FORK } from '@/config/appMode';
 import { WHITELIST } from '@/config/assets';
 import { chainName } from '@/config/chains';
-import { AAVE } from '@/config/contracts';
+import { AAVE, type AaveContracts } from '@/config/contracts';
 import { explorerAddressUrl, explorerTxUrl, revokeCashUrl } from '@/config/explorer';
 import type { ChainRead, ChainView, SupplyRow } from '@/core/chainPosition';
 import type { NextStep, NextStepInput, WalletStepName } from '@/core/nextStep';
-import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelTx, type PanelAsset, type PanelTab } from '@/core/panel';
+import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelTx, routeOf, type PanelAsset, type PanelTab, type Route } from '@/core/panel';
 import { parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
-import { APPROVAL, CTA, PANEL, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
+import { APPROVAL, CTA, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
 import { useForkGuard } from '@/wallet/useForkGuard';
 import { hf, pct, tokenAmount, usd } from './format';
 import { HealthFactor } from './HealthFactor';
@@ -25,6 +25,13 @@ import { TokenIcon } from './TokenIcon';
 
 const SMART_ACCOUNT_NOTE_KEY = 'lending-web:smartAccountNoteDismissed';
 const TABS = ['supply', 'withdraw', 'borrow', 'repay'] as const;
+
+/** Jenis izin sebelum transaksi utama (teksnya di `GRANT`). */
+type GrantKind = keyof typeof GRANT;
+const isGrant = (name: WalletStepName) => name === 'approve' || name === 'resetApproval' || name === 'delegate';
+// resetApproval cuma ada untuk ERC20 ala USDT (izin aWETH nggak perlu di-reset ke 0).
+const grantOf = (name: WalletStepName, route: Route): GrantKind =>
+  name === 'delegate' ? 'delegation' : name === 'approve' && route === 'gateway' ? 'aWeth' : 'pool';
 
 export type ChainData = { read: ChainRead; view: ChainView };
 
@@ -65,7 +72,7 @@ type Props = {
   refetch: () => Promise<ChainData>;
 };
 
-// Panel aksi di samping detail chain (Q20): tab Supply, Withdraw, Borrow, Repay untuk ERC20, plus mode toggle jaminan
+// Panel aksi di samping detail chain (Q20): tab Supply, Withdraw, Borrow, Repay (ETH lewat gateway), plus mode toggle jaminan
 // (dari switch di "Supply Anda"). Panel cuma dirender sesudah data posisi siap (sebelumnya skeleton / "gagal dimuat"),
 // jadi `data` selalu `ready` di sini.
 export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Props) {
@@ -146,15 +153,16 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   const copy: StepCopy = {
     symbol: row?.symbol ?? '',
     amount: tokenAmount(ptx?.shown ?? 0n, row?.decimals ?? 0),
-    approveAmount: tokenAmount(repay?.spend ?? amount ?? 0n, row?.decimals ?? 0),
+    approveAmount: tokenAmount(repay?.spend ?? withdraw?.spend ?? amount ?? 0n, row?.decimals ?? 0),
     full: ptx?.full ?? false,
-    native: ptx?.gateway != null,
+    // Dari `progressRow`: sesudah repay ETH lunas barisnya hilang, tapi progresnya tetap jalur gateway.
+    route: routeOf(tab, progressRow?.native ?? false),
     enable: ptx?.useAsCollateral ?? false,
     unlimited: approvalMode === 'unlimited',
   };
   const cta = row ? ctaFor(step, tab, copy) : null;
   const showSteps = isWalletStep(step) && tx.status === 'idle';
-  const asksApproval = step.step === 'approve' || step.step === 'resetApproval';
+  const grant = isWalletStep(step) && isGrant(step.step) ? grantOf(step.step, copy.route) : null;
   const amountUsd = row && amount !== null ? Number(formatUnits(amount, row.decimals)) * row.priceUsd : 0;
   const collateral = data.view.supplies.filter((s) => s.collateral);
 
@@ -250,13 +258,13 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
               )}
               {row.tab === 'repay' && repay?.full && (
                 <p className="mt-3 text-xs text-muted">
-                  {row.native
-                    ? PANEL.repayFullEth(tokenAmount(row.debt, row.decimals), tokenAmount(repay.spend, row.decimals))
-                    : PANEL.repayFull(tokenAmount(row.debt, row.decimals), row.symbol, tokenAmount(repay.spend, row.decimals))}
+                  {PANEL.repayFull[copy.route](tokenAmount(row.debt, row.decimals), row.symbol, tokenAmount(repay.spend, row.decimals))}
                 </p>
               )}
               {row.tab === 'withdraw' && withdraw?.all && (
-                <p className="mt-3 text-xs text-muted">{PANEL.withdrawAll(tokenAmount(row.supplied, row.decimals), row.symbol)}</p>
+                <p className="mt-3 text-xs text-muted">
+                  {PANEL.withdrawAll[copy.route](tokenAmount(row.supplied, row.decimals), row.symbol, tokenAmount(withdraw.spend, row.decimals))}
+                </p>
               )}
             </div>
           )}
@@ -277,8 +285,9 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
           )}
 
           {step.step === 'paused' && <p className="rounded-md bg-raised px-4 py-3 text-sm text-muted">{RISK_CONFIRM.paused}</p>}
-          {asksApproval && (
+          {grant && (
             <ApprovalSettings
+              kind={grant}
               mode={approvalMode}
               onChange={setApprovalMode}
               symbol={row.symbol}
@@ -358,7 +367,8 @@ function ctaFor(step: NextStep, tab: PanelTab, c: StepCopy): { label: string; en
     case 'resetApproval':
       return { label: CTA.resetApproval(c.symbol, tab), enabled: true };
     case 'approve':
-      return { label: CTA.approve(c.symbol, tab), enabled: true };
+    case 'delegate':
+      return { label: GRANT[grantOf(step.step, c.route)].cta(c.symbol, tab), enabled: true };
     case 'supply':
       return { label: CTA.supply(c.amount, c.symbol), enabled: true };
     case 'withdraw':
@@ -479,6 +489,7 @@ function RiskConfirm(props: {
 }
 
 function ApprovalSettings(props: {
+  kind: GrantKind;
   mode: NextStepInput['approvalMode'];
   onChange: (mode: NextStepInput['approvalMode']) => void;
   symbol: string;
@@ -486,9 +497,10 @@ function ApprovalSettings(props: {
   owner: Address | undefined;
   chainId: number;
 }) {
+  const text = GRANT[props.kind];
   return (
     <fieldset className="flex flex-col gap-2.5 rounded-md border border-line p-4 text-sm">
-      <legend className="px-1 text-xs text-muted">{APPROVAL.legend(props.symbol)}</legend>
+      <legend className="px-1 text-xs text-muted">{text.legend(props.symbol)}</legend>
       <div role="radiogroup" aria-label={APPROVAL.ariaMode} className="flex w-fit gap-1 rounded-md bg-raised p-1">
         {(['exact', 'unlimited'] as const).map((mode) => (
           <label
@@ -501,11 +513,11 @@ function ApprovalSettings(props: {
         ))}
       </div>
       {props.mode === 'exact' ? (
-        <p className="text-xs text-muted">{APPROVAL.exactNote(props.amount || '…', props.symbol)}</p>
+        <p className="text-xs text-muted">{text.exactNote(props.amount || '…', props.symbol)}</p>
       ) : (
-        <p className="rounded-md bg-warn-soft px-3 py-2 text-xs text-warn">{APPROVAL.unlimitedWarning(props.symbol)}</p>
+        <p className="rounded-md bg-warn-soft px-3 py-2 text-xs text-warn">{text.unlimitedWarning(props.symbol)}</p>
       )}
-      {props.owner && (
+      {props.owner && text.revocable && (
         <a
           className="link w-fit text-xs text-muted"
           href={revokeCashUrl(props.owner, props.chainId)}
@@ -530,8 +542,7 @@ type StepCopy = {
   /** Toggle jaminan: nyalakan atau matikan. */
   enable: boolean;
   unlimited: boolean;
-  /** Transaksi utama ETH lewat WrappedTokenGateway. */
-  native: boolean;
+  route: Route;
 };
 
 function stepText(name: WalletStepName, c: StepCopy) {
@@ -539,35 +550,49 @@ function stepText(name: WalletStepName, c: StepCopy) {
     case 'resetApproval':
       return { title: STEPS.resetApproval.title(c.symbol), detail: STEPS.resetApproval.detail(c.symbol) };
     case 'approve':
-      return {
-        title: STEPS.approve.title(c.approveAmount, c.symbol, c.unlimited),
-        detail: STEPS.approve.detail(c.approveAmount, c.symbol, c.unlimited),
-      };
+    case 'delegate': {
+      const text = GRANT[grantOf(name, c.route)];
+      return { title: text.title(c.approveAmount, c.symbol, c.unlimited), detail: text.detail(c.approveAmount, c.symbol, c.unlimited) };
+    }
     case 'supply':
-      return { title: STEPS.supply.title(c.amount, c.symbol), detail: c.native ? STEPS.supply.detailEth : STEPS.supply.detail };
+      return { title: STEPS.supply.title(c.amount, c.symbol), detail: STEPS.supply.detail[c.route] };
     case 'borrow':
-      return { title: STEPS.borrow.title(c.amount, c.symbol), detail: STEPS.borrow.detail };
+      return { title: STEPS.borrow.title(c.amount, c.symbol), detail: STEPS.borrow.detail[c.route] };
     case 'repay':
       return {
         title: c.full ? STEPS.repay.titleFull(c.symbol) : STEPS.repay.title(c.amount, c.symbol),
-        detail: c.native ? STEPS.repay.detailEth : STEPS.repay.detail,
+        detail: STEPS.repay.detail[c.route],
       };
     case 'withdraw':
-      return { title: c.full ? STEPS.withdraw.titleAll(c.symbol) : STEPS.withdraw.title(c.amount, c.symbol), detail: STEPS.withdraw.detail };
+      return {
+        title: c.full ? STEPS.withdraw.titleAll(c.symbol) : STEPS.withdraw.title(c.amount, c.symbol),
+        detail: STEPS.withdraw.detail[c.route],
+      };
     case 'setCollateral':
       return { title: STEPS.setCollateral.title(c.enable, c.symbol), detail: STEPS.setCollateral.detail };
   }
 }
 
-const isApproval = (name: WalletStepName) => name === 'approve' || name === 'resetApproval';
+type Contract = { label: string; address: Address };
+
+// Kontrak yang bisa dicocokkan per langkah (spec 89). Izin: kontrak tokennya (itu yang tampil di wallet) + yang diberi
+// izin. Transaksi utama: tujuannya, Pool atau gateway sesuai jalur.
+function stepContracts(name: WalletStepName, route: Route, contracts: AaveContracts, token: Contract): Contract[] {
+  const pool = { label: STEPS.pool, address: contracts.pool };
+  const gateway = { label: STEPS.gateway, address: contracts.wrappedTokenGateway };
+  const to = route === 'gateway' ? gateway : pool;
+  if (!isGrant(name)) return [to];
+  const grantToken = {
+    pool: token,
+    aWeth: { label: STEPS.aWeth, address: contracts.aWeth },
+    delegation: { label: STEPS.debtToken, address: contracts.variableDebtWeth },
+  }[grantOf(name, route)];
+  return [grantToken, { label: STEPS.spender(to.label), address: to.address }];
+}
 
 function WalletSteps(props: StepCopy & { chainId: number; steps: WalletStepName[]; token: Address }) {
   const contracts = AAVE[props.chainId];
-  // Transaksi utama ETH ditujukan ke gateway; approve (ERC20) dan aksi lain ke Pool.
-  const target = (name: WalletStepName) =>
-    props.native && !isApproval(name)
-      ? { label: STEPS.gateway, address: contracts.wrappedTokenGateway }
-      : { label: isApproval(name) ? STEPS.spender : STEPS.pool, address: contracts.pool };
+  const token = { label: STEPS.token(props.symbol), address: props.token };
   return (
     <div>
       <h3 className="text-xs text-muted">{STEPS.heading}</h3>
@@ -582,10 +607,9 @@ function WalletSteps(props: StepCopy & { chainId: number; steps: WalletStepName[
               <div className="min-w-0 text-sm">
                 <p className="font-medium">{text.title}</p>
                 <p className="mt-0.5 text-xs text-muted">{text.detail}</p>
-                {/* Approve dikirim ke kontrak token (itu yang tampil di wallet), dan yang diberi izin Aave Pool: dua-duanya
-                    perlu bisa dicocokkan (spec 89). */}
-                {isApproval(name) && <OfficialAddress chainId={props.chainId} label={STEPS.token(props.symbol)} address={props.token} />}
-                <OfficialAddress chainId={props.chainId} {...target(name)} />
+                {stepContracts(name, props.route, contracts, token).map((c) => (
+                  <OfficialAddress key={c.address} chainId={props.chainId} {...c} />
+                ))}
               </div>
             </li>
           );

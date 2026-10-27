@@ -123,6 +123,13 @@ export type RepayPlan = {
 
 // Bunga terus berjalan antara baca, approve, dan repay; bantalan = bunga 1 hari pada APR pinjaman saat ini.
 const CUSHION_SECONDS = 24n * 60n * 60n;
+const HOUR_SECONDS = 60n * 60n;
+
+/** Bunga `principal` selama `seconds` pada `rate` (ray/tahun), dibulatkan ke atas dan minimal 1 wei (pembulatan aToken/debt). */
+const interestAtLeastOne = (principal: bigint, rate: bigint, seconds: bigint) => {
+  const value = ceilDiv(principal * rate * seconds, SECONDS_PER_YEAR * RAY);
+  return value > 0n ? value : 1n;
+};
 
 /**
  * #8: lunas penuh kalau jumlahnya menutup utang dan saldo wallet cukup untuk utang + bantalan bunga. "Menutup" diberi
@@ -131,13 +138,10 @@ const CUSHION_SECONDS = 24n * 60n * 60n;
  */
 export function repayPlan(input: { debt: bigint; balance: bigint; amount: bigint; variableBorrowRate: bigint }): RepayPlan {
   const { debt, balance, amount } = input;
-  const interest = (seconds: bigint) => {
-    const value = ceilDiv(debt * input.variableBorrowRate * seconds, SECONDS_PER_YEAR * RAY);
-    return value > 0n ? value : 1n;
-  };
+  const interest = (seconds: bigint) => interestAtLeastOne(debt, input.variableBorrowRate, seconds);
   const cushion = interest(CUSHION_SECONDS);
   if (amount + cushion >= debt && balance >= debt + cushion) {
-    return { full: true, send: maxUint256, spend: debt + cushion, required: debt + interest(60n * 60n) };
+    return { full: true, send: maxUint256, spend: debt + cushion, required: debt + interest(HOUR_SECONDS) };
   }
   return { full: false, send: amount, spend: amount, required: amount };
 }
@@ -145,8 +149,15 @@ export function repayPlan(input: { debt: bigint; balance: bigint; amount: bigint
 export type WithdrawPlan = {
   /** Withdraw semua: dikirim sebagai `type(uint256).max`, Pool membakar seluruh aToken saat tx dieksekusi (tanpa debu). */
   all: boolean;
-  /** Argumen `amount` untuk `Pool.withdraw`. */
+  /** Argumen `amount` untuk `Pool.withdraw` / `withdrawETH`. */
   send: bigint;
+  /**
+   * Withdraw ETH: izin aWETH ke gateway yang diminta. Withdraw semua = saldo + bantalan bunga supply 1 hari, karena
+   * gateway menarik seluruh aWETH saat tx dieksekusi (V2). ERC20 nggak butuh izin.
+   */
+  spend: bigint;
+  /** Izin aWETH minimum untuk lanjut ke withdraw: saldo + bunga 1 jam kalau withdraw semua (pola `RepayPlan.required`). */
+  required: bigint;
 };
 
 /**
@@ -155,10 +166,13 @@ export type WithdrawPlan = {
  */
 export function withdrawPlan(input: { supplied: bigint; amount: bigint; liquidityRate: bigint }): WithdrawPlan {
   const { supplied, amount } = input;
-  const cushion = ceilDiv(supplied * input.liquidityRate * CUSHION_SECONDS, SECONDS_PER_YEAR * RAY);
+  const interest = (seconds: bigint) => interestAtLeastOne(supplied, input.liquidityRate, seconds);
+  const cushion = interest(CUSHION_SECONDS);
   // Jauh di atas saldo = salah ketik, bukan "semua": biar nextStep menolaknya sebagai saldo nggak cukup.
-  if (amount + cushion >= supplied && amount <= supplied + cushion) return { all: true, send: maxUint256 };
-  return { all: false, send: amount };
+  if (amount + cushion >= supplied && amount <= supplied + cushion) {
+    return { all: true, send: maxUint256, spend: supplied + cushion, required: supplied + interest(HOUR_SECONDS) };
+  }
+  return { all: false, send: amount, spend: amount, required: amount };
 }
 
 /** `getUserAccountData` yang dihitung ulang dari data per reserve (dasar simulasi; dibuktikan sama oleh test paritas). */

@@ -2,8 +2,11 @@ import { maxUint256 } from 'viem';
 
 import type { Gate, RepayPlan, WithdrawPlan } from './simulate';
 
-/** Langkah yang dikirim ke wallet (ERC20 lewat Pool). */
-export type WalletStepName = 'resetApproval' | 'approve' | 'supply' | 'withdraw' | 'borrow' | 'repay' | 'setCollateral';
+/**
+ * Langkah yang dikirim ke wallet. `approve` = ERC20 ke Pool, atau aWETH ke gateway (withdraw ETH); `delegate` = izin
+ * gateway berutang atas nama user (`approveDelegation`, borrow ETH).
+ */
+export type WalletStepName = 'resetApproval' | 'approve' | 'delegate' | 'supply' | 'withdraw' | 'borrow' | 'repay' | 'setCollateral';
 
 /** Hasil simulasi + konfirmasi user untuk aksi yang bisa memperburuk posisi (borrow, withdraw, mematikan jaminan). */
 type RiskInput = {
@@ -46,13 +49,19 @@ export type NextStepInput = {
   action: ActionInput;
   /** Saldo aset di wallet (supply/repay), atau saldo supply (withdraw). */
   balance: bigint;
-  /** On-chain: `token.allowance(user, Pool)`, dibaca di blok yang sama dengan saldo. */
+  /**
+   * Izin on-chain untuk aksi ini, dibaca di blok yang sama dengan saldo: ERC20 `allowance(user, Pool)`; withdraw ETH
+   * `aWETH.allowance(user, gateway)`; borrow ETH `borrowAllowance(user, gateway)`. Supply/repay ETH nggak memakainya.
+   */
   allowance: bigint;
   /** Default exact; unlimited hanya kalau user memilih (#8, pola Q7 swap). */
   approvalMode: 'exact' | 'unlimited';
   /** Token yang menolak approve dari izin ≠ 0 ke nilai ≠ 0 (USDT Ethereum). */
   requiresApprovalReset: boolean;
-  /** ETH lewat WrappedTokenGateway: dikirim sebagai `value` transaksi, tanpa approve (`balance` = saldo ETH). */
+  /**
+   * ETH lewat WrappedTokenGateway: supply/repay dikirim sebagai `value` tanpa approve (`balance` = saldo ETH); withdraw
+   * butuh izin aWETH ke gateway, borrow butuh credit delegation ke gateway.
+   */
   native: boolean;
 };
 
@@ -77,6 +86,8 @@ export type NextStep =
   /** `approve(Pool, 0)` dulu: approve langsung bakal revert selama izin lama ≠ 0. */
   | { step: 'resetApproval' }
   | { step: 'approve'; amount: bigint }
+  /** `approveDelegation(gateway, amount)` di variableDebtWETH: gateway boleh berutang ETH atas nama user. */
+  | { step: 'delegate'; amount: bigint }
   | { step: 'supply' }
   | { step: 'withdraw' }
   | { step: 'borrow' }
@@ -103,12 +114,24 @@ export function nextStep(input: NextStepInput): NextStep {
   const { amount, allowance } = input;
   if (amount === null) return { step: 'enterAmount' };
 
-  if (action.action === 'borrow') return riskStep(action) ?? { step: 'borrow' };
+  if (action.action === 'borrow') {
+    const risk = riskStep(action);
+    if (risk) return risk;
+    if (input.native && allowance < amount) return { step: 'delegate', amount: permitAmount(input, amount) };
+    return { step: 'borrow' };
+  }
   if (action.action === 'withdraw') {
     const blocked = lockStep(action);
     if (blocked) return blocked;
     if (amount > input.balance && !action.plan?.all) return { step: 'insufficientBalance' };
-    return confirmStep(action) ?? { step: 'withdraw' };
+    const confirm = confirmStep(action);
+    if (confirm) return confirm;
+    // Withdraw semua ETH: izin aWETH berbantalan, karena gateway menarik saldo aWETH saat tx dieksekusi (V2, #8).
+    const plan = action.plan;
+    if (input.native && allowance < (plan ? plan.required : amount)) {
+      return { step: 'approve', amount: permitAmount(input, plan ? plan.spend : amount) };
+    }
+    return { step: 'withdraw' };
   }
 
   // Yang keluar dari wallet: repay lunas penuh = utang + bantalan bunga, selain itu jumlah yang diisi.
@@ -119,10 +142,13 @@ export function nextStep(input: NextStepInput): NextStep {
 
   if (!input.native && allowance < (plan ? plan.required : amount)) {
     if (input.requiresApprovalReset && allowance > 0n) return { step: 'resetApproval' };
-    return { step: 'approve', amount: input.approvalMode === 'unlimited' ? maxUint256 : spend };
+    return { step: 'approve', amount: permitAmount(input, spend) };
   }
   return { step: action.action };
 }
+
+// Exact = yang dibutuhkan aksi ini; unlimited hanya kalau user memilih (#8). Berlaku juga untuk aWETH dan delegation.
+const permitAmount = (input: NextStepInput, exact: bigint) => (input.approvalMode === 'unlimited' ? maxUint256 : exact);
 
 // Urutan spec: kunci (melewati batas LTV, aturan ltv0) sebelum saldo, konfirmasi risiko sesudahnya.
 function lockStep(risk: RiskInput): NextStep | null {

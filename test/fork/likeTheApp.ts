@@ -15,7 +15,10 @@ export const whitelist = WHITELIST[1];
 
 export const read = (user: Address = TEST_ACCOUNT) => readChain(publicClient, { contracts, whitelist, user });
 
-type Options = Partial<Pick<PanelInput, 'approvalMode' | 'riskChecked' | 'riskTyped'>>;
+type Options = Partial<Pick<PanelInput, 'approvalMode' | 'riskChecked' | 'riskTyped'>> & {
+  /** Dijalankan sesudah tiap langkah izin, sebelum state dibaca ulang (mis. maju waktu supaya bunga bertambah). */
+  between?: () => Promise<void>;
+};
 
 /** Isi panel untuk data fork saat ini, persis seperti ActionPanel. */
 export async function panelState(tab: PanelInput['tab'], asset: Address, amount: bigint, options: Options = {}): Promise<PanelState> {
@@ -47,11 +50,13 @@ export async function runLikeTheApp(tab: PanelInput['tab'], asset: Address, amou
     // Yang dikirim ke kontrak dihitung persis seperti panel (uint256.max untuk lunas/withdraw semua, arah toggle jaminan).
     const plan = panelTx(row, state, amount);
     const { step } = state;
-    if (step.step !== 'resetApproval' && step.step !== 'approve' && step.step !== plan.main) throw new Error(`Berhenti di ${step.step}`);
+    const permit = step.step === 'resetApproval' || step.step === 'approve' || step.step === 'delegate';
+    if (!permit && step.step !== plan.main) throw new Error(`Berhenti di ${step.step}`);
     const request = requestFor(step, { contracts, asset, user: TEST_ACCOUNT, plan });
     const hash = await walletClient.writeContract({ ...request, gas: await gasLimitFor(publicClient, request, TEST_ACCOUNT) } as never);
     expect((await publicClient.waitForTransactionReceipt({ hash })).status).toBe('success');
-    sent.push(step.step === 'approve' ? { step: step.step, approveAmount: step.amount } : { step: step.step });
+    sent.push(step.step === 'approve' || step.step === 'delegate' ? { step: step.step, approveAmount: step.amount } : { step: step.step });
     if (step.step === plan.main) return sent;
+    await options.between?.();
   }
 }

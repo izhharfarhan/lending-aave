@@ -40,9 +40,13 @@ const evaluate = (label: string | ChainRead, input: Partial<PanelInput>) => {
 };
 
 describe('panelAssets()', () => {
-  it('offers ERC20 borrows from Pasar pinjam (ETH goes through the gateway later)', () => {
+  it('offers borrows from Pasar pinjam, ETH included (through the gateway)', () => {
     const view = buildChainView(read('ethCollateralUsdcDebt'), WHITELIST);
-    expect(panelAssets(view, 'borrow').map((r) => r.symbol)).toEqual(['USDC', 'USDT']);
+    expect(panelAssets(view, 'borrow').map((r) => [r.symbol, r.native])).toEqual([
+      ['ETH', true],
+      ['USDC', false],
+      ['USDT', false],
+    ]);
   });
 
   it('offers whitelisted debts to repay, ETH included (through the gateway), never outside assets', () => {
@@ -67,11 +71,11 @@ describe('panelAssets()', () => {
 });
 
 describe('panelAssets(): withdraw & jaminan', () => {
-  it('withdraws ERC20 supplies only, but lets ETH collateral be toggled directly on the Pool', () => {
+  it('withdraws whitelisted supplies, ETH included, and toggles collateral on all of them, never outside assets', () => {
     const view = buildChainView(read('ethDebtOutsideNonCollateral'), WHITELIST);
 
     // Supply: ETH, USDT (whitelist) + LINK (aset luar).
-    expect(panelAssets(view, 'withdraw').map((r) => r.symbol)).toEqual(['USDT']);
+    expect(panelAssets(view, 'withdraw').map((r) => r.symbol)).toEqual(['ETH', 'USDT']);
     expect(panelAssets(view, 'collateral').map((r) => r.symbol)).toEqual(['ETH', 'USDT']);
   });
 });
@@ -116,7 +120,7 @@ describe('evaluatePanel()', () => {
     const supplied = buildChainView(read('noDebt'), WHITELIST).supplies[0].amount;
     const state = evaluate('noDebt', { tab: 'withdraw', asset: USDC, amount: supplied });
 
-    expect(state.withdraw).toEqual({ all: true, send: maxUint256 });
+    expect(state.withdraw).toMatchObject({ all: true, send: maxUint256 });
     expect(state.step).toEqual({ step: 'withdraw' });
     expect(state.sim?.account.totalCollateralUsd).toBe(0);
   });
@@ -166,6 +170,56 @@ describe('evaluatePanel()', () => {
       expect(state.step).toEqual({ step: 'repay' });
       expect(panelTx(row, state, row.debt)).toMatchObject({ send: maxUint256, shown: row.debt, gateway: { value: state.repay!.spend } });
       expect(state.repay!.spend).toBeGreaterThan(row.debt);
+    });
+
+    // ethCollateralUsdcDebt: supply ±5,32 ETH (jaminan), utang USDC, belum ada izin aWETH maupun delegation ke gateway.
+    const ETH = (n: number) => BigInt(Math.round(n * 1e6)) * 10n ** 12n;
+    const rowOf = (r: ChainRead, tab: PanelInput['tab']) => panelAssets(buildChainView(r, WHITELIST), tab).find((a) => a.asset === WETH)!;
+
+    it('withdraws part of the ETH supply after an exact aWETH approve to the gateway, sending no ETH', () => {
+      const state = evaluate('ethCollateralUsdcDebt', { tab: 'withdraw', asset: WETH, amount: ETH(0.1) });
+
+      expect(state.step).toEqual({ step: 'approve', amount: ETH(0.1) });
+      expect(panelTx(rowOf(read('ethCollateralUsdcDebt'), 'withdraw'), state, ETH(0.1))).toMatchObject({
+        main: 'withdraw',
+        send: ETH(0.1),
+        gateway: { value: 0n },
+      });
+    });
+
+    it('goes straight to withdrawETH when the aWETH allowance already covers it', () => {
+      const base = read('ethCollateralUsdcDebt');
+      const approved: ChainRead = { ...base, user: { ...base.user!, gatewayAllowances: { withdraw: ETH(0.1), borrow: 0n } } };
+
+      expect(evaluate(approved, { tab: 'withdraw', asset: WETH, amount: ETH(0.1) }).step).toEqual({ step: 'withdraw' });
+    });
+
+    it('withdraws all ETH with type(uint256).max after an aWETH approve cushioned above the supply', () => {
+      // Utang USDC dihapus supaya seluruh ETH boleh ditarik.
+      const base = read('ethCollateralUsdcDebt');
+      const debtFree: ChainRead = {
+        ...base,
+        user: { ...base.user!, reserves: base.user!.reserves.map((r) => ({ ...r, scaledVariableDebt: 0n })) },
+      };
+      const row = rowOf(debtFree, 'withdraw');
+      if (row.tab !== 'withdraw') throw new Error('baris withdraw');
+      const state = evaluate(debtFree, { tab: 'withdraw', asset: WETH, amount: row.supplied });
+
+      expect(state.withdraw?.all).toBe(true);
+      expect(state.withdraw!.spend).toBeGreaterThan(row.supplied);
+      expect(state.step).toEqual({ step: 'approve', amount: state.withdraw!.spend });
+      expect(panelTx(row, state, row.supplied)).toMatchObject({ send: maxUint256, shown: row.supplied, full: true, gateway: { value: 0n } });
+    });
+
+    it('borrows ETH after letting the gateway borrow on your behalf, sending no ETH', () => {
+      const state = evaluate('ethCollateralUsdcDebt', { tab: 'borrow', asset: WETH, amount: ETH(0.1) });
+
+      expect(state.step).toEqual({ step: 'delegate', amount: ETH(0.1) });
+      expect(panelTx(rowOf(read('ethCollateralUsdcDebt'), 'borrow'), state, ETH(0.1))).toMatchObject({
+        main: 'borrow',
+        send: ETH(0.1),
+        gateway: { value: 0n },
+      });
     });
 
     it('toggles ETH collateral straight on the Pool, not through the gateway', () => {

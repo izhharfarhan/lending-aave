@@ -111,18 +111,26 @@ export const PANEL = {
   noDebts: 'Tidak ada utang yang bisa dilunasi dari panel ini.',
   noSupplies: 'Tidak ada supply yang bisa ditarik dari panel ini.',
   noSupplyAssets: 'Tidak ada aset yang bisa di-supply dari panel ini.',
-  repayFullEth: (debt: string, sent: string) =>
-    `Lunas penuh: Aave menarik utang persis saat transaksi dijalankan (sekarang ${debt} ETH, terus bertambah oleh bunga). Anda mengirim ${sent} ETH; kelebihannya dikembalikan otomatis oleh gateway.`,
-  withdrawAll: (amount: string, symbol: string) =>
-    `Withdraw semua: seluruh ${symbol} ditarik saat transaksi dijalankan (sekarang ${amount} ${symbol}, termasuk bunga yang terus bertambah).`,
+  /** Per jalur (`pool` = ERC20 langsung ke Pool, `gateway` = ETH lewat WrappedTokenGateway); `cushion` = utang + bantalan. */
+  repayFull: {
+    pool: (debt: string, symbol: string, cushion: string) =>
+      `Lunas penuh: Aave menarik utang persis saat transaksi dijalankan (sekarang ${debt} ${symbol}, terus bertambah oleh bunga). Izin diberi bantalan bunga, total ${cushion} ${symbol}.`,
+    gateway: (debt: string, _symbol: string, cushion: string) =>
+      `Lunas penuh: Aave menarik utang persis saat transaksi dijalankan (sekarang ${debt} ETH, terus bertambah oleh bunga). Anda mengirim ${cushion} ETH; kelebihannya dikembalikan otomatis oleh gateway.`,
+  },
+  /** `cushion` = saldo + bantalan bunga, jumlah izin aWETH (cuma jalur gateway). */
+  withdrawAll: {
+    pool: (amount: string, symbol: string, _cushion: string) =>
+      `Withdraw semua: seluruh ${symbol} ditarik saat transaksi dijalankan (sekarang ${amount} ${symbol}, termasuk bunga yang terus bertambah).`,
+    gateway: (amount: string, _symbol: string, cushion: string) =>
+      `Withdraw semua: seluruh ETH ditarik saat transaksi dijalankan (sekarang ${amount} ETH, termasuk bunga yang terus bertambah). Izin aWETH diberi bantalan bunga, total ${cushion} aWETH.`,
+  },
   collateralTitle: (symbol: string) => `Jaminan ${symbol}`,
   collateralOn: (symbol: string) =>
     `Saat ini ${symbol} dihitung sebagai jaminan. Kalau dimatikan, batas pinjam dan health factor ikut turun, tetapi ${symbol} tetap tersimpan dan tetap berbunga.`,
   collateralOff: (symbol: string) =>
     `${symbol} belum dihitung sebagai jaminan. Kalau diaktifkan, batas pinjam Anda naik, tetapi ${symbol} bisa ikut dijual saat likuidasi.`,
   noBorrowAssets: 'Tidak ada aset yang bisa dipinjam dari panel ini.',
-  repayFull: (debt: string, symbol: string, cushion: string) =>
-    `Lunas penuh: Aave menarik utang persis saat transaksi dijalankan (sekarang ${debt} ${symbol}, terus bertambah oleh bunga). Izin diberi bantalan bunga, total ${cushion} ${symbol}.`,
   arrow: '→',
   pendingAfter: '…',
   invalid: {
@@ -148,7 +156,6 @@ export const CTA = {
   cannotBeCollateral: 'Aset ini tidak bisa jadi jaminan',
   confirmRisk: { check: 'Centang pernyataan risiko dulu', type: 'Ketik "confirm" dulu' },
   resetApproval: (symbol: string, action: string) => `Reset izin ${symbol}, lalu ${action}`,
-  approve: (symbol: string, action: string) => `Approve ${symbol}, lalu ${action}`,
   supply: (amount: string, symbol: string) => `Supply ${amount} ${symbol}`,
   borrow: (amount: string, symbol: string) => `Borrow ${amount} ${symbol}`,
   repay: (amount: string, symbol: string) => `Repay ${amount} ${symbol}`,
@@ -183,14 +190,57 @@ export const RISK_CONFIRM = {
 
 // Approve default exact; unlimited hanya pilihan eksplisit user (#8, pola Q7 swap).
 export const APPROVAL = {
-  legend: (symbol: string) => `Izin ${symbol} ke Aave Pool`,
   ariaMode: 'Jenis izin',
   exact: 'Exact',
   unlimited: 'Unlimited',
-  exactNote: (amount: string, symbol: string) => `Hanya ${amount} ${symbol}. Paling aman; transaksi berikutnya perlu approve lagi.`,
-  unlimitedWarning: (symbol: string) =>
-    `Aave Pool boleh menarik ${symbol} berapa pun, tanpa batas waktu. Kalau izin ini disalahgunakan, seluruh saldo ${symbol} bisa ditarik.`,
   revoke: 'Periksa atau cabut izin di revoke.cash ↗',
+};
+
+/**
+ * Izin sebelum transaksi utama, per jenis (spec 13): `pool` = ERC20 ke Aave Pool (supply/repay ERC20), `aWeth` = aWETH ke
+ * WrappedTokenGateway (withdraw ETH), `delegation` = gateway boleh berutang atas nama user (borrow ETH). Judul dan
+ * penjelasan langkah wallet, tombol utama, dan pengaturan exact/unlimited semuanya dari sini.
+ */
+export const GRANT = {
+  pool: {
+    cta: (symbol: string, action: string) => `Approve ${symbol}, lalu ${action}`,
+    title: (amount: string, symbol: string, unlimited: boolean) =>
+      unlimited ? `Approve ${symbol} tanpa batas` : `Approve ${amount} ${symbol} (exact)`,
+    detail: (amount: string, symbol: string, unlimited: boolean) =>
+      unlimited
+        ? `Mengizinkan Aave Pool menarik ${symbol} berapa pun. Ada biaya jaringan.`
+        : `Mengizinkan Aave Pool menarik tepat ${amount} ${symbol}. Ada biaya jaringan.`,
+    legend: (symbol: string) => `Izin ${symbol} ke Aave Pool`,
+    exactNote: (amount: string, symbol: string) => `Hanya ${amount} ${symbol}. Paling aman; transaksi berikutnya perlu approve lagi.`,
+    unlimitedWarning: (symbol: string) =>
+      `Aave Pool boleh menarik ${symbol} berapa pun, tanpa batas waktu. Kalau izin ini disalahgunakan, seluruh saldo ${symbol} bisa ditarik.`,
+    revocable: true,
+  },
+  aWeth: {
+    cta: (_symbol: string, action: string) => `Approve aWETH, lalu ${action}`,
+    title: (amount: string, _symbol: string, unlimited: boolean) =>
+      unlimited ? 'Approve aWETH ke WrappedTokenGateway tanpa batas' : `Approve ${amount} aWETH ke WrappedTokenGateway (exact)`,
+    detail: (amount: string, _symbol: string, unlimited: boolean) =>
+      `aWETH adalah bukti supply ETH Anda. Untuk withdraw ETH, gateway resmi Aave menarik aWETH dari wallet Anda, menukarnya jadi ETH, lalu mengirimkannya ke Anda; izin ini membolehkan gateway menarik ${unlimited ? 'aWETH berapa pun' : `tepat ${amount} aWETH`}. Ada biaya jaringan.`,
+    legend: () => 'Izin aWETH ke Aave WrappedTokenGateway',
+    exactNote: (amount: string) => `Hanya ${amount} aWETH. Paling aman; withdraw ETH berikutnya perlu approve lagi.`,
+    unlimitedWarning: () =>
+      'Gateway boleh menarik aWETH berapa pun, tanpa batas waktu. Kalau izin ini disalahgunakan, seluruh supply ETH Anda bisa ditarik.',
+    revocable: true,
+  },
+  delegation: {
+    cta: (_symbol: string, action: string) => `Izinkan gateway berutang, lalu ${action}`,
+    title: (amount: string, _symbol: string, unlimited: boolean) =>
+      unlimited ? 'Izinkan gateway berutang atas nama Anda (tanpa batas)' : `Izinkan gateway berutang ${amount} ETH atas nama Anda`,
+    detail: (amount: string, _symbol: string, unlimited: boolean) =>
+      `Credit delegation: Aave meminjamkan WETH ke gateway resmi Aave, tetapi utangnya dicatat atas nama Anda. Gateway membukanya jadi ETH lalu mengirimkannya ke wallet Anda. Izin ini membolehkan gateway berutang ${unlimited ? 'berapa pun' : `paling banyak ${amount} ETH`} atas nama Anda. Ada biaya jaringan.`,
+    legend: () => 'Izin berutang ETH untuk Aave WrappedTokenGateway',
+    exactNote: (amount: string) => `Hanya ${amount} ETH, habis terpakai oleh borrow ini. Borrow ETH berikutnya perlu izin lagi.`,
+    unlimitedWarning: () =>
+      'Gateway boleh berutang ETH berapa pun atas nama Anda, tanpa batas waktu. Gateway hanya meminjam untuk wallet yang memanggilnya, tetapi izin terbuka tetap risiko kalau kontraknya bermasalah.',
+    // Credit delegation bukan allowance ERC20 biasa; revoke.cash belum tentu menampilkannya.
+    revocable: false,
+  },
 };
 
 // Langkah wallet sebelum popup (Q9): judul, penjelasan, alamat resmi, explorer.
@@ -201,27 +251,28 @@ export const STEPS = {
     detail: (symbol: string) =>
       `${symbol} menolak mengubah izin yang masih tersisa, jadi izin lama ke Aave Pool dinolkan dulu. Ada biaya jaringan.`,
   },
-  approve: {
-    title: (amount: string, symbol: string, unlimited: boolean) =>
-      unlimited ? `Approve ${symbol} tanpa batas` : `Approve ${amount} ${symbol} (exact)`,
-    detail: (amount: string, symbol: string, unlimited: boolean) =>
-      unlimited
-        ? `Mengizinkan Aave Pool menarik ${symbol} berapa pun. Ada biaya jaringan.`
-        : `Mengizinkan Aave Pool menarik tepat ${amount} ${symbol}. Ada biaya jaringan.`,
-  },
+  // `detail` per jalur: `pool` = ERC20 langsung ke Aave Pool, `gateway` = ETH lewat WrappedTokenGateway.
   supply: {
     title: (amount: string, symbol: string) => `Supply ${amount} ${symbol}`,
-    detail: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
-    detailEth: 'ETH dikirim ke gateway resmi Aave, dibungkus jadi WETH, lalu di-supply atas nama Anda. Tanpa approve. Ada biaya jaringan.',
+    detail: {
+      pool: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
+      gateway: 'ETH dikirim ke gateway resmi Aave, dibungkus jadi WETH, lalu di-supply atas nama Anda. Tanpa approve. Ada biaya jaringan.',
+    },
   },
   borrow: {
     title: (amount: string, symbol: string) => `Borrow ${amount} ${symbol}`,
-    detail: 'Aave Pool mengirim pinjaman ke wallet Anda, dengan bunga variabel. Ada biaya jaringan.',
+    detail: {
+      pool: 'Aave Pool mengirim pinjaman ke wallet Anda, dengan bunga variabel. Ada biaya jaringan.',
+      gateway: 'Gateway resmi Aave meminjam WETH atas nama Anda (bunga variabel), membukanya jadi ETH, lalu mengirimkannya ke wallet Anda. Ada biaya jaringan.',
+    },
   },
   withdraw: {
     title: (amount: string, symbol: string) => `Withdraw ${amount} ${symbol}`,
     titleAll: (symbol: string) => `Withdraw semua ${symbol}`,
-    detail: 'Aave Pool mengirim aset ke wallet Anda. Ada biaya jaringan.',
+    detail: {
+      pool: 'Aave Pool mengirim aset ke wallet Anda. Ada biaya jaringan.',
+      gateway: 'Gateway resmi Aave menarik aWETH Anda, menukarnya jadi ETH, lalu mengirimkannya ke wallet Anda. Ada biaya jaringan.',
+    },
   },
   setCollateral: {
     title: (enable: boolean, symbol: string) => (enable ? `Aktifkan ${symbol} sebagai jaminan` : `Matikan ${symbol} sebagai jaminan`),
@@ -230,13 +281,17 @@ export const STEPS = {
   repay: {
     title: (amount: string, symbol: string) => `Repay ${amount} ${symbol}`,
     titleFull: (symbol: string) => `Lunasi utang ${symbol}`,
-    detail: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
-    detailEth: 'ETH dikirim ke gateway resmi Aave untuk melunasi utang Anda. Kelebihan ETH dikembalikan otomatis. Tanpa approve. Ada biaya jaringan.',
+    detail: {
+      pool: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
+      gateway: 'ETH dikirim ke gateway resmi Aave untuk melunasi utang Anda. Kelebihan ETH dikembalikan otomatis. Tanpa approve. Ada biaya jaringan.',
+    },
   },
   pool: 'Aave Pool',
   gateway: 'Aave WrappedTokenGateway',
   token: (symbol: string) => `Kontrak ${symbol}`,
-  spender: 'Izin untuk Aave Pool',
+  spender: (name: string) => `Izin untuk ${name}`,
+  aWeth: 'Kontrak aWETH',
+  debtToken: 'Kontrak utang ETH (variableDebtWETH)',
   official: '✓ alamat resmi Aave',
   explorer: 'explorer ↗',
   smartAccountNote:

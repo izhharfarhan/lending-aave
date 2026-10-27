@@ -2,10 +2,10 @@ import { erc20Abi, multicall3Abi, type Address, type ContractFunctionParameters,
 
 import type { AaveContracts } from '@/config/contracts';
 import type { AccountRead, ChainRead, ReserveRead, UserReserveRead, WhitelistAsset } from '@/core/chainPosition';
-import { poolAbi, uiPoolDataProviderAbi } from './abis';
+import { debtTokenAbi, poolAbi, uiPoolDataProviderAbi } from './abis';
 
 type ReadChainArgs = {
-  contracts: Pick<AaveContracts, 'pool' | 'poolAddressesProvider' | 'uiPoolDataProvider'>;
+  contracts: Pick<AaveContracts, 'pool' | 'poolAddressesProvider' | 'uiPoolDataProvider' | 'wrappedTokenGateway' | 'aWeth' | 'variableDebtWeth'>;
   whitelist: WhitelistAsset[];
   /** `undefined` = wallet belum terhubung: cukup data reserve (daftar aset + APY, Q6). */
   user: Address | undefined;
@@ -13,7 +13,7 @@ type ReadChainArgs = {
   blockNumber?: bigint;
 };
 
-// Reserve, posisi user, getUserAccountData, saldo wallet + izin ke Pool aset whitelist, dan timestamp blok dalam SATU
+// Reserve, posisi user, getUserAccountData, saldo wallet + izin ke Pool/gateway aset whitelist, dan timestamp blok dalam SATU
 // multicall di blok yang sama, jadi HF dari kontrak, saldo, dan izin yang dibaca nextStep nggak pernah dari blok beda.
 export async function readChain(client: PublicClient, { contracts, whitelist, user, blockNumber }: ReadChainArgs): Promise<ChainRead> {
   const multicall3 = client.chain?.contracts?.multicall3?.address;
@@ -26,6 +26,7 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
     { address: multicall3, abi: multicall3Abi, functionName: 'getCurrentBlockTimestamp' },
   ];
   const erc20s = whitelist.filter((asset) => !asset.native);
+  const hasNative = whitelist.some((asset) => asset.native);
   const userCalls: ContractFunctionParameters[] = user
     ? [
         { address: contracts.uiPoolDataProvider, abi: uiPoolDataProviderAbi, functionName: 'getUserReservesData', args: [provider, user] },
@@ -44,6 +45,17 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
             args: [user, contracts.pool],
           }),
         ),
+        ...(hasNative
+          ? [
+              { address: contracts.aWeth, abi: erc20Abi, functionName: 'allowance', args: [user, contracts.wrappedTokenGateway] },
+              {
+                address: contracts.variableDebtWeth,
+                abi: debtTokenAbi,
+                functionName: 'borrowAllowance',
+                args: [user, contracts.wrappedTokenGateway],
+              },
+            ]
+          : []),
       ]
     : [];
 
@@ -72,10 +84,13 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
             account: toAccount(account),
             walletBalances: Object.fromEntries(whitelist.map((asset, i) => [asset.address, walletReads[i]])),
             allowances: Object.fromEntries(erc20s.map((asset, i) => [asset.address, walletReads[whitelist.length + i]])),
+            gatewayAllowances: hasNative ? gatewayAllowances(walletReads.slice(whitelist.length + erc20s.length)) : null,
           }
         : null,
   };
 }
+
+const gatewayAllowances = ([withdraw, borrow]: bigint[]) => ({ withdraw, borrow });
 
 function toAccount([totalCollateralBase, totalDebtBase, availableBorrowsBase, currentLiquidationThreshold, ltv, healthFactor]: readonly [
   bigint,

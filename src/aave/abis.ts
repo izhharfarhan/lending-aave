@@ -42,4 +42,14 @@ export const poolAbi = parseAbi([
 export const gatewayAbi = parseAbi([
   'function depositETH(address pool, address onBehalfOf, uint16 referralCode) payable',
   'function repayETH(address pool, uint256 amount, address onBehalfOf) payable',
+  // Withdraw: gateway menarik aWETH user (butuh izin aWETH), amount = uint256.max untuk seluruh saldo saat eksekusi.
+  'function withdrawETH(address pool, uint256 amount, address to)',
+  // Borrow: gateway berutang atas nama msg.sender (butuh credit delegation di variableDebtWETH).
+  'function borrowETH(address pool, uint256 amount, uint16 referralCode)',
+]);
+
+// VariableDebtToken (ICreditDelegationToken): izin pihak lain berutang atas nama user.
+export const debtTokenAbi = parseAbi([
+  'function approveDelegation(address delegatee, uint256 amount)',
+  'function borrowAllowance(address fromUser, address toUser) view returns (uint256)',
 ]);

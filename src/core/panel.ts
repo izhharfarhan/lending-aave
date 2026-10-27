@@ -19,7 +19,7 @@ type AssetBase = {
   apy: number;
   /** Reserve Dijeda: posisinya tetap bisa dibuka di panel, tapi semua aksi nonaktif dengan penjelasan. */
   paused: boolean;
-  /** ETH (reserve WETH): supply/repay lewat WrappedTokenGateway, dibayar dengan ETH, tanpa approve. */
+  /** ETH (reserve WETH): lewat WrappedTokenGateway; toggle jaminan tetap langsung ke Pool. */
   native: boolean;
 };
 /** Aset yang keluar dari wallet lewat approve ke Pool. `null` = belum connect. */
@@ -28,12 +28,12 @@ type FromWallet = { walletBalance: bigint | null; allowance: bigint | null; requ
 /** Aset yang bisa dipilih di satu tab; `tab` membedakan field yang dipakai tab itu. */
 export type PanelAsset =
   | (AssetBase & FromWallet & { tab: 'supply' })
-  /** `borrowable` = sisa batas pinjam dalam token ini; `null` = belum connect. */
-  | (AssetBase & { tab: 'borrow'; borrowable: bigint | null })
+  /** `borrowable` = sisa batas pinjam dalam token ini; `allowance` = credit delegation ke gateway (ETH), `null` = belum connect / ERC20. */
+  | (AssetBase & { tab: 'borrow'; borrowable: bigint | null; allowance: bigint | null })
   /** `borrowRate` = APR pinjaman (ray) untuk bantalan bunga repay penuh. */
   | (AssetBase & FromWallet & { tab: 'repay'; debt: bigint; borrowRate: bigint })
-  /** `supplyRate` = APR supply (ray) untuk kelonggaran "withdraw semua". */
-  | (AssetBase & { tab: 'withdraw'; supplied: bigint; supplyRate: bigint; collateral: boolean })
+  /** `supplyRate` = APR supply (ray) untuk kelonggaran "withdraw semua"; `allowance` = izin aWETH ke gateway (ETH), `null` = ERC20. */
+  | (AssetBase & { tab: 'withdraw'; supplied: bigint; supplyRate: bigint; collateral: boolean; allowance: bigint | null })
   | (AssetBase & { tab: 'collateral'; supplied: bigint; collateral: boolean; canBeCollateral: boolean });
 
 type AssetOf<T extends PanelTab> = Extract<PanelAsset, { tab: T }>;
@@ -72,7 +72,7 @@ type Context = {
 
 type TabSpec<A extends PanelAsset> = {
   main: MainStep;
-  /** Aset `native` (ETH) di tab ini lewat WrappedTokenGateway: dibayar dengan ETH, tanpa approve. */
+  /** Aset `native` (ETH) di tab ini lewat WrappedTokenGateway (bukan langsung ke Pool). */
   gateway: boolean;
   /** Aset yang bisa dipilih di tab ini, urut seperti tabelnya. */
   assets: (view: ChainView) => A[];
@@ -95,8 +95,8 @@ const risk = (sim: Simulation | null, ctx: Context) => ({
   riskTyped: ctx.riskTyped,
 });
 
-// Semua yang beda per tab ada di sini. ETH: supply & repay lewat gateway; withdraw & borrow ETH menyusul di tiket 07
-// (toggle jaminan ETH langsung ke Pool); aset luar read-only. Pasar supply/pinjam sudah tanpa reserve Dibekukan/Dijeda; posisi di reserve itu tetap
+// Semua yang beda per tab ada di sini. ETH: supply/withdraw/borrow/repay lewat gateway, toggle jaminan ETH langsung ke
+// Pool; aset luar read-only. Pasar supply/pinjam sudah tanpa reserve Dibekukan/Dijeda; posisi di reserve itu tetap
 // bisa dibuka (Dibekukan masih boleh withdraw, repay, dan toggle jaminan; Dijeda ditolak `nextStep` dengan penjelasan).
 export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
   supply: {
@@ -107,14 +107,15 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
   },
   borrow: {
     main: 'borrow',
-    gateway: false,
-    assets: (view) => view.borrowMarket.filter((r) => !r.native).map((r) => ({ ...r, tab: 'borrow', paused: false })),
+    gateway: true,
+    assets: (view) => view.borrowMarket.map((r) => ({ ...r, tab: 'borrow', paused: false })),
     prepare: (row, ctx) => {
       const { amount } = ctx;
       const sim =
         amount === null ? null : simulateIf(ctx, (read) => simulate(read, ctx.whitelist, { action: 'borrow', asset: row.asset, amount }));
       const hasCollateral = (ctx.view.account?.totalCollateralUsd ?? 0) > 0;
-      return { ...noSim, sim, action: { action: 'borrow', hasCollateral, ...risk(sim, ctx) }, ...noWallet };
+      // Borrow ETH: izin yang dibandingkan nextStep = credit delegation ke gateway.
+      return { ...noSim, sim, action: { action: 'borrow', hasCollateral, ...risk(sim, ctx) }, ...noWallet, allowance: row.allowance ?? 0n };
     },
   },
   repay: {
@@ -136,15 +137,15 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
   },
   withdraw: {
     main: 'withdraw',
-    gateway: false,
+    gateway: true,
     assets: (view) =>
       view.supplies
-        .filter((r) => !r.native && !r.outside)
+        .filter((r) => !r.outside)
         .map((r) => ({ ...r, tab: 'withdraw', supplied: r.amount, paused: r.status === 'dijeda' })),
     prepare: (row, ctx) => {
       const { amount } = ctx;
-      // Saldo yang dibandingkan nextStep = saldo supply, bukan wallet; withdraw nggak butuh izin.
-      const supply = { balance: row.supplied, allowance: 0n, requiresApprovalReset: false };
+      // Saldo yang dibandingkan nextStep = saldo supply, bukan wallet; izin cuma untuk ETH (aWETH ke gateway).
+      const supply = { balance: row.supplied, allowance: row.allowance ?? 0n, requiresApprovalReset: false };
       if (amount === null) return { ...noSim, action: { action: 'withdraw', plan: null, ...risk(null, ctx) }, ...supply };
       const withdraw = withdrawPlan({ supplied: row.supplied, amount, liquidityRate: row.supplyRate });
       // Withdraw semua dikirim sebagai uint256.max; simulasi memotongnya ke saldo.
@@ -207,17 +208,24 @@ export type PanelTx = {
   full: boolean;
   /** Toggle jaminan: nyalakan (`true`) atau matikan; tab lain nggak memakainya. */
   useAsCollateral: boolean;
-  /** ETH lewat gateway: transaksi utama dikirim ke WrappedTokenGateway dengan `value` ETH ini; `null` = langsung ke Pool. */
+  /**
+   * ETH lewat gateway: transaksi utama (dan izinnya) ke WrappedTokenGateway, dengan `value` ETH ini (cuma supply/repay;
+   * withdraw/borrow 0). `null` = langsung ke Pool.
+   */
   gateway: { value: bigint } | null;
   historyKind: LocalTxEntry['kind'];
 };
 
+/** Jalur transaksi: ERC20 (dan toggle jaminan) langsung ke Aave Pool, ETH lewat WrappedTokenGateway. */
+export type Route = 'pool' | 'gateway';
+export const routeOf = (tab: PanelTab, native: boolean): Route => (native && PANEL_TABS[tab].gateway ? 'gateway' : 'pool');
+
 /** Apa yang dikirim ke kontrak, ditampilkan, dan dicatat di riwayat untuk isi panel saat ini. */
 export function panelTx(row: PanelAsset, state: PanelState, amount: bigint | null): PanelTx {
-  const { main, gateway } = PANEL_TABS[row.tab];
+  const { main } = PANEL_TABS[row.tab];
   const typed = amount ?? 0n;
-  const native = gateway && row.native;
-  const base = { ...idleTx(row.tab), send: typed, shown: typed, gateway: native ? { value: typed } : null };
+  const native = routeOf(row.tab, row.native) === 'gateway';
+  const base = { ...idleTx(row.tab), send: typed, shown: typed, gateway: native ? { value: 0n } : null };
   switch (row.tab) {
     case 'repay': {
       const full = state.repay?.full ?? false;
@@ -230,6 +238,8 @@ export function panelTx(row: PanelAsset, state: PanelState, amount: bigint | nul
       const full = state.withdraw?.all ?? false;
       return { ...base, send: state.withdraw?.send ?? typed, shown: full ? row.supplied : typed, full, historyKind: 'withdraw' };
     }
+    case 'supply':
+      return { ...base, gateway: native ? { value: typed } : null, historyKind: 'supply' };
     case 'collateral': {
       const enable = !row.collateral;
       return { ...base, send: 0n, shown: row.supplied, useAsCollateral: enable, historyKind: enable ? 'collateralOn' : 'collateralOff' };

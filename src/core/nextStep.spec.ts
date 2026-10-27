@@ -1,7 +1,7 @@
 import { maxUint256 } from 'viem';
 
 import { nextStep, type NextStepInput } from './nextStep';
-import type { RepayPlan } from './simulate';
+import type { RepayPlan, WithdrawPlan } from './simulate';
 
 const USDC = (n: number) => BigInt(n) * 1_000_000n;
 
@@ -158,7 +158,7 @@ describe('nextStep()', () => {
     const withdraw = (action: Partial<Extract<NextStepInput['action'], { action: 'withdraw' }>> = {}, overrides: Partial<NextStepInput> = {}) =>
       input({
         allowance: 0n,
-        action: { action: 'withdraw', plan: { all: false, send: USDC(100) }, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false, ...action },
+        action: { action: 'withdraw', plan: { all: false, send: USDC(100), spend: USDC(100), required: USDC(100) }, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false, ...action },
         ...overrides,
       });
 
@@ -168,7 +168,7 @@ describe('nextStep()', () => {
 
     it('blocks withdrawing more than the supply, unless it is "withdraw everything"', () => {
       expect(nextStep(withdraw({}, { amount: USDC(501) }))).toEqual({ step: 'insufficientBalance' });
-      expect(nextStep(withdraw({ plan: { all: true, send: maxUint256 } }, { amount: USDC(500) + 3n }))).toEqual({ step: 'withdraw' });
+      expect(nextStep(withdraw({ plan: { all: true, send: maxUint256, spend: USDC(500) + 9n, required: USDC(500) + 1n } }, { amount: USDC(500) + 3n }))).toEqual({ step: 'withdraw' });
     });
 
     it('locks past the LTV limit, explains the LTV-0 rule, and asks for the stricter confirmations', () => {
@@ -223,6 +223,47 @@ describe('nextStep()', () => {
 
       expect(nextStep(eth({ action: { action: 'repay', plan: partial } }))).toEqual({ step: 'repay' });
       expect(nextStep(eth({ action: { action: 'repay', plan: full } }))).toEqual({ step: 'repay' });
+    });
+
+    // Withdraw ETH: gateway menarik aWETH dari wallet, jadi butuh izin aWETH → gateway (`allowance`); `balance` = saldo supply.
+    const withdrawEth = (plan: WithdrawPlan, overrides: Partial<NextStepInput> = {}) =>
+      eth({ action: { action: 'withdraw', plan, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false }, ...overrides });
+    const partialWithdraw: WithdrawPlan = { all: false, send: ETH(100), spend: ETH(100), required: ETH(100) };
+    const allWithdraw: WithdrawPlan = { all: true, send: maxUint256, spend: ETH(500) + 30n, required: ETH(500) + 2n };
+
+    it('approves exactly the withdrawn aWETH to the gateway, then withdraws', () => {
+      expect(nextStep(withdrawEth(partialWithdraw))).toEqual({ step: 'approve', amount: ETH(100) });
+      expect(nextStep(withdrawEth(partialWithdraw, { allowance: ETH(99) }))).toEqual({ step: 'approve', amount: ETH(100) });
+      expect(nextStep(withdrawEth(partialWithdraw, { allowance: ETH(100) }))).toEqual({ step: 'withdraw' });
+      expect(nextStep(withdrawEth(partialWithdraw, { approvalMode: 'unlimited' }))).toEqual({ step: 'approve', amount: maxUint256 });
+    });
+
+    it('cushions the aWETH approve for "withdraw everything", and does not ask again once interest grew a little', () => {
+      expect(nextStep(withdrawEth(allWithdraw, { amount: ETH(500), allowance: ETH(500) }))).toEqual({ step: 'approve', amount: ETH(500) + 30n });
+      expect(nextStep(withdrawEth(allWithdraw, { amount: ETH(500), allowance: ETH(500) + 2n }))).toEqual({ step: 'withdraw' });
+    });
+
+    it('asks for the aWETH approve only after the risk is confirmed', () => {
+      const risky = eth({ action: { action: 'withdraw', plan: partialWithdraw, gate: 'check', ltvZero: false, riskChecked: false, riskTyped: false } });
+      expect(nextStep(risky)).toEqual({ step: 'confirmRisk', gate: 'check' });
+      expect(nextStep(withdrawEth(partialWithdraw, { amount: ETH(501) }))).toEqual({ step: 'insufficientBalance' });
+    });
+
+    it('never resets an aWETH allowance to 0 first', () => {
+      expect(nextStep(withdrawEth(partialWithdraw, { requiresApprovalReset: true, allowance: ETH(30) }))).toEqual({ step: 'approve', amount: ETH(100) });
+    });
+
+    it('asks to let the gateway borrow on your behalf (credit delegation) before borrowing ETH', () => {
+      expect(nextStep(borrow({}, { native: true, amount: ETH(1) }))).toEqual({ step: 'delegate', amount: ETH(1) });
+      expect(nextStep(borrow({}, { native: true, amount: ETH(1), allowance: ETH(1) - 1n }))).toEqual({ step: 'delegate', amount: ETH(1) });
+      expect(nextStep(borrow({}, { native: true, amount: ETH(1), allowance: ETH(1) }))).toEqual({ step: 'borrow' });
+      expect(nextStep(borrow({}, { native: true, amount: ETH(1), approvalMode: 'unlimited' }))).toEqual({ step: 'delegate', amount: maxUint256 });
+    });
+
+    it('asks for the delegation only after the risk checks', () => {
+      expect(nextStep(borrow({ gate: 'locked' }, { native: true, amount: ETH(1) }))).toEqual({ step: 'overLtv' });
+      expect(nextStep(borrow({ gate: 'type' }, { native: true, amount: ETH(1) }))).toEqual({ step: 'confirmRisk', gate: 'type' });
+      expect(nextStep(borrow({ hasCollateral: false }, { native: true, amount: ETH(1) }))).toEqual({ step: 'needCollateral' });
     });
 
     it('still blocks an amount above the ETH balance', () => {
