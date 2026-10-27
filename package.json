@@ -7,6 +7,7 @@
     "dev:mainnet": "node scripts/with-env.mjs .env.mainnet next dev -p 3200",
     "anvil:up": "node --env-file=.env.fork scripts/anvil-up.mjs",
     "build": "node scripts/with-env.mjs .env.fork next build",
+    "fixture:position": "tsx scripts/position-fixture.mts",
     "typecheck": "tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
@@ -29,6 +30,7 @@
     "jest": "30.5.2",
     "tailwindcss": "^4",
     "ts-jest": "29.4.15",
+    "tsx": "4.23.15",
     "typescript": "^5"
   },
   "packageManager": "pnpm@12.11.2"

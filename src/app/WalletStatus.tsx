@@ -1,8 +1,7 @@
 'use client';
 
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { formatEther } from 'viem';
-import { useAccount, useBalance } from 'wagmi';
+import { useAccount } from 'wagmi';
 
 import { SUPPORTED_CHAINS } from '@/config/chains';
 import { FORK_GUARD, WALLET } from '@/copy';
@@ -15,12 +14,12 @@ export function WalletButton() {
   return <ConnectButton label={WALLET.connect} chainStatus="none" showBalance={false} accountStatus="address" />;
 }
 
-// Tiket 01: bukti wallet tersambung ke fork (saldo ETH akun tes) + peringatan pengaman fork.
+// Peringatan pengaman fork + ajakan connect (Q6). Saldo wallet tampil di tabel "Pasar supply".
 export function WalletOverview() {
-  const { address, isConnected } = useAccount();
-  const { data: balance } = useBalance({ address, chainId: CHAIN_ID, query: { enabled: isConnected } });
+  const { isConnected } = useAccount();
   const guard = useForkGuard(CHAIN_ID);
 
+  if (guard.safe && isConnected) return null;
   return (
     <section className="surface flex flex-col gap-4 p-6">
       {!guard.safe && (
@@ -28,17 +27,7 @@ export function WalletOverview() {
           {FORK_GUARD[guard.reason]}
         </p>
       )}
-      {isConnected ? (
-        <div>
-          <p className="text-sm text-muted">{WALLET.ethBalance}</p>
-          <p className="display mt-2 text-4xl font-extralight tracking-tight">
-            {balance ? Number(formatEther(balance.value)).toLocaleString('id-ID', { maximumFractionDigits: 4 }) : '…'}{' '}
-            <span className="text-lg text-muted">ETH</span>
-          </p>
-        </div>
-      ) : (
-        <p className="text-sm text-muted">{WALLET.connectPrompt}</p>
-      )}
+      {!isConnected && <p className="text-sm text-muted">{WALLET.connectPrompt}</p>}
     </section>
   );
 }

@@ -24,9 +24,10 @@ const MAINNET_RPC_URLS: Record<number, string | undefined> = {
   [mainnet.id]: process.env.NEXT_PUBLIC_RPC_URL_1,
 };
 
-// Mode fork: `undefined` = URL dari definisi chain (Anvil lokal).
+// Mode fork: `undefined` = URL dari definisi chain (Anvil lokal). Fork yang baru nyala masih "dingin": tiap slot
+// storage diambil dulu dari RPC archive, jadi getReservesData pertama bisa jauh lewat timeout default viem (10 detik).
 function appTransport(chainId: number) {
-  return http(IS_FORK ? undefined : MAINNET_RPC_URLS[chainId]);
+  return IS_FORK ? http(undefined, { timeout: 120_000 }) : http(MAINNET_RPC_URLS[chainId]);
 }
 
 const wallets: WalletList = [

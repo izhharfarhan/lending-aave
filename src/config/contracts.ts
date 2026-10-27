@@ -5,6 +5,8 @@ import type { Address } from 'viem';
 // Jangan ditulis tangan: tanda "alamat resmi Aave" di UI bersandar pada sumber ini.
 export type AaveContracts = {
   pool: Address;
+  /** Argumen `provider` untuk semua fungsi UiPoolDataProviderV3. */
+  poolAddressesProvider: Address;
   wrappedTokenGateway: Address;
   uiPoolDataProvider: Address;
   oracle: Address;
@@ -15,6 +17,7 @@ export type AaveContracts = {
 export const AAVE: Record<number, AaveContracts> = {
   1: {
     pool: AaveV3Ethereum.POOL,
+    poolAddressesProvider: AaveV3Ethereum.POOL_ADDRESSES_PROVIDER,
     wrappedTokenGateway: AaveV3Ethereum.WETH_GATEWAY,
     uiPoolDataProvider: AaveV3Ethereum.UI_POOL_DATA_PROVIDER,
     oracle: AaveV3Ethereum.ORACLE,
