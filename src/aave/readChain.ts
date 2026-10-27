@@ -2,7 +2,7 @@ import { erc20Abi, multicall3Abi, type Address, type ContractFunctionParameters,
 
 import type { AaveContracts } from '@/config/contracts';
 import type { AccountRead, ChainRead, ReserveRead, UserReserveRead, WhitelistAsset } from '@/core/chainPosition';
-import { debtTokenAbi, poolAbi, uiPoolDataProviderAbi } from './abis';
+import { debtTokenAbi, poolAbi, scaledSupplyAbi, uiPoolDataProviderAbi } from './abis';
 
 type ReadChainArgs = {
   contracts: Pick<AaveContracts, 'pool' | 'poolAddressesProvider' | 'uiPoolDataProvider' | 'wrappedTokenGateway' | 'aWeth' | 'variableDebtWeth'>;
@@ -13,8 +13,8 @@ type ReadChainArgs = {
   blockNumber?: bigint;
 };
 
-// Reserve, posisi user, getUserAccountData, saldo wallet + izin ke Pool/gateway aset whitelist, dan timestamp blok dalam SATU
-// multicall di blok yang sama, jadi HF dari kontrak, saldo, dan izin yang dibaca nextStep nggak pernah dari blok beda.
+// Reserve, posisi user, getUserAccountData, saldo wallet + izin ke Pool/gateway aset whitelist, dan timestamp blok di blok
+// yang sama (satu multicall, plus satu untuk scaledTotalSupply aToken), jadi HF dari kontrak, saldo, dan izin yang dibaca nextStep nggak pernah dari blok beda.
 export async function readChain(client: PublicClient, { contracts, whitelist, user, blockNumber }: ReadChainArgs): Promise<ChainRead> {
   const multicall3 = client.chain?.contracts?.multicall3?.address;
   if (!multicall3) throw new Error(`Chain ${client.chain?.id} nggak punya alamat Multicall3`);
@@ -72,9 +72,20 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
     ...bigint[],
   ];
 
+  // Supply cap butuh `scaledTotalSupply` aToken; alamat aToken baru diketahui dari getReservesData, jadi multicall kedua
+  // di blok yang SAMA.
+  const reserveOf = (asset: WhitelistAsset) => reserves.find((r) => r.underlyingAsset.toLowerCase() === asset.address.toLowerCase());
+  const listed = whitelist.filter((asset) => reserveOf(asset));
+  const scaledSupplies = await client.multicall({
+    contracts: listed.map((asset) => ({ address: reserveOf(asset)!.aTokenAddress, abi: scaledSupplyAbi, functionName: 'scaledTotalSupply' })),
+    allowFailure: false,
+    blockNumber: block,
+  });
+
   return {
     blockTimestamp,
     reserves: [...reserves],
+    scaledATokenSupplies: Object.fromEntries(listed.map((asset, i) => [asset.address, scaledSupplies[i]])),
     baseCurrency,
     user:
       userReserves && account

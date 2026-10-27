@@ -3,7 +3,7 @@ import { maxUint256, type Address } from 'viem';
 
 import { buildChainView, type ChainRead, type WhitelistAsset } from './chainPosition';
 import { parseBigint } from './fixtures/bigintJson';
-import { evaluatePanel, panelAssets, panelTx, type PanelInput } from './panel';
+import { evaluatePanel, panelAssets, panelMax, panelTx, type PanelInput } from './panel';
 
 type Fixture = Omit<ChainRead, 'user'> & { users: Record<string, NonNullable<ChainRead['user']>> };
 const fixture = parseBigint<Fixture>(readFileSync('src/core/fixtures/ethereum.position.json', 'utf8'));
@@ -100,6 +100,29 @@ describe('evaluatePanel()', () => {
   it('asks for collateral first on a position without any', () => {
     // Wallet `empty` nggak punya ETH sama sekali; diberi sedikit supaya cek biaya jaringan lolos.
     expect(evaluate(withEth('empty', 10n ** 15n), {}).step).toEqual({ step: 'needCollateral' });
+  });
+
+  describe('kapasitas pool', () => {
+    it('locks a borrow above the pool liquidity, with what is still available', () => {
+      // ethCollateralUsdcDebt: batas pinjam 8.586 USDC; likuiditas USDC diperkecil jadi 1 USDC.
+      const r = withReserve('ethCollateralUsdcDebt', USDC, { virtualUnderlyingBalance: 1_000_000n });
+      expect(evaluate(r, { amount: 2_000_000n }).step).toEqual({ step: 'overCapacity', limit: 'liquidity', available: 1_000_000n });
+      expect(evaluate(r, { amount: 1_000_000n }).step).toEqual({ step: 'borrow' });
+    });
+
+    it('locks a supply once the supply cap is already full', () => {
+      // Cap USDC 1.000 USDC, padahal supply USDC di pool jauh di atasnya.
+      const r = withReserve('bahayaWithOutsideAssets', USDC, { supplyCap: 1_000n });
+      expect(evaluate(r, { tab: 'supply', amount: 100_000_000n }).step).toEqual({ step: 'overCapacity', limit: 'supplyCap', available: 0n });
+    });
+
+    it('ignores the removed isolation-mode fields (Q28): non-zero values change nothing', () => {
+      const isolation = { debtCeiling: 1_000n, debtCeilingDecimals: 2n, borrowableInIsolation: false, isolationModeTotalDebt: 999n, isSiloedBorrowing: true };
+      const withIsolation = (label: string) => ({ ...read(label), reserves: read(label).reserves.map((r) => ({ ...r, ...isolation })) });
+      for (const input of [{ amount: 1_000_000_000n }, { tab: 'supply' as const, amount: 100_000_000n }, { tab: 'withdraw' as const, asset: WETH, amount: 10n ** 17n }]) {
+        expect(evaluate(withIsolation('ethCollateralUsdcDebt'), input)).toEqual(evaluate('ethCollateralUsdcDebt', input));
+      }
+    });
   });
 
   describe('biaya jaringan', () => {
@@ -266,3 +289,142 @@ describe('evaluatePanel()', () => {
     });
   });
 });
+
+describe('panelMax()', () => {
+  const max = (label: string | ChainRead, tab: PanelInput['tab'], asset: Address, networkFee: bigint | null = null) => {
+    const r = typeof label === 'string' ? read(label) : label;
+    // Lantai cadangan gas Ethereum 0,0005 ETH.
+    return panelMax(r, buildChainView(r, WHITELIST), WHITELIST, { tab, asset, minGasReserve: 500_000_000_000_000n, networkFee });
+  };
+  const rowOf = (label: string, tab: PanelInput['tab'], asset: Address) =>
+    panelAssets(buildChainView(read(label), WHITELIST), tab).find((r) => r.asset === asset)!;
+
+  describe('supply', () => {
+    it('ERC20: the whole wallet balance', () => {
+      // Wallet bahayaWithOutsideAssets: 200 USDC.
+      expect(max('bahayaWithOutsideAssets', 'supply', USDC)).toBe(200_000_000n);
+    });
+
+    it('ETH: balance minus a gas reserve, rounded down to 6 decimals', () => {
+      // Wallet noDebt: 0,088035438238165435 ETH. Biaya belum diketahui → cadangan minimum Ethereum 0,0005 ETH.
+      expect(max('noDebt', 'supply', WETH)).toBe(87_535_000_000_000_000n);
+      // Biaya 0,001 ETH → cadangan 2 × biaya = 0,002 ETH.
+      expect(max('noDebt', 'supply', WETH, 10n ** 15n)).toBe(86_035_000_000_000_000n);
+    });
+
+    it('is capped by what is left of the supply cap', () => {
+      const r = withReserve('bahayaWithOutsideAssets', USDC, { supplyCap: 1_000n });
+      expect(max(r, 'supply', USDC)).toBe(0n);
+    });
+  });
+
+  describe('borrow', () => {
+    it('goes up to the LTV limit (a hair below, as interest and prices move until the tx lands), and still asks to confirm', () => {
+      // ethCollateralUsdcDebt: sisa batas pinjam 8.586,77 USDC.
+      const amount = max('ethCollateralUsdcDebt', 'borrow', USDC)!;
+      expect(amount).toBeLessThanOrEqual(8_586_770_000n);
+      expect(amount).toBeGreaterThan(8_577_000_000n);
+      // MAX nggak melewati konfirmasi risiko: HF sesudahnya < 1,1 → wajib ketik "confirm".
+      expect(evaluate('ethCollateralUsdcDebt', { amount }).step).toEqual({ step: 'confirmRisk', gate: 'type' });
+    });
+
+    it('is capped by the pool liquidity and the borrow cap', () => {
+      const thin = withReserve('ethCollateralUsdcDebt', USDC, { virtualUnderlyingBalance: 1_000_000n });
+      expect(max(thin, 'borrow', USDC)).toBe(1_000_000n);
+      expect(max(withReserve('ethCollateralUsdcDebt', USDC, { borrowCap: 1n }), 'borrow', USDC)).toBe(0n);
+    });
+
+    it('is 0 without collateral', () => {
+      expect(max('empty', 'borrow', USDC)).toBe(0n);
+    });
+  });
+
+  describe('withdraw', () => {
+    it('the whole supply when nothing depends on it, sent as type(uint256).max', () => {
+      const supplied = rowOf('noDebt', 'withdraw', USDC);
+      const amount = max('noDebt', 'withdraw', USDC)!;
+      expect(supplied.tab === 'withdraw' && amount).toBe(supplied.tab === 'withdraw' && supplied.supplied);
+      expect(evaluate('noDebt', { tab: 'withdraw', asset: USDC, amount }).withdraw).toMatchObject({ all: true, send: maxUint256 });
+    });
+
+    it('stops a hair (0,1%) below the LTV limit when the collateral backs a debt', () => {
+      // waspada: jaminan ETH, utang USDC.
+      const amount = max('waspada', 'withdraw', WETH)!;
+      expect(amount).toBeGreaterThan(0n);
+      expect(evaluate('waspada', { tab: 'withdraw', asset: WETH, amount }).step).not.toEqual({ step: 'overLtv' });
+      expect(evaluate('waspada', { tab: 'withdraw', asset: WETH, amount: (amount * 1_002n) / 1_000n }).step).toEqual({ step: 'overLtv' });
+    });
+
+    it('stays out of the "withdraw everything" range when the pool liquidity is just below the supply', () => {
+      // noDebt: supply USDC; likuiditas = saldo − 1 unit, jadi "withdraw semua" (yang menarik seluruh saldo) pasti ditolak.
+      const supplied = rowOf('noDebt', 'withdraw', USDC);
+      const total = supplied.tab === 'withdraw' ? supplied.supplied : 0n;
+      const r = withReserve('noDebt', USDC, { virtualUnderlyingBalance: total - 1n });
+      const amount = max(r, 'withdraw', USDC)!;
+      const state = evaluate(r, { tab: 'withdraw', asset: USDC, amount });
+      expect(state.withdraw?.all).toBe(false);
+      expect(state.step).toEqual({ step: 'withdraw' });
+    });
+
+    it('is capped by the pool liquidity', () => {
+      expect(max(withReserve('noDebt', USDC, { virtualUnderlyingBalance: 5_000_000n }), 'withdraw', USDC)).toBe(5_000_000n);
+    });
+  });
+
+  describe('repay', () => {
+    it('the smaller of the debt and the wallet', () => {
+      // bahayaWithOutsideAssets: utang USDC 3.775 lebih, wallet 200 USDC.
+      expect(max('bahayaWithOutsideAssets', 'repay', USDC)).toBe(200_000_000n);
+    });
+
+    it('ETH keeps the gas reserve in the wallet', () => {
+      // ethDebtOutsideNonCollateral: utang ETH ±3,7, wallet 0,076277248076830282 ETH − cadangan 0,0005.
+      expect(max('ethDebtOutsideNonCollateral', 'repay', WETH)).toBe(75_777_000_000_000_000n);
+    });
+
+    // Utang ETH ethDebtOutsideNonCollateral, saldo ETH diatur relatif terhadap utang dan bantalan repay penuh.
+    const ethDebt = () => {
+      const row = rowOf('ethDebtOutsideNonCollateral', 'repay', WETH);
+      if (row.tab !== 'repay') throw new Error('bukan baris repay');
+      // Saldo besar → rencana lunas penuh, jadi `spend` − utang = bantalan bunga.
+      const full = evaluate(withEth('ethDebtOutsideNonCollateral', 10n ** 24n), { tab: 'repay', asset: WETH, amount: row.debt }).repay!;
+      return { debt: row.debt, cushion: full.spend - row.debt };
+    };
+    const reserve = 500_000_000_000_000n;
+
+    it('pays the whole debt (type(uint256).max) when the wallet covers debt + cushion and still keeps the gas reserve', () => {
+      const { debt, cushion } = ethDebt();
+      // +2 unit desimal ke-6: MAX ETH dibulatkan ke bawah 6 desimal.
+      const r = withEth('ethDebtOutsideNonCollateral', debt + cushion + reserve + 2n * 10n ** 12n);
+      const amount = max(r, 'repay', WETH)!;
+      expect(amount).toBe(debt);
+      expect(evaluate(r, { tab: 'repay', asset: WETH, amount }).repay).toMatchObject({ full: true, send: maxUint256 });
+    });
+
+    it('ETH: stops below the "pay in full" range when the cushion would eat the gas reserve', () => {
+      const { debt, cushion } = ethDebt();
+      // Saldo mentah menutup utang + bantalan, tapi sesudah cadangan gas nggak.
+      const r = withEth('ethDebtOutsideNonCollateral', debt + cushion + reserve / 2n);
+      const amount = max(r, 'repay', WETH)!;
+      expect(amount).toBeLessThan(debt - cushion);
+      expect(evaluate(r, { tab: 'repay', asset: WETH, amount }).repay?.full).toBe(false);
+    });
+
+    it('ERC20: the exact debt when the wallet covers the debt but not the cushion', () => {
+      // bahayaWithOutsideAssets: utang USDC 3.775 lebih; wallet diisi persis sebesar utang.
+      const row = rowOf('bahayaWithOutsideAssets', 'repay', USDC);
+      const debt = row.tab === 'repay' ? row.debt : 0n;
+      const base = read('bahayaWithOutsideAssets');
+      const r = { ...base, user: { ...base.user!, walletBalances: { ...base.user!.walletBalances, [USDC]: debt } } };
+      const amount = max(r, 'repay', USDC)!;
+      expect(amount).toBe(debt);
+      expect(evaluate(r, { tab: 'repay', asset: USDC, amount }).repay).toEqual({ full: false, send: debt, spend: debt, required: debt });
+    });
+  });
+
+  it('has no MAX for the collateral toggle or an asset that is not in the tab', () => {
+    expect(max('noDebt', 'collateral', USDC)).toBeNull();
+    expect(max('noDebt', 'repay', USDC)).toBeNull();
+  });
+});
+

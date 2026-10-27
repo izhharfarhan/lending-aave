@@ -32,6 +32,17 @@ export type ReserveRead = {
   variableBorrowRate: bigint;
   lastUpdateTimestamp: number;
   priceInMarketReferenceCurrency: bigint;
+  /** Kapasitas pool (Q27, V8): cap dalam satuan token utuh, 0 = tanpa batas. */
+  supplyCap: bigint;
+  borrowCap: bigint;
+  /** Bagian treasury yang belum di-mint, scaled (ikut supply cap). */
+  accruedToTreasury: bigint;
+  totalScaledVariableDebt: bigint;
+  /** bps bunga pinjaman yang masuk treasury. */
+  reserveFactor: bigint;
+  /** Likuiditas yang bisa dipinjam/ditarik, satuan terkecil. */
+  virtualUnderlyingBalance: bigint;
+  aTokenAddress: Address;
 };
 
 export type UserReserveRead = {
@@ -55,6 +66,8 @@ export type AccountRead = {
 export type ChainRead = {
   blockTimestamp: bigint;
   reserves: ReserveRead[];
+  /** `aToken.scaledTotalSupply()` reserve whitelist, per alamat underlying (supply cap, V8). */
+  scaledATokenSupplies: Record<Address, bigint>;
   baseCurrency: { marketReferenceCurrencyUnit: bigint; marketReferenceCurrencyPriceInUsd: bigint };
   /** `null` = wallet belum terhubung. */
   user: {

@@ -11,12 +11,12 @@ import { isWalletStep, plannedSteps } from '@/aave/poolTx';
 import { usePoolTx, type TxState } from '@/aave/usePoolTx';
 import { IS_FORK } from '@/config/appMode';
 import { WHITELIST } from '@/config/assets';
-import { chainName } from '@/config/chains';
+import { chainName, minGasReserve } from '@/config/chains';
 import { AAVE, type AaveContracts } from '@/config/contracts';
 import { explorerAddressUrl, explorerTxUrl, revokeCashUrl } from '@/config/explorer';
 import type { ChainRead, ChainView, SupplyRow } from '@/core/chainPosition';
 import type { NextStep, NextStepInput, WalletStepName } from '@/core/nextStep';
-import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelTx, routeOf, type PanelAsset, type PanelTab, type Route } from '@/core/panel';
+import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelMax, panelTx, routeOf, type PanelAsset, type PanelTab, type Route } from '@/core/panel';
 import { parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
 import { APPROVAL, CTA, GAS, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
@@ -162,6 +162,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
 
   const copy: StepCopy = {
     symbol: row?.symbol ?? '',
+    decimals: row?.decimals ?? 0,
     amount: tokenAmount(ptx?.shown ?? 0n, row?.decimals ?? 0),
     approveAmount: tokenAmount(repay?.spend ?? withdraw?.spend ?? amount ?? 0n, row?.decimals ?? 0),
     full: ptx?.full ?? false,
@@ -227,6 +228,29 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
                   }}
                   className="num w-full min-w-0 bg-transparent text-[32px] outline-none placeholder:text-faint focus-visible:outline-none"
                 />
+                {isConnected && (
+                  <button
+                    type="button"
+                    className="btn-ghost shrink-0 px-2 py-1 text-xs font-medium"
+                    title={PANEL.maxInfo}
+                    disabled={tx.status === 'running'}
+                    onClick={() => {
+                      const max = panelMax(data.read, data.view, whitelist, {
+                        tab,
+                        asset: row.asset,
+                        minGasReserve: minGasReserve(chainId),
+                        networkFee: networkFee.fee,
+                      });
+                      if (max === null) return;
+                      startOver();
+                      resetRisk();
+                      // Koma desimal gaya Indonesia; parseAmountInput menerima titik dan koma.
+                      setAmountText(formatUnits(max, row.decimals).replace('.', ','));
+                    }}
+                  >
+                    {PANEL.max}
+                  </button>
+                )}
                 <label className="btn-ghost flex shrink-0 items-center gap-2 py-1.5 pl-2 pr-1">
                   <TokenIcon symbol={row.symbol} size={20} />
                   <select
@@ -392,6 +416,8 @@ function ctaFor(step: NextStep, tab: PanelTab, c: StepCopy): { label: string; en
       return { label: CTA.needCollateral, enabled: true };
     case 'insufficientBalance':
       return { label: CTA.insufficientBalance(c.symbol), enabled: false };
+    case 'overCapacity':
+      return { label: CTA.overCapacity[step.limit](tokenAmount(step.available, c.decimals), c.symbol), enabled: false };
     case 'overLtv':
       return { label: TAB_UI[tab].overLtv, enabled: false };
     case 'confirmRisk':
@@ -571,6 +597,7 @@ const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)
 
 type StepCopy = {
   symbol: string;
+  decimals: number;
   amount: string;
   approveAmount: string;
   /** Repay lunas penuh / withdraw semua. */

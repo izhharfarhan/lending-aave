@@ -53,3 +53,6 @@ export const debtTokenAbi = parseAbi([
   'function approveDelegation(address delegatee, uint256 amount)',
   'function borrowAllowance(address fromUser, address toUser) view returns (uint256)',
 ]);
+
+/** aToken: total supply scaled (tanpa indeks bunga), untuk cek supply cap (V8). */
+export const scaledSupplyAbi = parseAbi(['function scaledTotalSupply() view returns (uint256)']);

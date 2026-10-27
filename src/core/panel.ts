@@ -1,7 +1,9 @@
 import { maxUint256, type Address } from 'viem';
 
+import { MAX_CAPACITY_HORIZON_SECONDS, NO_CAPACITY_LIMIT, poolCapacity, type Capacity } from './capacity';
 import type { ChainRead, ChainView, WhitelistAsset } from './chainPosition';
 import type { LocalTxEntry } from './localHistory';
+import { belowLtvEdge, largestPassing, maxSpendableEth, minOf } from './maxAmount';
 import { nextStep, type ActionInput, type NextStep, type NextStepInput, type WalletStepName } from './nextStep';
 import { repayPlan, simulate, withdrawPlan, type RepayPlan, type Simulation, type WithdrawPlan } from './simulate';
 
@@ -86,6 +88,23 @@ type TabSpec<A extends PanelAsset> = {
   /** Aset yang bisa dipilih di tab ini, urut seperti tabelnya. */
   assets: (view: ChainView) => A[];
   prepare: (row: A, ctx: Context) => Prepared;
+  /** MAX (Q26) untuk aset ini; tanpa `max` = tab tanpa kolom jumlah. */
+  max?: (row: A, ctx: MaxContext) => bigint;
+};
+
+/** Yang dibutuhkan MAX selain data chain: kuota pool (horizon MAX) dan cadangan gas ETH. */
+export type MaxInput = {
+  /** `SupportedChain.minGasReserve` chain ini. */
+  minGasReserve: bigint;
+  /** Biaya jaringan terakhir yang diketahui (cadangan gas MAX ETH); `null` = lantai chain. */
+  networkFee: bigint | null;
+};
+type MaxContext = Pick<Context, 'read' | 'whitelist'> & MaxInput & { capacity: Capacity };
+
+// MAX dari saldo wallet: ETH menyisakan cadangan gas.
+const walletMax = (row: AssetBase & FromWallet, ctx: MaxContext) => {
+  const balance = row.walletBalance ?? 0n;
+  return row.native ? maxSpendableEth({ balance, minGasReserve: ctx.minGasReserve, networkFee: ctx.networkFee }) : balance;
 };
 
 const noSim: Pick<Prepared, 'sim' | 'repay' | 'withdraw'> = { sim: null, repay: null, withdraw: null };
@@ -113,6 +132,7 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
     gateway: true,
     assets: (view) => view.supplyMarket.map((r) => ({ ...r, tab: 'supply', paused: false })),
     prepare: (row) => ({ ...noSim, action: { action: 'supply' }, ...fromWallet(row) }),
+    max: (row, ctx) => minOf(walletMax(row, ctx), ctx.capacity.supplyCap),
   },
   borrow: {
     main: 'borrow',
@@ -125,6 +145,14 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
       const hasCollateral = (ctx.view.account?.totalCollateralUsd ?? 0) > 0;
       // Borrow ETH: izin yang dibandingkan nextStep = credit delegation ke gateway.
       return { ...noSim, sim, action: { action: 'borrow', hasCollateral, ...risk(sim, ctx) }, ...noWallet, allowance: row.allowance ?? 0n };
+    },
+    max: (row, ctx) => {
+      const pool = minOf(ctx.capacity.liquidity, ctx.capacity.borrowCap);
+      // `borrowable` (sisa batas pinjam dari getUserAccountData) mempersempit pencarian; ×2 karena itu cuma perkiraan.
+      const upper = minOf(pool, (row.borrowable ?? 0n) * 2n + 1n);
+      const ok = (amount: bigint) => simulate(ctx.read, ctx.whitelist, { action: 'borrow', asset: row.asset, amount }).gate !== 'locked';
+      const atLtv = largestPassing(upper, ok);
+      return atLtv < pool ? belowLtvEdge(atLtv) : atLtv;
     },
   },
   repay: {
@@ -142,6 +170,17 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
       const sent = repay.full ? repay.send : amount;
       const sim = simulateIf(ctx, (read) => simulate(read, ctx.whitelist, { action: 'repay', asset: row.asset, amount: sent }));
       return { sim, repay, withdraw: null, action: { action: 'repay', plan: repay }, ...fromWallet(row) };
+    },
+    // Lunas penuh kalau yang boleh dipakai menutup utang + bantalan; selain itu jumlah persis (Q26). ETH: jumlah yang
+    // masuk rentang "lunas penuh" (jumlah + bantalan ≥ utang) bisa dikirim sebagai utang + bantalan dari saldo mentah dan
+    // memakan cadangan gas, jadi berhenti tepat di bawah rentang itu.
+    max: (row, ctx) => {
+      const spendable = walletMax(row, ctx);
+      const plan = (balance: bigint, amount: bigint) => repayPlan({ debt: row.debt, balance, amount, variableBorrowRate: row.borrowRate });
+      if (plan(spendable, row.debt).full) return row.debt;
+      if (!row.native) return minOf(row.debt, spendable);
+      const cushion = plan(maxUint256, row.debt).spend - row.debt;
+      return minOf(spendable, row.debt > cushion ? row.debt - cushion - 1n : 0n);
     },
   },
   withdraw: {
@@ -161,6 +200,19 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
       const sent = withdraw.all ? withdraw.send : amount;
       const sim = simulateIf(ctx, (read) => simulate(read, ctx.whitelist, { action: 'withdraw', asset: row.asset, amount: sent }));
       return { sim, repay: null, withdraw, action: { action: 'withdraw', plan: withdraw, ...risk(sim, ctx) }, ...supply };
+    },
+    // Jaminan yang dibutuhkan utang nggak ikut (#9). Seluruh saldo (kalau likuiditas cukup) → "withdraw semua"; di bawah
+    // itu, jangan masuk rentang "withdraw semua" (withdrawPlan), yang menarik seluruh saldo dan bisa ditolak likuiditas.
+    max: (row, ctx) => {
+      const ok = (amount: bigint) => {
+        const sim = simulate(ctx.read, ctx.whitelist, { action: 'withdraw', asset: row.asset, amount });
+        return sim.gate !== 'locked' && !sim.ltvZero;
+      };
+      const upper = minOf(row.supplied, ctx.capacity.liquidity);
+      if (upper === row.supplied && ok(upper)) return upper;
+      const partial = (amount: bigint) => ok(amount) && !withdrawPlan({ supplied: row.supplied, amount, liquidityRate: row.supplyRate }).all;
+      const best = largestPassing(upper, partial);
+      return best < upper && !ok(best + 1n) ? belowLtvEdge(best) : best;
     },
   },
   collateral: {
@@ -184,6 +236,31 @@ const specOf = (tab: PanelTab) => PANEL_TABS[tab] as unknown as TabSpec<PanelAss
 
 export const panelAssets = (view: ChainView, tab: PanelTab): PanelAsset[] => specOf(tab).assets(view);
 
+/**
+ * Sisa kapasitas pool reserve aset ini (Q27); aset di luar data chain (panel kosong) = tanpa batas. `horizonSeconds` 0 =
+ * aturan kontrak saat ini (kunci tombol); MAX memakai `MAX_CAPACITY_HORIZON_SECONDS`.
+ */
+export function capacityOf(read: ChainRead, asset: Address, horizonSeconds = 0n): Capacity {
+  const reserve = read.reserves.find((r) => r.underlyingAsset.toLowerCase() === asset.toLowerCase());
+  const scaled = Object.entries(read.scaledATokenSupplies).find(([address]) => address.toLowerCase() === asset.toLowerCase())?.[1];
+  if (!reserve || scaled === undefined) return NO_CAPACITY_LIMIT;
+  return poolCapacity(reserve, scaled, read.blockTimestamp, horizonSeconds);
+}
+
+/** MAX (Q26) untuk aset terpilih; `null` = belum connect, tab tanpa jumlah, atau aset nggak ada di tab ini. */
+export function panelMax(
+  read: ChainRead,
+  view: ChainView,
+  whitelist: WhitelistAsset[],
+  input: MaxInput & { tab: PanelTab; asset: Address },
+): bigint | null {
+  const spec = specOf(input.tab);
+  const row = spec.assets(view).find((r) => r.asset === input.asset);
+  if (!spec.max || !row || !read.user) return null;
+  const capacity = capacityOf(read, input.asset, MAX_CAPACITY_HORIZON_SECONDS);
+  return spec.max(row, { read, whitelist, capacity, minGasReserve: input.minGasReserve, networkFee: input.networkFee });
+}
+
 /** Isi panel dari data satu chain: simulasi, rencana repay/withdraw, lalu tombol utama lewat `nextStep`. */
 export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: WhitelistAsset[], input: PanelInput): PanelState {
   const spec = specOf(input.tab);
@@ -200,6 +277,7 @@ export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: White
     approvalMode: input.approvalMode,
     ethBalance,
     networkFee: input.networkFee,
+    capacity: capacityOf(read, input.asset),
   };
   // Cek biaya dinetralkan: ETH yang kurang nggak mengubah transaksi apa saja yang tersisa.
   const withGasCheck = (stepInput: NextStepInput) => ({

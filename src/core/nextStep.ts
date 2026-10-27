@@ -1,5 +1,6 @@
 import { maxUint256 } from 'viem';
 
+import type { Capacity } from './capacity';
 import type { Gate, RepayPlan, WithdrawPlan } from './simulate';
 
 /**
@@ -70,6 +71,8 @@ export type NextStepInput = {
    * sedang dimuat, atau estimasi gagal): cek dilewati, kecuali ETH 0 (pola Q19 swap).
    */
   networkFee: bigint | null;
+  /** Sisa kapasitas pool reserve ini (Q27): supply cap, borrow cap, likuiditas. */
+  capacity: Capacity;
 };
 
 export type NextStep =
@@ -94,6 +97,8 @@ export type NextStep =
   /** Menyalakan jaminan aset ber-LTV 0. */
   | { step: 'cannotBeCollateral' }
   | { step: 'insufficientBalance' }
+  /** Melewati kapasitas pool (Q27): "Kuota supply/pinjaman aset ini penuh" / "Likuiditas pool tidak cukup, tersedia X". */
+  | { step: 'overCapacity'; limit: keyof Capacity; available: bigint }
   | { step: 'confirmRisk'; gate: 'check' | 'type' }
   /** `approve(Pool, 0)` dulu: approve langsung bakal revert selama izin lama ≠ 0. */
   | { step: 'resetApproval' }
@@ -132,14 +137,15 @@ export function nextStep(input: NextStepInput): NextStep {
   if (amount === null) return { step: 'enterAmount' };
 
   if (action.action === 'borrow') {
-    const risk = riskStep(action);
-    if (risk) return risk;
+    const blocked = lockStep(action) ?? capacityStep(input.capacity, amount, ['borrowCap', 'liquidity']) ?? confirmStep(action);
+    if (blocked) return blocked;
     // Delegation selalu exact, abaikan approvalMode: delegation terbuka = pihak lain bisa berutang atas nama user.
     if (input.native && allowance < amount) return { step: 'delegate', amount };
     return { step: 'borrow' };
   }
   if (action.action === 'withdraw') {
-    const blocked = lockStep(action);
+    // Withdraw semua: yang ditarik dari pool = seluruh saldo supply.
+    const blocked = lockStep(action) ?? capacityStep(input.capacity, action.plan?.all ? input.balance : amount, ['liquidity']);
     if (blocked) return blocked;
     if (amount > input.balance && !action.plan?.all) return { step: 'insufficientBalance' };
     const confirm = confirmStep(action);
@@ -155,6 +161,10 @@ export function nextStep(input: NextStepInput): NextStep {
   // Yang keluar dari wallet: repay lunas penuh = utang + bantalan bunga, selain itu jumlah yang diisi.
   const plan = action.action === 'repay' ? action.plan : null;
   const spend = plan ? plan.spend : amount;
+  if (action.action === 'supply') {
+    const full = capacityStep(input.capacity, amount, ['supplyCap']);
+    if (full) return full;
+  }
   // Sebelum approve: approve cuma buang gas kalau transaksinya nggak mungkin jalan.
   if (spend > input.balance) return { step: 'insufficientBalance' };
   // Supply/repay ETH: jumlah yang dikirim dan biaya jaringan diambil dari saldo ETH yang sama.
@@ -187,3 +197,12 @@ function confirmStep(risk: RiskInput): NextStep | null {
 }
 
 const riskStep = (risk: RiskInput) => lockStep(risk) ?? confirmStep(risk);
+
+// Q27: batas yang relevan untuk aksi ini, urut; `null` di Capacity = tanpa cap.
+function capacityStep(capacity: Capacity, amount: bigint, limits: Extract<NextStep, { step: 'overCapacity' }>['limit'][]): NextStep | null {
+  for (const limit of limits) {
+    const available = capacity[limit];
+    if (available !== null && amount > available) return { step: 'overCapacity', limit, available };
+  }
+  return null;
+}

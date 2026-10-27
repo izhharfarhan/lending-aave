@@ -99,6 +99,8 @@ export const PANEL = {
   tabs: { supply: 'Supply', withdraw: 'Withdraw', borrow: 'Borrow', repay: 'Repay' },
   soon: 'Menyusul',
   amount: 'Jumlah',
+  max: 'MAX',
+  maxInfo: 'Isi jumlah terbesar yang bisa dijalankan: saldo, batas LTV, kuota pool, likuiditas, dan cadangan gas untuk ETH.',
   asset: 'Aset',
   wallet: 'Wallet',
   interest: (usdPerYear: string, apy: string) => `bunga ≈ ${usdPerYear} per tahun (APY ${apy})`,
@@ -153,6 +155,14 @@ export const CTA = {
   busy: 'Sedang diproses…',
   enterAmount: 'Masukkan jumlah',
   needsEthForGas: 'ETH kurang untuk biaya jaringan',
+  /** Q27; kuota yang masih tersisa sebagian ditulis jumlahnya, bukan "penuh". */
+  overCapacity: {
+    supplyCap: (available: string, symbol: string) =>
+      available === '0' ? 'Kuota supply aset ini penuh' : `Melebihi sisa kuota supply, tersisa ${available} ${symbol}`,
+    borrowCap: (available: string, symbol: string) =>
+      available === '0' ? 'Kuota pinjaman aset ini penuh' : `Melebihi sisa kuota pinjaman, tersisa ${available} ${symbol}`,
+    liquidity: (available: string, symbol: string) => `Likuiditas pool tidak cukup, tersedia ${available} ${symbol}`,
+  },
   insufficientBalance: (symbol: string) => `Saldo ${symbol} tidak cukup`,
   needCollateral: 'Supply jaminan dulu',
   overLtv: 'Melebihi batas pinjam',

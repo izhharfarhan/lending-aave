@@ -1,5 +1,6 @@
 import { maxUint256 } from 'viem';
 
+import { NO_CAPACITY_LIMIT } from './capacity';
 import { nextStep, type NextStepInput } from './nextStep';
 import type { RepayPlan, WithdrawPlan } from './simulate';
 
@@ -22,6 +23,8 @@ const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
   native: false,
   ethBalance: 10n ** 18n,
   networkFee: null,
+  // Pool tanpa cap dan likuiditasnya berlimpah, kecuali test kapasitas.
+  capacity: NO_CAPACITY_LIMIT,
   action: { action: 'supply' },
   ...overrides,
 });
@@ -324,6 +327,54 @@ describe('nextStep()', () => {
 
       const full: RepayPlan = { full: true, send: maxUint256, spend: ETH(1) - fee + 5n, required: ETH(1) - fee };
       expect(nextStep(eth({ amount: ETH(1) - fee, action: { action: 'repay', plan: full } }))).toEqual({ step: 'needsEthForGas', needed: ETH(1) + 5n });
+    });
+  });
+
+  describe('kapasitas pool', () => {
+    const lockedBorrow = { gate: 'locked' as const };
+
+    it('locks a supply above the remaining supply cap, saying how much still fits', () => {
+      expect(nextStep(input({ capacity: { supplyCap: USDC(99), borrowCap: null, liquidity: 0n } }))).toEqual({
+        step: 'overCapacity',
+        limit: 'supplyCap',
+        available: USDC(99),
+      });
+      expect(nextStep(input({ capacity: { supplyCap: USDC(100), borrowCap: null, liquidity: 0n } }))).toEqual({ step: 'approve', amount: USDC(100) });
+    });
+
+    it('locks a borrow above the borrow cap first, then above the pool liquidity', () => {
+      const capacity = { supplyCap: null, borrowCap: USDC(50), liquidity: USDC(80) };
+      expect(nextStep(borrow({}, { capacity }))).toEqual({ step: 'overCapacity', limit: 'borrowCap', available: USDC(50) });
+      expect(nextStep(borrow({}, { capacity: { ...capacity, borrowCap: null } }))).toEqual({ step: 'overCapacity', limit: 'liquidity', available: USDC(80) });
+    });
+
+    it('locks a withdraw above the pool liquidity, also a withdraw-all of the whole supply', () => {
+      const withdraw = (plan: WithdrawPlan) =>
+        input({ capacity: { supplyCap: null, borrowCap: null, liquidity: USDC(80) }, action: { action: 'withdraw', plan, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false } });
+      expect(nextStep(withdraw({ all: false, send: USDC(100), spend: USDC(100), required: USDC(100) }))).toEqual({
+        step: 'overCapacity',
+        limit: 'liquidity',
+        available: USDC(80),
+      });
+      expect(nextStep({ ...withdraw({ all: true, send: maxUint256, spend: USDC(500), required: USDC(500) }), amount: USDC(500) })).toEqual({
+        step: 'overCapacity',
+        limit: 'liquidity',
+        available: USDC(80),
+      });
+    });
+
+    it('comes after the LTV lock and before the balance and risk confirmation checks', () => {
+      const full = { supplyCap: USDC(0), borrowCap: USDC(0), liquidity: 0n };
+      expect(nextStep(borrow(lockedBorrow, { capacity: full }))).toEqual({ step: 'overLtv' });
+      expect(nextStep(borrow({ gate: 'check' }, { capacity: full }))).toEqual({ step: 'overCapacity', limit: 'borrowCap', available: 0n });
+      expect(nextStep(input({ amount: USDC(600), capacity: full }))).toEqual({ step: 'overCapacity', limit: 'supplyCap', available: 0n });
+    });
+
+    it('never limits repay or the collateral toggle', () => {
+      const full = { supplyCap: 0n, borrowCap: 0n, liquidity: 0n };
+      expect(nextStep(repay(undefined, { capacity: full }))).toEqual({ step: 'approve', amount: USDC(100) });
+      const toggle: NextStepInput['action'] = { action: 'collateral', enable: false, canEnable: true, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false };
+      expect(nextStep(input({ amount: null, action: toggle, capacity: full }))).toEqual({ step: 'setCollateral' });
     });
   });
 });
