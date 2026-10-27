@@ -41,8 +41,9 @@ sudah final (sesi belajar 2026-10-27). Hasil grilling (Q1–Q23, 2026-10-27) dic
    untuk withdraw semua ETH lewat gateway: izin aWETH diberi bantalan, karena saldo
    aWETH bertambah oleh bunga antara approve dan withdraw (V2).
 9. Tingkat peringatan HF (setelah transaksi; borrow, withdraw, matikan collateral):
-   ≥ 2.0 hijau · 1.5–2.0 kuning · 1.1–1.5 merah + centang · < 1.1 merah + ketik
-   "confirm" · melebihi batas LTV: tombol dikunci.
+   ≥ 2.0 ~~hijau~~ Aman (netral) · 1.5–2.0 ~~kuning~~ Waspada (amber) · 1.1–1.5
+   Bahaya (merah) + centang · < 1.1 Bahaya (merah) + ketik "confirm" · melebihi
+   batas LTV: tombol dikunci. (Warna dirapikan 2026-10-27 sesuai Q20.)
 10. Dev Tools (fork saja): semua dari proyek swap + maju waktu (+1 hari/+30 hari/
     +1 tahun), ubah harga oracle (impersonate admin Aave), simulasi likuidasi.
 11. Indexer wajib. Pemilik posisi dari field event, bukan `txFrom`:
@@ -104,8 +105,9 @@ Pola sama: tingkatan peringatan, detail collapsible, status tx multi-tahap
   `~/projects/lending-aave/lending-indexer` (Ponder). File ini tinggal di `lending-web/`.
 
 ### Q2 — Chain berbahaya
-- Tingkat risiko dari HF **saat ini**, ambang sama dengan #9: ≥ 2.0 Aman (hijau),
-  1.5–2.0 Waspada (kuning), < 1.5 Bahaya (merah).
+- Tingkat risiko dari HF **saat ini**, ambang sama dengan #9: ≥ 2.0 Aman (~~hijau~~
+  netral), 1.5–2.0 Waspada (~~kuning~~ amber), < 1.5 Bahaya (merah). (Warna dirapikan
+  2026-10-27 sesuai Q20.)
 - Banner dashboard hanya untuk Bahaya. Waspada cukup ditandai di kartu.
 - Beberapa chain Bahaya: banner menyebut HF terendah dulu, lalu "+N chain lain".
 - Tanpa utang: tulis "Tidak ada utang", bukan "∞".
@@ -181,7 +183,7 @@ Tiga journey. Withdraw/repay biasa ikut pola J1/J2.
 | Stage | Pain point | Solusi |
 |---|---|---|
 | Pastikan jaminan | Nggak tahu supply = jaminan | Baris jaminan + CTA (Q11) |
-| Pilih aset pinjam | Takut salah pilih | Hanya `borrowingEnabled` + APY pinjam |
+| Pilih aset pinjam | Takut salah pilih | ~~Hanya `borrowingEnabled`~~ Daftar pinjam sesuai #4 (`borrowableBitmap` kalau di E-Mode; tanpa reserve frozen/paused) + APY pinjam |
 | Isi jumlah | Nggak tahu batas aman | Sisa batas pinjam + HF sebelum → sesudah |
 | Konfirmasi risiko | Nggak sadar risiko likuidasi | Tier #9 (centang / ketik confirm) |
 | Borrow → selesai | Sama seperti J1 | Status multi-tahap |
@@ -267,7 +269,7 @@ Tiga journey. Withdraw/repay biasa ikut pola J1/J2.
 ### Q20 — Tema visual (DIUBAH 2026-10-27)
 - ~~Sistem desain swap-web (tema Zardex violet).~~ Diganti atas permintaan user setelah
   review visual prototype pertama (terasa "AI slop"). Referensi: dashboard gaya Bitlend,
-  aksen hijau. Gambar referensi nggak dipakai (hak cipta).
+  ~~aksen hijau~~ aksen violet (lihat catatan akhir Q20). Gambar referensi nggak dipakai (hak cipta).
 - Layout: sidebar kiri (wordmark, Dashboard, Riwayat, "E-Mode" redup + badge SEGERA;
   footer = status per chain: blok terbaru + status indexer sinkron/tertinggal/offline).
   Hero = ringkasan semua chain: satu angka raksasa HF terendah + skala HF (1,0 → 1,5 →
@@ -275,7 +277,7 @@ Tiga journey. Withdraw/repay biasa ikut pola J1/J2.
   bar batas pinjam. Banner Bahaya/likuidasi menempel di atas hero. Chain = segmen ringkas
   di bawah hero. Aset = tabel datar (aset + logo, APY, wallet, jaminan); klik baris membuka
   panel aksi di kanan (Q19), aksi dipilih lewat tab panel. Logo token = inisial dalam
-  lingkaran berwarna (tanpa aset bermerek). Visual hero = CSS saja ("portal" cahaya hijau),
+  lingkaran berwarna (tanpa aset bermerek). Visual hero = CSS saja ("portal" cahaya ~~hijau~~ violet),
   dengan slot gambar opsional.
 - Warna: latar hampir hitam netral, satu aksen (awalnya hijau mint, lalu violet; lihat di bawah) untuk aksi, pilihan aktif, dan
   angka hero. HF Aman = netral; hanya Waspada (amber) dan Bahaya (merah) yang berwarna.
