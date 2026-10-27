@@ -17,10 +17,15 @@ export type DashboardSummary = {
   highestBorrowLimitUsed: { chainId: number; used: number; availableUsd: number; risk: RiskLevel } | null;
   /** Chain Bahaya (HF < 1,5), HF terendah dulu: banner menyebut yang pertama lalu "+N chain lain" (Q2). */
   dangerChains: number[];
+  /**
+   * "Belum lengkap (n/3 chain)" (Q4): ada chain yang gagal dibaca, jadi HF terendah cuma batas atas ("≤ x") dan batas
+   * pinjam tertinggi "bisa saja lebih tinggi" (Q24). `null` = semua chain terbaca.
+   */
+  incomplete: { readCount: number; totalCount: number; unreadChains: number[] } | null;
 };
 
 // Ringkasan semua chain untuk hero (ADR 0001, Q3).
-export function summarizeChains(chains: ChainAccount[]): DashboardSummary {
+export function summarizeChains(chains: ChainAccount[], unreadChains: number[] = []): DashboardSummary {
   // Chain tanpa utang nggak punya HF, jadi nggak ikut HF terendah (Q3).
   const byHealth = chains
     .flatMap(({ chainId, account }) =>
@@ -43,6 +48,10 @@ export function summarizeChains(chains: ChainAccount[]): DashboardSummary {
     netUsd: totalSupplyUsd - totalDebtUsd,
     highestBorrowLimitUsed: highest,
     dangerChains: byHealth.filter((chain) => chain.risk === 'bahaya').map((chain) => chain.chainId),
+    incomplete:
+      unreadChains.length > 0
+        ? { readCount: chains.length, totalCount: chains.length + unreadChains.length, unreadChains }
+        : null,
   };
 }
 

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 
 import { useAllChainViews } from '@/aave/useChainView';
@@ -12,7 +13,7 @@ import { RISK_THRESHOLD, type ChainRead, type ChainView, type RiskLevel } from '
 import { liquidationPrice } from '@/core/simulate';
 import { chainSegment, summarizeChains, type ChainAccount, type DashboardSummary } from '@/core/summary';
 import { CHAIN_PICKER, DANGER, DASHBOARD, POSITION, RISK } from '@/copy';
-import { hf, pct, tokenAmount, usd } from './format';
+import { hf, list, pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
 import { liquidationText } from './LiquidationText';
 
@@ -23,7 +24,8 @@ const hrefOf = (chain: SupportedChain) => `/?chain=${chain.slug}`;
 const stagger = (i: number) => ({ ['--i' as string]: i }) as CSSProperties;
 
 // Ringkasan semua chain (ADR 0001): banner Bahaya menempel di atas hero, lalu segmen per chain yang sekaligus jadi
-// pemilih chain (Q5: cuma ganti URL). Chain yang gagal atau belum terbaca nggak ikut ringkasan; labelnya di tiket 12.
+// pemilih chain (Q5: cuma ganti URL). Chain yang gagal dibaca nggak ikut dijumlah; ringkasan lalu berlabel "Belum lengkap"
+// (Q4). Semua chain dibaca ulang tiap ±30 detik dan saat tab difokuskan (useAllChainViews).
 export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
   const { isConnected } = useAccount();
   const queries = useAllChainViews();
@@ -31,69 +33,106 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
 
   const loaded = SUPPORTED_CHAINS.flatMap((chain, i): Loaded[] => {
     const data = queries[i].data;
-    return data ? [{ chain, ...data }] : [];
+    return data && !queries[i].isError ? [{ chain, ...data }] : [];
   });
   const connected = loaded.filter(({ view }) => view.account !== null);
+  // "Gagal" = bacaan terakhir error, walau data lama masih ada: sama dengan detail chain, dan ringkasan nggak pernah
+  // tampil lengkap dengan data basi (Q4).
+  const failed = (i: number) => queries[i].isError;
+  const unread = SUPPORTED_CHAINS.filter((_, i) => failed(i)).map((c) => c.chainId);
   const summary = summarizeChains(
     connected.map(({ chain, view }): ChainAccount => ({ chainId: chain.chainId, account: view.account!, totalSupplyUsd: view.totalSupplyUsd })),
+    unread,
   );
   const loadedOf = (chainId: number) => loaded.find(({ chain }) => chain.chainId === chainId)!;
 
   return (
     <div className="flex flex-col gap-4">
-      {isConnected && (
-        <div className="reveal" style={stagger(0)}>
-          <DangerBanner summary={summary} loadedOf={loadedOf} />
-          <Hero
-            summary={summary}
-            loading={queries.some((q) => q.isLoading)}
-            indebted={connected.filter(({ view }) => view.account!.healthFactor !== null)}
-            selectedChainId={selectedChainId}
-          />
-        </div>
-      )}
+      <div className="reveal" style={stagger(0)}>
+        {isConnected ? (
+          <>
+            <DangerBanner summary={summary} loadedOf={loadedOf} />
+            <Hero
+              summary={summary}
+              loading={queries.some((q) => q.isLoading)}
+              indebted={connected.filter(({ view }) => view.account!.healthFactor !== null)}
+              selectedChainId={selectedChainId}
+            />
+          </>
+        ) : (
+          <ConnectHero />
+        )}
+      </div>
       <nav aria-label={CHAIN_PICKER.label} className="reveal surface grid overflow-hidden md:grid-cols-3 md:divide-x md:divide-line" style={stagger(1)}>
         {SUPPORTED_CHAINS.map((chain, i) => {
           const query = queries[i];
           const ethBalance = query.data?.read.user?.walletBalances[WHITELIST[chain.chainId].find((a) => a.native)!.address] ?? 0n;
+          const view = failed(i) ? undefined : query.data?.view;
+          const account = view?.account;
+          // Seluruh sel bisa diklik lewat `after:` Link nama chain; tombol "Coba lagi" di atasnya (z-10) tetap tombol sendiri.
           return (
-            <Link
+            <div
               key={chain.slug}
-              href={hrefOf(chain)}
-              aria-current={chain.chainId === selectedChainId ? 'page' : undefined}
-              className={`flex flex-col border-line px-5 py-4 transition-colors max-md:border-b max-md:last:border-b-0 ${
+              className={`relative flex flex-col border-line px-5 py-4 transition-colors max-md:border-b max-md:last:border-b-0 ${
                 chain.chainId === selectedChainId ? 'bg-panel-hover shadow-[inset_0_2px_0_var(--accent)]' : 'hover:bg-panel-hover'
               }`}
             >
               <span className="flex w-full items-center gap-2">
                 <ChainIcon chain={chain} />
-                <span className="font-medium">{chain.name}</span>
-                {query.data?.view.account &&
-                  (query.data.view.account.healthFactor !== null ? (
+                <Link
+                  href={hrefOf(chain)}
+                  aria-current={chain.chainId === selectedChainId ? 'page' : undefined}
+                  className="font-medium after:absolute after:inset-0"
+                >
+                  {chain.name}
+                </Link>
+                {account &&
+                  (account.healthFactor !== null ? (
                     <span className="ml-auto text-lg">
-                      <HealthFactor value={query.data.view.account.healthFactor} withLabel={false} />
+                      <HealthFactor value={account.healthFactor} withLabel={false} />
                     </span>
                   ) : (
                     // Ada supply tanpa utang: "Tidak ada utang", bukan "∞" (Q2). Tanpa posisi sama sekali cukup "Belum ada posisi".
-                    query.data.view.supplies.length > 0 && <span className="ml-auto text-xs text-muted">{DASHBOARD.noDebt}</span>
+                    view!.supplies.length > 0 && <span className="ml-auto text-xs text-muted">{DASHBOARD.noDebt}</span>
                   ))}
               </span>
-              {isConnected &&
-                (query.isLoading ? (
-                  <span className="mt-2 flex flex-col gap-1.5">
-                    <span className="skeleton block h-3.5 w-32" />
-                    <span className="skeleton block h-1 w-full" />
-                  </span>
-                ) : query.data ? (
-                  <SegmentBody chain={chain} read={query.data.read} view={query.data.view} ethBalance={ethBalance} fee={fees[i]} />
-                ) : (
-                  <span className="mt-2 text-xs text-danger">{DASHBOARD.failed}</span>
-                ))}
-            </Link>
+              {!isConnected ? (
+                <span className="mt-2 text-xs text-muted">{DASHBOARD.connectSegment}</span>
+              ) : query.isLoading ? (
+                <span className="mt-2 flex flex-col gap-1.5">
+                  <span className="skeleton block h-3.5 w-32" />
+                  <span className="skeleton block h-1 w-full" />
+                </span>
+              ) : failed(i) || !query.data ? (
+                <span className="mt-2 flex items-center gap-2 text-xs text-danger">
+                  {DASHBOARD.failed} ·
+                  <button type="button" className="link relative z-10 text-ink" disabled={query.isFetching} onClick={() => query.refetch()}>
+                    {query.isFetching ? DASHBOARD.retrying : DASHBOARD.retry}
+                  </button>
+                </span>
+              ) : (
+                <SegmentBody chain={chain} read={query.data.read} view={query.data.view} ethBalance={ethBalance} fee={fees[i]} />
+              )}
+            </div>
           );
         })}
       </nav>
     </div>
+  );
+}
+
+// Q6: sebelum wallet terhubung, hero berisi ajakan; detail chain di bawah tetap menampilkan aset + APY.
+function ConnectHero() {
+  const { openConnectModal } = useConnectModal();
+  return (
+    <section className="surface p-5 md:p-10">
+      <p className="text-sm text-muted">{DASHBOARD.lowestHf}</p>
+      <p className="display mt-3 text-[72px] font-extralight leading-[0.9] text-faint md:text-[120px]">{DASHBOARD.unknownHf}</p>
+      <p className="mt-5 max-w-sm text-sm text-muted">{DASHBOARD.connectPrompt(list(SUPPORTED_CHAINS.map((c) => c.name)))}</p>
+      <button type="button" className="btn-accent mt-4 px-5 py-2.5" onClick={openConnectModal} disabled={!openConnectModal}>
+        {DASHBOARD.connect}
+      </button>
+    </section>
   );
 }
 
@@ -133,6 +172,8 @@ const HERO_TONE: Record<RiskLevel, string> = { aman: 'text-accent', waspada: 'te
 function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Loaded[]; selectedChainId: number }) {
   const { summary, loading } = props;
   const lowest = summary.lowestHealthFactor;
+  const incomplete = summary.incomplete;
+  const unreadNames = incomplete && list(incomplete.unreadChains.map(chainNameOf));
   const money = (n: number) => (loading ? <span className="skeleton mt-1 block h-6 w-24" /> : usd(n));
 
   // Tipografi saja (tanpa gambar): angka HF jadi pusat di kiri, skala + statistik di kolom kanan.
@@ -140,15 +181,21 @@ function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Lo
     <section className={`surface ${summary.dangerChains.length > 0 ? 'rounded-t-none' : ''}`}>
       <div className="grid gap-x-12 gap-y-4 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,520px)] md:items-center md:p-10">
         <div>
-          <p className="text-sm text-muted" title={DASHBOARD.lowestHfInfo}>
-            {DASHBOARD.lowestHf}
-            <span className="ml-1 text-[10px] text-faint">ⓘ</span>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+            <span title={DASHBOARD.lowestHfInfo}>
+              {DASHBOARD.lowestHf}
+              <span className="ml-1 text-[10px] text-faint">ⓘ</span>
+            </span>
+            {!loading && incomplete && (
+              <span className="badge badge-warn">{DASHBOARD.incomplete(incomplete.readCount, incomplete.totalCount)}</span>
+            )}
           </p>
           {loading ? (
             <span className="skeleton mt-4 block h-14 w-40 md:h-[150px] md:w-96" />
           ) : lowest ? (
             <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-1">
               <p className={`display text-[72px] font-extralight leading-[0.9] tracking-tight md:text-[168px] ${HERO_TONE[lowest.risk]}`}>
+                {incomplete && <span className="mr-1 text-[0.5em]">{DASHBOARD.atMost}</span>}
                 {hf(lowest.healthFactor)}
               </p>
               <p className="pb-5 text-base">
@@ -156,8 +203,14 @@ function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Lo
                 <span className="text-muted"> · {chainNameOf(lowest.chainId)}</span>
               </p>
             </div>
+          ) : incomplete ? (
+            // Chain yang terbaca tanpa utang, tapi chain yang gagal bisa saja punya utang: jangan tulis "Tidak ada utang".
+            <p className="display mt-3 text-[72px] font-extralight leading-[0.9] text-faint md:text-[120px]">{DASHBOARD.unknownHf}</p>
           ) : (
             <p className="display mt-4 mb-6 text-4xl font-extralight text-muted md:text-5xl">{POSITION.noDebt}</p>
+          )}
+          {!loading && unreadNames && (
+            <p className="mt-3 text-xs text-warn">{lowest ? DASHBOARD.hfMayBeLower(unreadNames) : DASHBOARD.mayHaveDebt(unreadNames)}</p>
           )}
         </div>
         <div>
@@ -169,7 +222,9 @@ function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Lo
             <Stat label={DASHBOARD.totalDebt}>{money(summary.totalDebtUsd)}</Stat>
             <Stat label={DASHBOARD.net}>{money(summary.netUsd)}</Stat>
           </dl>
-          {!loading && summary.highestBorrowLimitUsed && <BorrowLimitBar top={summary.highestBorrowLimitUsed} />}
+          {!loading && summary.highestBorrowLimitUsed && (
+            <BorrowLimitBar top={summary.highestBorrowLimitUsed} note={unreadNames ? DASHBOARD.limitMayBeHigher(unreadNames) : null} />
+          )}
         </div>
       </div>
     </section>
@@ -299,7 +354,7 @@ function Stat({ label, children, first = false }: { label: string; children: Rea
 const usedText = (used: number) => (Number.isFinite(used) ? pct(used, 0) : POSITION.overLimit);
 const usedWidth = (used: number) => `${Math.min(used, 1) * 100}%`;
 
-function BorrowLimitBar({ top }: { top: NonNullable<DashboardSummary['highestBorrowLimitUsed']> }) {
+function BorrowLimitBar({ top, note }: { top: NonNullable<DashboardSummary['highestBorrowLimitUsed']>; note: string | null }) {
   return (
     <div className="mt-7 max-w-[520px]">
       <div className="flex justify-between gap-3 text-xs">
@@ -319,6 +374,7 @@ function BorrowLimitBar({ top }: { top: NonNullable<DashboardSummary['highestBor
           style={{ left: usedWidth(top.used) }}
         />
       </div>
+      {note && <p className="mt-1.5 text-xs text-warn">{note}</p>}
     </div>
   );
 }

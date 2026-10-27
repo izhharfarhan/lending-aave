@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import type { Address } from 'viem';
+import { useAccount } from 'wagmi';
 
 import { useChainView } from '@/aave/useChainView';
 import { WHITELIST } from '@/config/assets';
@@ -31,6 +32,7 @@ type Picked = { tab: PanelTab; asset?: Address };
 // Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. ETH di semua tab lewat gateway.
 export function ChainDetail({ chainId }: { chainId: number }) {
   const { data, isPending, isError, refetch } = useChainView(chainId);
+  const { isConnected } = useAccount();
   const [picked, setPicked] = useState<Picked>({ tab: 'supply' });
   const name = chainName(chainId);
 
@@ -44,7 +46,7 @@ export function ChainDetail({ chainId }: { chainId: number }) {
   if (isError)
     return (
       <div role="alert" className="surface bg-danger-soft p-5 text-sm text-danger">
-        {POSITION.failed(name)}{' '}
+        {POSITION.failed(name)} {isConnected && `${POSITION.notCounted} `}
         <button type="button" className="link text-ink" onClick={() => refetch()}>
           {POSITION.retry}
         </button>

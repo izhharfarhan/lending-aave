@@ -8,6 +8,9 @@ export const usd = (n: number) => {
   const digits = n < 100 ? 2 : 0;
   return `$${nf(digits, digits).format(n)}`;
 };
+// "Ethereum, Base, dan Arbitrum".
+const listFormat = new Intl.ListFormat('id-ID', { type: 'conjunction' });
+export const list = (items: string[]) => listFormat.format(items);
 export const pct = (n: number, digits = 2) => `${nf(digits, digits).format(n * 100)}%`;
 // HF dibulatkan ke BAWAH: 1,996 ditulis 1,99 (Waspada), bukan 2,00 di samping label Waspada. Tampilan nggak pernah
 // lebih aman dari kenyataan.

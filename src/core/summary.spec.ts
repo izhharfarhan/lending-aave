@@ -78,6 +78,30 @@ describe('summarizeChains()', () => {
     });
   });
 
+  describe('positive: belum lengkap (Q4, Q24)', () => {
+    it('marks the summary incomplete with the unread chain, so lowest HF and highest limit are only bounds', () => {
+      const summary = summarizeChains(
+        [
+          chain(ETHEREUM, { healthFactor: 2.6, risk: 'aman', totalDebtUsd: 400, borrowLimitUsed: 0.3, availableBorrowsUsd: 900 }, 2_000),
+          chain(ARBITRUM, { healthFactor: 1.7, risk: 'waspada', totalDebtUsd: 600, borrowLimitUsed: 0.6, availableBorrowsUsd: 400 }, 1_300),
+        ],
+        [BASE],
+      );
+
+      // HF terendah yang terbaca 1,7 → ditulis "≤ 1,7"; batas pinjam tertinggi 60% "bisa saja lebih tinggi".
+      expect(summary.lowestHealthFactor).toMatchObject({ chainId: ARBITRUM, healthFactor: 1.7 });
+      expect(summary.highestBorrowLimitUsed).toMatchObject({ chainId: ARBITRUM, used: 0.6 });
+      expect(summary.incomplete).toEqual({ readCount: 2, totalCount: 3, unreadChains: [BASE] });
+    });
+
+    it('is never complete while a chain is unread, even when the read chains have no debt', () => {
+      const summary = summarizeChains([chain(ETHEREUM, { totalCollateralUsd: 500 }, 500)], [BASE, ARBITRUM]);
+
+      expect(summary.lowestHealthFactor).toBeNull();
+      expect(summary.incomplete).toEqual({ readCount: 1, totalCount: 3, unreadChains: [BASE, ARBITRUM] });
+    });
+  });
+
   describe('edge', () => {
     it('has no lowest HF, no borrow limit bar and no banner when no chain has debt', () => {
       const summary = summarizeChains([chain(ETHEREUM, { totalCollateralUsd: 2_000 }, 2_000), chain(BASE, {}, 0), chain(ARBITRUM, {}, 0)]);
@@ -89,6 +113,7 @@ describe('summarizeChains()', () => {
         netUsd: 2_000,
         highestBorrowLimitUsed: null,
         dangerChains: [],
+        incomplete: null,
       });
     });
   });

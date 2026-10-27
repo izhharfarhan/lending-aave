@@ -31,7 +31,6 @@ export const WALLET = {
   forkGroup: 'Fork lokal',
   walletGroup: 'Wallet',
   connect: 'Hubungkan wallet',
-  connectPrompt: 'Hubungkan wallet untuk melihat posisi Anda.',
 };
 
 // Pengaman fork (pola swap-web): kalau nggak aman, semua aksi transaksi dikunci.
@@ -57,6 +56,8 @@ export const POSITION = {
     'Health factor = nilai jaminan × liquidation threshold ÷ utang. Kalau turun di bawah 1, sebagian jaminan Anda dijual pihak lain untuk melunasi utang, ditambah penalti.',
   loading: 'Memuat posisi…',
   failed: (chain: string) => `Posisi di ${chain} gagal dimuat.`,
+  /** Q4: chain yang gagal nggak ikut ringkasan di atas. */
+  notCounted: 'Ringkasan semua chain di atas belum menghitung chain ini.',
   retry: 'Coba lagi',
   liquidation: 'Harga likuidasi',
   liquidationInfo:
@@ -90,6 +91,21 @@ export const DASHBOARD = {
   canSupply: (amount: string) => `${amount} di wallet bisa di-supply`,
   ethShort: 'ETH kurang untuk bertransaksi',
   noDebt: POSITION.noDebt,
+  retry: POSITION.retry,
+  retrying: 'Memuat…',
+  // Q4, Q24: ringkasan nggak pernah tampil lengkap kalau ada chain yang gagal dibaca.
+  incomplete: (read: number, total: number) => `Belum lengkap (${read}/${total} chain)`,
+  atMost: '≤',
+  unknownHf: '—',
+  hfMayBeLower: (chains: string) => `${chains} belum terbaca, bisa lebih rendah`,
+  /** Chain yang terbaca tanpa utang: belum ada angka yang bisa "lebih rendah". */
+  mayHaveDebt: (chains: string) => `${chains} belum terbaca, bisa saja ada utang`,
+  limitMayBeHigher: (chains: string) => `${chains} belum terbaca, bisa saja lebih tinggi`,
+  // Q6: sebelum wallet terhubung.
+  connectPrompt: (chains: string) => `Hubungkan wallet untuk melihat posisi Anda di ${chains} sekaligus.`,
+  connect: WALLET.connect,
+  /** Segmen chain sebelum connect: keterangan, bukan tombol (klik segmen tetap memilih chain). */
+  connectSegment: 'Posisi tampil setelah wallet terhubung',
   failed: 'Gagal dimuat',
 };
 
