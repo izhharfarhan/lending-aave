@@ -1,0 +1,14 @@
+# dependencies
+node_modules
+
+# Next.js
+.next
+next-env.d.ts
+*.tsbuildinfo
+
+# env: semua file .env* diabaikan kecuali contohnya
+.env*
+!.env.example
+
+# font berlisensi personal, dipasang lokal saja (DECISIONS.md Q20)
+public/fonts/local/

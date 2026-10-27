@@ -1,0 +1,81 @@
+# Lending
+
+App lending di atas pool Aave V3 di beberapa chain: user menyimpan aset, meminjam dengan jaminan, dan memantau risiko likuidasi semua chain dari satu dashboard.
+
+## Posisi
+
+**Posisi**:
+Seluruh supply dan utang satu alamat di pool Aave pada satu chain. Satu alamat punya paling banyak satu posisi per chain.
+_Avoid_: akun, portofolio
+
+**Jaminan**:
+Bagian supply yang sedang diaktifkan sebagai collateral, sehingga dihitung untuk batas pinjam dan health factor.
+_Avoid_: deposit, agunan
+
+**Health factor (HF)**:
+Angka keamanan sebuah posisi: nilai jaminan × liquidation threshold dibagi utang. Di bawah 1, posisi bisa dilikuidasi.
+_Avoid_: skor keamanan, health score
+
+**Tingkat risiko**:
+Label dari HF: Aman (≥ 2.0), Waspada (1.5–2.0), Bahaya (< 1.5). Ambangnya sama untuk HF saat ini dan HF setelah transaksi.
+_Avoid_: status, level
+
+**Sisa batas pinjam**:
+Nilai yang masih bisa dipinjam sebelum menyentuh batas LTV.
+_Avoid_: borrow power, available to borrow
+
+**Likuidasi**:
+Penjualan sebagian jaminan oleh pihak lain untuk melunasi sebagian utang posisi yang HF-nya di bawah 1, ditambah penalti.
+_Avoid_: lelang
+
+## Dashboard
+
+**Ringkasan**:
+Bagian teratas dashboard: total supply, total utang, net, dan HF terendah dari semua chain yang didukung.
+_Avoid_: overview, total aset
+
+**HF terendah**:
+HF paling kecil di antara posisi yang punya utang, di semua chain.
+
+**Ringkasan belum lengkap**:
+Keadaan ringkasan ketika posisi di satu chain atau lebih gagal dibaca. Angkanya tidak boleh dianggap final.
+
+**Kartu chain**:
+Ringkasan satu posisi (HF, supply, utang, kecukupan ETH untuk gas) yang bisa diklik untuk memilih chain.
+
+**Chain terpilih**:
+Chain yang detail posisinya sedang ditampilkan di app. Bisa beda dengan network wallet.
+_Avoid_: chain aktif, network aktif
+
+**Chain berbahaya**:
+Chain yang posisinya bertingkat risiko Bahaya. Hanya chain ini yang memunculkan banner.
+
+## Transaksi
+
+**Langkah wallet**:
+Satu permintaan ke wallet (ganti network, approve, delegasi kredit, atau transaksi utama) yang ditampilkan ke user sebelum popup wallet muncul.
+
+**Alamat resmi**:
+Alamat kontrak Aave yang tercantum di Aave address book untuk chain tersebut.
+
+## Risiko
+
+**Harga likuidasi**:
+Harga ETH (oracle chain itu) yang membuat HF suatu posisi tepat 1, dengan harga aset lain dianggap tetap. Hanya ada kalau posisi bergantung pada satu aset volatil.
+_Avoid_: liquidation price, harga lelang
+
+**E-Mode**:
+Kategori yang, kalau diaktifkan user, memberi LTV/LT khusus untuk aset jaminan di dalam kategori itu dan menentukan aset mana yang boleh dipinjam. Di app ini hanya dibaca, tidak diatur.
+_Avoid_: efficiency mode, mode efisien
+
+**Dibekukan**:
+Status reserve yang tidak menerima supply atau pinjaman baru, tapi posisi lama masih bisa ditarik dan dilunasi.
+_Avoid_: frozen, beku
+
+**Dijeda**:
+Status reserve yang untuk sementara menolak semua aksi, termasuk withdraw dan repay.
+_Avoid_: paused, berhenti
+
+**Aset luar**:
+Aset dalam posisi user yang tidak ada di whitelist app. Ikut terhitung dalam risiko, tapi tampil read-only.
+_Avoid_: aset lain, aset non-whitelist
