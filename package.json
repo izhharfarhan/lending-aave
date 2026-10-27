@@ -9,7 +9,8 @@
     "build": "node scripts/with-env.mjs .env.fork next build",
     "fixture:position": "tsx scripts/position-fixture.mts",
     "typecheck": "tsc --noEmit",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:fork": "NODE_OPTIONS=--experimental-vm-modules jest -c jest.fork.config.ts --runInBand"
   },
   "dependencies": {
     "@bgd-labs/aave-address-book": "4.44.22",

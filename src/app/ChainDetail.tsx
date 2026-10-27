@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import type { Address } from 'viem';
 
 import { useChainView } from '@/aave/useChainView';
 import { chainName } from '@/config/chains';
@@ -12,14 +13,17 @@ import {
   type RiskLevel,
 } from '@/core/chainPosition';
 import { POSITION, RISK, TABLE } from '@/copy';
+import { ActionPanel } from './ActionPanel';
 import { hf, pct, tokenAmount, usd } from './format';
+import { TokenIcon } from './TokenIcon';
 
 const AAVE_APP_URL = 'https://app.aave.com/';
 
-// Detail chain terpilih (Q20, prototype): kepala HF + sisa batas pinjam, lalu empat tabel datar. Baris belum bisa
-// diklik; panel aksi menyusul di tiket 03.
+// Detail chain terpilih (Q20, prototype): kepala HF + sisa batas pinjam, empat tabel datar, dan panel aksi di kanan.
+// Tiket 03: baris ERC20 di Pasar supply membuka panel Supply; baris lain menyusul (ETH lewat gateway di tiket 06).
 export function ChainDetail({ chainId }: { chainId: number }) {
   const { data: view, isPending, isError, refetch } = useChainView(chainId);
+  const [picked, setPicked] = useState<Address | null>(null);
   const name = chainName(chainId);
 
   if (isPending)
@@ -39,14 +43,38 @@ export function ChainDetail({ chainId }: { chainId: number }) {
       </div>
     );
 
+  // Panel selalu ada di kanan (prototype); baris baru ditandai setelah user memilihnya.
+  const supplyAssets = view.supplyMarket.filter((r) => !r.native);
+  const asset = picked ?? supplyAssets[0]?.asset;
+
   return (
     <section className="reveal flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <h2 className="display text-2xl font-normal">{name}</h2>
         {view.account && <AccountFacts account={view.account} />}
       </div>
-      {view.account && <PositionTables view={view} />}
-      <MarketTables view={view} />
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {view.account && <PositionTables view={view} />}
+          <MarketTables view={view} activeAsset={picked ?? undefined} onSupply={setPicked} />
+        </div>
+        {asset && (
+          <div className="xl:sticky xl:top-6">
+            <ActionPanel
+              chainId={chainId}
+              assets={supplyAssets}
+              asset={asset}
+              onAssetChange={setPicked}
+              refetch={async () => {
+                const result = await refetch();
+                // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
+                if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
+                return result.data;
+              }}
+            />
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -108,7 +136,7 @@ function Fact({ label, info, children }: { label: string; info?: string; childre
 
 function PositionTables({ view }: { view: ChainView }) {
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
+    <div className="grid gap-4 2xl:grid-cols-2">
       <FlatTable
         title={TABLE.supplies}
         empty={TABLE.noSupplies}
@@ -142,12 +170,17 @@ function PositionTables({ view }: { view: ChainView }) {
   );
 }
 
-function MarketTables({ view }: { view: ChainView }) {
+function MarketTables(props: {
+  view: ChainView;
+  activeAsset: Address | undefined;
+  onSupply: (asset: Address) => void;
+}) {
+  const { view } = props;
   const [showAll, setShowAll] = useState(false);
   const connected = view.account !== null;
 
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
+    <div className="grid gap-4 2xl:grid-cols-2">
       <FlatTable
         title={TABLE.supplyMarket}
         aside={
@@ -169,6 +202,9 @@ function MarketTables({ view }: { view: ChainView }) {
         rows={visibleSupplyMarket(view.supplyMarket, showAll).map((row) => ({
           key: row.asset,
           symbol: row.symbol,
+          active: row.asset === props.activeAsset,
+          // ETH lewat gateway menyusul di tiket 06.
+          onClick: row.native ? undefined : () => props.onSupply(row.asset),
           cells: [
             <span key="apy" className="num">{pct(row.apy)}</span>,
             <span key="wallet" className="num text-muted">
@@ -214,7 +250,8 @@ function AssetNote({ outside, status }: { outside: boolean; status: ReserveStatu
   );
 }
 
-type Row = { key: string; symbol: string; note?: ReactNode; cells: ReactNode[] };
+/** Baris tanpa `onClick` belum punya aksi (bukan sekadar nonaktif): kursor biasa, nggak bisa difokus. */
+type Row = { key: string; symbol: string; note?: ReactNode; cells: ReactNode[]; active?: boolean; onClick?: () => void };
 
 function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?: ReactNode; heads: string[]; rows: Row[]; empty: string }) {
   return (
@@ -237,7 +274,14 @@ function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.key} className="!cursor-default">
+              <tr
+                key={row.key}
+                data-active={row.active ?? false}
+                className={row.onClick ? '' : '!cursor-default'}
+                onClick={row.onClick}
+                tabIndex={row.onClick ? 0 : undefined}
+                onKeyDown={row.onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), row.onClick?.()) : undefined}
+              >
                 <td>
                   <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                     <TokenIcon symbol={row.symbol} />
@@ -254,20 +298,5 @@ function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?
         </table>
       )}
     </div>
-  );
-}
-
-const TOKEN_COLOR: Record<string, string> = { ETH: '--tok-eth', USDC: '--tok-usdc', USDT: '--tok-usdt', wstETH: '--tok-wsteth' };
-
-// Logo token = inisial di lingkaran berwarna (Q20), tanpa aset bermerek.
-function TokenIcon({ symbol, size = 22 }: { symbol: string; size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
-      style={{ width: size, height: size, fontSize: size * 0.36, background: `var(${TOKEN_COLOR[symbol] ?? '--tok-other'})` }}
-    >
-      {symbol === 'ETH' ? 'E' : symbol.slice(0, 2)}
-    </span>
   );
 }

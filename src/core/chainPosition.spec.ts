@@ -25,7 +25,7 @@ const USDT: Address = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
 const WHITELIST: WhitelistAsset[] = [
   { address: WETH, symbol: 'ETH', native: true },
   { address: USDC, symbol: 'USDC', native: false },
-  { address: USDT, symbol: 'USDT', native: false },
+  { address: USDT, symbol: 'USDT', native: false, requiresApprovalReset: true },
 ];
 
 describe('buildChainView()', () => {
@@ -128,6 +128,28 @@ describe('buildChainView()', () => {
         expect.objectContaining({ asset: USDT, symbol: 'USDT', walletBalance: 0n, canBeCollateral: true }),
       ]);
       expect(supplyMarket[0].apy).toBeCloseTo(0.013052, 6);
+    });
+
+    it('carries the oracle price and the allowance to the Pool that the action panel needs', () => {
+      const { supplyMarket } = buildChainView(read('ethCollateralUsdcDebt'), WHITELIST);
+      const usdc = supplyMarket.find((r) => r.symbol === 'USDC')!;
+
+      // Harga oracle USDC di blok pin: 99.979.651 / 1e8.
+      expect(usdc.priceUsd).toBeCloseTo(0.99979651, 8);
+      expect(usdc.allowance).toBe(0n);
+      // ETH lewat gateway: nggak ada approve ke Pool.
+      expect(supplyMarket.find((r) => r.symbol === 'ETH')!.allowance).toBeNull();
+      expect(buildChainView(guest, WHITELIST).supplyMarket.map((r) => r.allowance)).toEqual([null, null, null]);
+    });
+
+    it('tells the panel which assets go through the gateway and which need an allowance reset first', () => {
+      const { supplyMarket } = buildChainView(guest, WHITELIST);
+
+      expect(supplyMarket.map((r) => [r.symbol, r.native, r.requiresApprovalReset])).toEqual([
+        ['ETH', true, false],
+        ['USDC', false, false],
+        ['USDT', false, true],
+      ]);
     });
 
     it('hides zero wallet balances unless "Tampilkan semua" is on', () => {

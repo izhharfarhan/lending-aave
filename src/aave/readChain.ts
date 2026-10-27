@@ -13,8 +13,8 @@ type ReadChainArgs = {
   blockNumber?: bigint;
 };
 
-// Reserve, posisi user, getUserAccountData, saldo wallet whitelist, dan timestamp blok dalam SATU multicall di blok
-// yang sama, jadi HF dari kontrak dan saldo per reserve nggak pernah berasal dari blok beda.
+// Reserve, posisi user, getUserAccountData, saldo wallet + izin ke Pool aset whitelist, dan timestamp blok dalam SATU
+// multicall di blok yang sama, jadi HF dari kontrak, saldo, dan izin yang dibaca nextStep nggak pernah dari blok beda.
 export async function readChain(client: PublicClient, { contracts, whitelist, user, blockNumber }: ReadChainArgs): Promise<ChainRead> {
   const multicall3 = client.chain?.contracts?.multicall3?.address;
   if (!multicall3) throw new Error(`Chain ${client.chain?.id} nggak punya alamat Multicall3`);
@@ -25,6 +25,7 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
     // Timestamp blok, bukan Date.now(): bunga dihitung sampai blok ini, dan di fork jam Anvil bisa beda (Q30).
     { address: multicall3, abi: multicall3Abi, functionName: 'getCurrentBlockTimestamp' },
   ];
+  const erc20s = whitelist.filter((asset) => !asset.native);
   const userCalls: ContractFunctionParameters[] = user
     ? [
         { address: contracts.uiPoolDataProvider, abi: uiPoolDataProviderAbi, functionName: 'getUserReservesData', args: [provider, user] },
@@ -35,6 +36,14 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
               ? { address: multicall3, abi: multicall3Abi, functionName: 'getEthBalance', args: [user] }
               : { address: asset.address, abi: erc20Abi, functionName: 'balanceOf', args: [user] },
         ),
+        ...erc20s.map(
+          (asset): ContractFunctionParameters => ({
+            address: asset.address,
+            abi: erc20Abi,
+            functionName: 'allowance',
+            args: [user, contracts.pool],
+          }),
+        ),
       ]
     : [];
 
@@ -43,7 +52,7 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
   const results = await client.multicall({ contracts: [...baseCalls, ...userCalls], allowFailure: false, blockNumber: block });
 
   // Array campuran ABI bikin tipe hasil multicall jadi `unknown`; urutannya tetap sesuai `contracts`.
-  const [[reserves, baseCurrency], blockTimestamp, userReserves, account, ...balances] = results as [
+  const [[reserves, baseCurrency], blockTimestamp, userReserves, account, ...walletReads] = results as [
     readonly [readonly ReserveRead[], ChainRead['baseCurrency']],
     bigint,
     (readonly [readonly UserReserveRead[], number])?,
@@ -61,7 +70,8 @@ export async function readChain(client: PublicClient, { contracts, whitelist, us
             reserves: [...userReserves[0]],
             eModeCategoryId: userReserves[1],
             account: toAccount(account),
-            walletBalances: Object.fromEntries(whitelist.map((asset, i) => [asset.address, balances[i]])),
+            walletBalances: Object.fromEntries(whitelist.map((asset, i) => [asset.address, walletReads[i]])),
+            allowances: Object.fromEntries(erc20s.map((asset, i) => [asset.address, walletReads[whitelist.length + i]])),
           }
         : null,
   };

@@ -10,6 +10,6 @@ export const WHITELIST: Record<number, WhitelistAsset[]> = {
     // Reserve WETH tampil sebagai ETH: supply/withdraw/borrow/repay lewat WrappedTokenGateway (#6).
     { address: AaveV3Ethereum.ASSETS.WETH.UNDERLYING, symbol: 'ETH', native: true },
     { address: AaveV3Ethereum.ASSETS.USDC.UNDERLYING, symbol: 'USDC', native: false },
-    { address: AaveV3Ethereum.ASSETS.USDT.UNDERLYING, symbol: 'USDT', native: false },
+    { address: AaveV3Ethereum.ASSETS.USDT.UNDERLYING, symbol: 'USDT', native: false, requiresApprovalReset: true },
   ],
 };

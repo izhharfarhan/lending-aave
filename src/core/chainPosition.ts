@@ -7,6 +7,8 @@ export type WhitelistAsset = {
   symbol: string;
   /** `true` = dipakai sebagai ETH native lewat WrappedTokenGateway, jadi saldo wallet-nya saldo ETH. */
   native: boolean;
+  /** Token yang menolak approve dari izin ≠ 0 ke nilai ≠ 0 (USDT Ethereum): reset ke 0 dulu. */
+  requiresApprovalReset?: true;
 };
 
 /** Field `AggregatedReserveData` UiPoolDataProviderV3 yang dipakai modul ini (struct lengkapnya juga lolos). */
@@ -59,6 +61,8 @@ export type ChainRead = {
     account: AccountRead;
     /** Saldo wallet per alamat whitelist; aset `native` berisi saldo ETH. */
     walletBalances: Record<Address, bigint>;
+    /** `allowance(user, Pool)` per alamat whitelist ERC20 (aset `native` lewat gateway, nggak ada di sini). */
+    allowances: Record<Address, bigint>;
   } | null;
 };
 
@@ -97,7 +101,14 @@ type MarketRowBase = { asset: Address; symbol: string; decimals: number; apy: nu
 export type SupplyMarketRow = MarketRowBase & {
   /** `null` = wallet belum terhubung. */
   walletBalance: bigint | null;
+  /** Izin ke Pool. `null` = belum terhubung, atau aset `native` (lewat gateway, tanpa approve). */
+  allowance: bigint | null;
   canBeCollateral: boolean;
+  /** Harga oracle Aave dalam USD, untuk padanan USD jumlah yang diisi. */
+  priceUsd: number;
+  /** Dari whitelist: ETH lewat gateway (tiket 06), selain itu ERC20 lewat approve ke Pool. */
+  native: boolean;
+  requiresApprovalReset: boolean;
 };
 export type BorrowMarketRow = MarketRowBase & {
   /** Sisa batas pinjam dalam token ini. `null` = wallet belum terhubung. */
@@ -182,7 +193,11 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
   const supplyMarket = offered.map(({ asset, reserve }) => ({
     ...market(asset, reserve, reserve.liquidityRate),
     walletBalance: user ? (user.walletBalances[asset.address] ?? 0n) : null,
+    allowance: user && !asset.native ? (user.allowances[asset.address] ?? 0n) : null,
     canBeCollateral: reserve.usageAsCollateralEnabled && reserve.baseLTVasCollateral > 0n,
+    priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
+    native: asset.native,
+    requiresApprovalReset: asset.requiresApprovalReset ?? false,
   }));
   // E-Mode (borrowableBitmap) menyusul di tiket 14; di luar E-Mode ikut `borrowingEnabled`.
   const borrowMarket = offered

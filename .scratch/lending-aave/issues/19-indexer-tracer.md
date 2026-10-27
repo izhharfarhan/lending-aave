@@ -18,9 +18,10 @@
 
 ## Comments
 
-- 2026-10-27 (dari tiket 02): Alchemy free plan membatasi `eth_getLogs` **10 blok per request**. Error-nya menyesatkan ("ranges over 10000 blocks are not supported on free plan"), padahal range 3.000 blok pun ditolak. Lewat Anvil fork, log sebelum blok pin diteruskan ke Alchemy, jadi batas yang sama berlaku.
+- 2026-10-27 (dari tiket 02): RPC fork membatasi `eth_getLogs` **10 blok per request**. Error-nya menyesatkan ("ranges over 10000 blocks are not supported on free plan"), padahal range 3.000 blok pun ditolak. Lewat Anvil fork, log sebelum blok pin diteruskan ke RPC upstream, jadi batas yang sama berlaku.
+  - **Koreksi 2026-10-27 (tiket 03)**: RPC-nya **bukan Alchemy**. `.env.fork` (disalin dari swap-web) memakai `ANVIL_FORK_URL_1=https://eth.drpc.org`, jadi batas dan pesan error di atas dari **drpc free plan**. Kalau nanti pindah ke Alchemy, batas `getLogs`-nya perlu dicek ulang.
   - Pilihan yang perlu diputuskan sebelum implementasi (ajukan ke user, jangan langsung pilih):
     1. `START_BLOCK` dekat blok pin. Backfill pendek, sisanya event dari fork lokal.
-    2. RPC lain khusus `getLogs` yang range-nya besar, terpisah dari RPC archive untuk `eth_call`.
+    2. RPC lain khusus `getLogs` yang range-nya besar, terpisah dari RPC archive untuk `eth_call` (atau ganti RPC fork ke yang batas `getLogs`-nya lebih longgar).
     3. Batas range di config Ponder (mis. `ethGetLogsBlockRange: 10`). Lambat untuk range panjang.
   - Ini juga menyentuh tiket 20 (3 chain) dan 21 (likuidasi, butuh `getUserAccountData` di blok −1 lewat archive).

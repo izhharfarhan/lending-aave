@@ -12,6 +12,14 @@ export const uiPoolDataProviderAbi = parseAbi([
   'function getUserReservesData(address provider, address user) view returns (UserReserveData[], uint8)',
 ]);
 
+// Custom error Errors.sol v3.7 yang bisa muncul dari aksi user; ikut ABI supaya viem bisa men-decode revert-nya
+// (`aaveErrorName`) dan pesan Indonesianya bisa dipilih.
 export const poolAbi = parseAbi([
+  'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
+  'error InvalidAmount()',
+  'error ReserveInactive()',
+  'error ReserveFrozen()',
+  'error ReservePaused()',
+  'error SupplyCapExceeded()',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
 ]);

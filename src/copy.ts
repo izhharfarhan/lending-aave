@@ -79,3 +79,101 @@ export const TABLE = {
   dibekukan: 'Dibekukan',
   dijeda: 'Dijeda',
 };
+
+export const PANEL = {
+  tabs: { supply: 'Supply', withdraw: 'Withdraw', borrow: 'Borrow', repay: 'Repay' },
+  soon: 'Menyusul',
+  amount: 'Jumlah',
+  asset: 'Aset',
+  wallet: 'Wallet',
+  interest: (usdPerYear: string, apy: string) => `bunga ≈ ${usdPerYear} per tahun (APY ${apy})`,
+  invalid: {
+    not_a_number: 'Jumlah tidak valid.',
+    too_many_decimals: (decimals: number) => `Maksimal ${decimals} angka di belakang koma.`,
+    overflow: 'Jumlah terlalu besar.',
+  },
+};
+
+export const CTA = {
+  connect: 'Hubungkan wallet',
+  loading: POSITION.loading,
+  loadFailed: 'Posisi gagal dimuat',
+  locked: 'Transaksi dikunci (pengaman fork)',
+  busy: 'Sedang diproses…',
+  enterAmount: 'Masukkan jumlah',
+  insufficientBalance: (symbol: string) => `Saldo ${symbol} tidak cukup`,
+  resetApproval: (symbol: string) => `Reset izin ${symbol}, lalu supply`,
+  approve: (symbol: string) => `Approve ${symbol}, lalu supply`,
+  supply: (amount: string, symbol: string) => `Supply ${amount} ${symbol}`,
+};
+
+// Approve default exact; unlimited hanya pilihan eksplisit user (#8, pola Q7 swap).
+export const APPROVAL = {
+  legend: (symbol: string) => `Izin ${symbol} ke Aave Pool`,
+  ariaMode: 'Jenis izin',
+  exact: 'Exact',
+  unlimited: 'Unlimited',
+  exactNote: (amount: string, symbol: string) => `Hanya ${amount} ${symbol}. Paling aman; supply berikutnya perlu approve lagi.`,
+  unlimitedWarning: (symbol: string) =>
+    `Aave Pool boleh menarik ${symbol} berapa pun, tanpa batas waktu. Kalau izin ini disalahgunakan, seluruh saldo ${symbol} bisa ditarik.`,
+  revoke: 'Periksa atau cabut izin di revoke.cash ↗',
+};
+
+// Langkah wallet sebelum popup (Q9): judul, penjelasan, alamat resmi, explorer.
+export const STEPS = {
+  heading: 'Yang akan diminta wallet',
+  resetApproval: {
+    title: (symbol: string) => `Reset izin ${symbol} ke 0`,
+    detail: (symbol: string) =>
+      `${symbol} menolak mengubah izin yang masih tersisa, jadi izin lama ke Aave Pool dinolkan dulu. Ada biaya jaringan.`,
+  },
+  approve: {
+    title: (amount: string, symbol: string, unlimited: boolean) =>
+      unlimited ? `Approve ${symbol} tanpa batas` : `Approve ${amount} ${symbol} (exact)`,
+    detail: (amount: string, symbol: string, unlimited: boolean) =>
+      unlimited
+        ? `Mengizinkan Aave Pool menarik ${symbol} berapa pun. Ada biaya jaringan.`
+        : `Mengizinkan Aave Pool menarik tepat ${amount} ${symbol}. Ada biaya jaringan.`,
+  },
+  supply: {
+    title: (amount: string, symbol: string) => `Supply ${amount} ${symbol}`,
+    detail: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
+  },
+  pool: 'Aave Pool',
+  token: (symbol: string) => `Kontrak ${symbol}`,
+  spender: 'Izin untuk Aave Pool',
+  official: '✓ alamat resmi Aave',
+  explorer: 'explorer ↗',
+  smartAccountNote:
+    'Wallet mungkin menawarkan "smart account activation" atau gas gratis. Itu fitur wallet, bukan bagian app ini, dan aman ditolak. Jika wallet menandai alamat di atas berbahaya, cocokkan lewat tautan explorer.',
+  closeNote: 'Tutup catatan',
+};
+
+export const TX = {
+  pending: 'menunggu',
+  waitingWallet: 'konfirmasi di wallet…',
+  waitingNetwork: 'menunggu jaringan…',
+  done: '✓ selesai',
+  rejectedStep: 'ditolak di wallet',
+  failedStep: 'gagal',
+  success: (amount: string, symbol: string) => `Supply ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
+  explorer: 'explorer ↗',
+  forkTx: 'tx fork lokal, tidak ada di explorer publik',
+  retry: 'Coba lagi',
+};
+
+// Error wallet & kontrak dalam bahasa yang bisa dipahami (spec 100–101, pola walletError swap-web).
+export const TX_ERROR = {
+  rejected: 'Anda menolak permintaan di wallet. Tidak ada biaya terpakai.',
+  wrong_network: 'Wallet Anda sedang di network lain. Ganti ke Ethereum di wallet, lalu coba lagi.',
+  insufficient_funds: 'ETH di wallet tidak cukup untuk biaya jaringan.',
+  failed: 'Transaksi tidak terkirim. Posisi Anda tidak berubah.',
+  reverted: 'Transaksi gagal di jaringan. Posisi Anda tidak berubah, tetapi biaya jaringan tetap terpakai.',
+  aave: {
+    SupplyCapExceeded: 'Kuota supply aset ini penuh.',
+    ReserveFrozen: 'Aset ini sedang Dibekukan: supply baru tidak diterima.',
+    ReservePaused: 'Aset ini sedang Dijeda: semua aksi nonaktif sementara.',
+    ReserveInactive: 'Aset ini tidak aktif di Aave.',
+    InvalidAmount: 'Jumlah harus lebih dari 0.',
+  } as Record<string, string>,
+};
