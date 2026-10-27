@@ -135,49 +135,42 @@ function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Lo
   const lowest = summary.lowestHealthFactor;
   const money = (n: number) => (loading ? <span className="skeleton mt-1 block h-6 w-24" /> : usd(n));
 
+  // Tipografi saja (tanpa gambar): angka HF jadi pusat di kiri, skala + statistik di kolom kanan.
   return (
-    <section className={`surface relative overflow-hidden ${summary.dangerChains.length > 0 ? 'rounded-t-none' : ''}`}>
-      <div className="absolute inset-y-0 right-0 hidden w-[46%] md:block" aria-hidden>
-        <div className="portal-scene">
-          <div className="portal-floor" />
-          <div className="portal-rock left" />
-          <div className="portal-reflection" />
-          <div className="portal-door" />
-          <div className="portal-rock right" />
-        </div>
-      </div>
-      <div className="relative z-10 p-5 md:p-8 md:pr-[46%]">
-        <p className="text-sm text-muted" title={DASHBOARD.lowestHfInfo}>
-          {DASHBOARD.lowestHf}
-          <span className="ml-1 text-[10px] text-faint">ⓘ</span>
-        </p>
-        {loading ? (
-          <span className="skeleton mt-4 block h-14 w-40 md:h-[88px] md:w-72" />
-        ) : lowest ? (
-          <>
+    <section className={`surface ${summary.dangerChains.length > 0 ? 'rounded-t-none' : ''}`}>
+      <div className="grid gap-x-12 gap-y-4 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,520px)] md:items-center md:p-10">
+        <div>
+          <p className="text-sm text-muted" title={DASHBOARD.lowestHfInfo}>
+            {DASHBOARD.lowestHf}
+            <span className="ml-1 text-[10px] text-faint">ⓘ</span>
+          </p>
+          {loading ? (
+            <span className="skeleton mt-4 block h-14 w-40 md:h-[150px] md:w-96" />
+          ) : lowest ? (
             <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-1">
-              <p className={`display text-[64px] font-extralight leading-[0.95] tracking-tight md:text-[104px] ${HERO_TONE[lowest.risk]}`}>
+              <p className={`display text-[72px] font-extralight leading-[0.9] tracking-tight md:text-[168px] ${HERO_TONE[lowest.risk]}`}>
                 {hf(lowest.healthFactor)}
               </p>
-              <p className="pb-3 text-sm">
+              <p className="pb-5 text-base">
                 <span className={lowest.risk === 'aman' ? 'text-ink' : HERO_TONE[lowest.risk]}>{RISK[lowest.risk]}</span>
                 <span className="text-muted"> · {chainNameOf(lowest.chainId)}</span>
               </p>
             </div>
-            <HfScale indebted={props.indebted} selectedChainId={props.selectedChainId} />
-          </>
-        ) : (
-          <p className="display mt-4 mb-6 text-4xl font-extralight text-muted md:text-5xl">{POSITION.noDebt}</p>
-        )}
-
-        <dl className="mt-2 grid max-w-[560px] grid-cols-3">
-          <Stat label={DASHBOARD.totalSupply} first>
-            {money(summary.totalSupplyUsd)}
-          </Stat>
-          <Stat label={DASHBOARD.totalDebt}>{money(summary.totalDebtUsd)}</Stat>
-          <Stat label={DASHBOARD.net}>{money(summary.netUsd)}</Stat>
-        </dl>
-        {!loading && summary.highestBorrowLimitUsed && <BorrowLimitBar top={summary.highestBorrowLimitUsed} />}
+          ) : (
+            <p className="display mt-4 mb-6 text-4xl font-extralight text-muted md:text-5xl">{POSITION.noDebt}</p>
+          )}
+        </div>
+        <div>
+          {!loading && lowest && <HfScale indebted={props.indebted} selectedChainId={props.selectedChainId} />}
+          <dl className="mt-2 grid max-w-[560px] grid-cols-3">
+            <Stat label={DASHBOARD.totalSupply} first>
+              {money(summary.totalSupplyUsd)}
+            </Stat>
+            <Stat label={DASHBOARD.totalDebt}>{money(summary.totalDebtUsd)}</Stat>
+            <Stat label={DASHBOARD.net}>{money(summary.netUsd)}</Stat>
+          </dl>
+          {!loading && summary.highestBorrowLimitUsed && <BorrowLimitBar top={summary.highestBorrowLimitUsed} />}
+        </div>
       </div>
     </section>
   );
@@ -190,37 +183,39 @@ const SCALE_MAX = 3;
 const scalePct = (value: number) => ((Math.min(Math.max(value, 1), SCALE_MAX) - 1) / (SCALE_MAX - 1)) * 100;
 const SCALE_TICKS = DASHBOARD.scaleTicks;
 
-// Label penanda berakhir di batangnya (memanjang ke kiri), urut HF dari kiri. Tiap label ditaruh di baris terendah yang
-// nggak menabrak label lain di baris itu dan nggak ditembus batang penanda di baris atasnya (batang turun melewati baris
-// bawah). Penanda di kiri selalu sudah ditempatkan, jadi batang baru nggak pernah menembus label baris bawah, kecuali
-// label yang mentok di tepi kiri skala (HF dekat 1,0). Lebar label diperkirakan dari jumlah huruf (11px, IBM Plex Sans).
-const ROW_HEIGHT = 16;
+// Satu baris label di atas skala. Label yang bakal bertumpuk digabung jadi satu, urut HF dari kiri
+// ("Base 1,38 · Arbitrum 1,44"), diletakkan di tengah batang-batangnya dan dijaga tetap di dalam skala. Lebar label
+// diperkirakan dari jumlah huruf (11px, IBM Plex Sans).
+const LABEL_HEIGHT = 16;
 const CHAR_WIDTH = 6.4;
 const LABEL_GAP = 8;
 
-type Marker = Loaded & { value: number; x: number; left: number; width: number; row: number };
+type Marker = Loaded & { value: number; x: number };
+type LabelGroup = { markers: Marker[]; left: number };
 
-function placeMarkers(indebted: Loaded[], scaleWidth: number): Marker[] {
-  const placed: Marker[] = [];
-  const sorted = indebted
-    .map((loaded) => ({ ...loaded, value: loaded.view.account!.healthFactor! }))
+function groupLabels(indebted: Loaded[], scaleWidth: number): LabelGroup[] {
+  const markers = indebted
+    .map((loaded) => {
+      const value = loaded.view.account!.healthFactor!;
+      return { ...loaded, value, x: (scalePct(value) / 100) * scaleWidth };
+    })
     .sort((a, b) => a.value - b.value);
-  for (const marker of sorted) {
-    const x = (scalePct(marker.value) / 100) * scaleWidth;
-    const width = (marker.chain.name.length + 5) * CHAR_WIDTH;
-    const left = Math.max(x - width - 4, 0);
-    const clashes = (row: number) =>
-      placed.some((other) =>
-        other.row === row
-          ? left < other.left + other.width + LABEL_GAP && other.left < left + width + LABEL_GAP
-          : other.row > row && other.x >= left - LABEL_GAP && other.x <= left + width + LABEL_GAP,
-      );
-    // Berhenti: baris di atas penanda tertinggi selalu kosong.
-    let row = 0;
-    while (clashes(row)) row++;
-    placed.push({ ...marker, x, left, width, row });
+  const textLength = (group: Marker[]) =>
+    group.reduce((n, m) => n + m.chain.name.length + 5, 0) + (group.length - 1) * DASHBOARD.markerJoin.length;
+  const widthOf = (group: Marker[]) => textLength(group) * CHAR_WIDTH;
+  const leftOf = (group: Marker[]) => {
+    const center = group.reduce((sum, m) => sum + m.x, 0) / group.length;
+    return Math.min(Math.max(center - widthOf(group) / 2, 0), Math.max(scaleWidth - widthOf(group), 0));
+  };
+  // Gabung kelompok bertetangga yang labelnya bertumpuk sampai nggak ada lagi; tiap gabungan mengurangi jumlah kelompok.
+  const groups = markers.map((m) => [m]);
+  for (let i = 0; i < groups.length - 1; ) {
+    if (leftOf(groups[i]) + widthOf(groups[i]) + LABEL_GAP > leftOf(groups[i + 1])) {
+      groups.splice(i, 2, [...groups[i], ...groups[i + 1]]);
+      i = 0;
+    } else i++;
   }
-  return placed;
+  return groups.map((group) => ({ markers: group, left: leftOf(group) }));
 }
 
 function useWidth<T extends HTMLElement>(fallback: number): [RefObject<T | null>, number] {
@@ -238,11 +233,10 @@ function useWidth<T extends HTMLElement>(fallback: number): [RefObject<T | null>
 
 function HfScale({ indebted, selectedChainId }: { indebted: Loaded[]; selectedChainId: number }) {
   const [ref, width] = useWidth<HTMLDivElement>(520);
-  const markers = placeMarkers(indebted, width);
-  const rows = Math.max(1, ...markers.map((m) => m.row + 1));
-  const labelsHeight = rows * ROW_HEIGHT;
+  const groups = groupLabels(indebted, width);
+  const barTop = LABEL_HEIGHT + 12;
   return (
-    <div ref={ref} className="relative mt-5 max-w-[520px] pb-9" style={{ paddingTop: labelsHeight + 12 }}>
+    <div ref={ref} className="relative max-w-[520px] pb-9" style={{ paddingTop: barTop }}>
       <div className="relative h-[3px] rounded-full bg-line-strong">
         <span className="absolute inset-y-0 left-0 rounded-l-full bg-danger" style={{ width: `${scalePct(RISK_THRESHOLD.waspada)}%` }} />
         <span
@@ -254,35 +248,40 @@ function HfScale({ indebted, selectedChainId }: { indebted: Loaded[]; selectedCh
         <span
           key={tick}
           className={`num absolute text-[10px] text-faint ${i === 0 ? '' : i === SCALE_TICKS.length - 1 ? '-translate-x-full' : '-translate-x-1/2'}`}
-          style={{ left: `${scalePct(tick)}%`, top: labelsHeight + 22 }}
+          style={{ left: `${scalePct(tick)}%`, top: barTop + 10 }}
         >
           {label}
           {tick === 1 && <span className="block font-sans">{DASHBOARD.liquidationTick}</span>}
         </span>
       ))}
-      {markers.map(({ chain, value, x, left, row }) => {
-        const active = chain.chainId === selectedChainId;
-        // Baris 0 paling dekat skala; batang dari bawah label sampai skala.
-        const labelTop = (rows - 1 - row) * ROW_HEIGHT;
-        return (
-          <Fragment key={chain.slug}>
-            <Link
-              href={hrefOf(chain)}
-              aria-label={DASHBOARD.marker(chain.name, hf(value))}
-              aria-current={active ? 'page' : undefined}
-              className={`absolute whitespace-nowrap text-[11px] leading-4 ${active ? 'text-accent' : 'text-muted hover:text-ink'}`}
-              style={{ left, top: labelTop }}
-            >
-              {chain.name} <span className="num">{hf(value)}</span>
-            </Link>
-            <span
-              aria-hidden
-              className={`absolute w-[3px] -translate-x-1/2 rounded-full ${active ? 'bg-accent' : 'bg-ink'}`}
-              style={{ left: x, top: labelTop + ROW_HEIGHT + 2, height: labelsHeight + 12 - (labelTop + ROW_HEIGHT + 2) + 4 }}
-            />
-          </Fragment>
-        );
-      })}
+      {groups.map(({ markers, left }) => (
+        <span key={markers[0].chain.slug} className="absolute whitespace-nowrap text-[11px] leading-4" style={{ left, top: 0 }}>
+          {markers.map(({ chain, value }, i) => {
+            const active = chain.chainId === selectedChainId;
+            return (
+              <Fragment key={chain.slug}>
+                {i > 0 && <span className="text-faint">{DASHBOARD.markerJoin}</span>}
+                <Link
+                  href={hrefOf(chain)}
+                  aria-label={DASHBOARD.marker(chain.name, hf(value))}
+                  aria-current={active ? 'page' : undefined}
+                  className={active ? 'text-accent' : 'text-muted hover:text-ink'}
+                >
+                  {chain.name} <span className="num">{hf(value)}</span>
+                </Link>
+              </Fragment>
+            );
+          })}
+        </span>
+      ))}
+      {groups.flatMap(({ markers }) => markers).map(({ chain, x }) => (
+        <span
+          key={chain.slug}
+          aria-hidden
+          className={`absolute w-[3px] -translate-x-1/2 rounded-full ${chain.chainId === selectedChainId ? 'bg-accent' : 'bg-ink'}`}
+          style={{ left: x, top: LABEL_HEIGHT + 2, height: barTop - LABEL_HEIGHT + 2 }}
+        />
+      ))}
     </div>
   );
 }

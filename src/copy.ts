@@ -76,6 +76,8 @@ export const DASHBOARD = {
   ] as [number, string][],
   liquidationTick: 'likuidasi',
   marker: (chain: string, hf: string) => `${chain}, health factor ${hf}`,
+  /** Pemisah label penanda yang digabung karena HF-nya berdekatan. */
+  markerJoin: ' · ',
   totalSupply: 'Total supply',
   totalDebt: 'Total utang',
   net: 'Net',

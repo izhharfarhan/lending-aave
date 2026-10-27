@@ -31,12 +31,6 @@
   --tok-usdt: #23a07a;
   --tok-wsteth: #3aa3e8;
   --tok-other: #6b726d;
-  /* Visual "portal" hero: lantai & monolit gelap, cahayanya turunan --accent. */
-  --portal-sky: #0c0f0d;
-  --portal-ground: #070908;
-  --portal-rock: #1d221f;
-  --portal-rock-lit: #232925;
-  --portal-rock-shade: #0b0d0c;
   /* Inisial di ikon chain (latar warna chain yang terang). */
   --chain-ink: #000;
   --chain-ethereum: #b4bccb;
@@ -285,91 +279,11 @@ body {
     animation: shimmer 1.4s linear infinite;
     border-radius: 4px;
   }
-
-  /*
-   * "Portal" hero (Q20): pintu cahaya aksen di atas lantai berkisi, diapit dua monolit. Semuanya CSS (gambar referensi
-   * nggak dipakai), warna turunan `--accent`.
-   */
-  .portal-scene {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    background:
-      radial-gradient(22rem 14rem at 58% 82%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
-      linear-gradient(180deg, var(--portal-sky) 0%, var(--portal-ground) 100%);
-    mask-image: linear-gradient(90deg, transparent 0%, #000 30%);
-  }
-  .portal-floor {
-    position: absolute;
-    left: -20%;
-    right: -20%;
-    bottom: -10%;
-    height: 62%;
-    background-image:
-      linear-gradient(color-mix(in srgb, var(--accent) 16%, transparent) 1px, transparent 1px),
-      linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, transparent) 1px, transparent 1px);
-    background-size: 46px 46px;
-    transform: perspective(340px) rotateX(64deg);
-    transform-origin: 50% 100%;
-    mask-image: linear-gradient(0deg, #000 10%, transparent 85%);
-  }
-  .portal-door {
-    position: absolute;
-    z-index: 2;
-    left: 46%;
-    bottom: 30%;
-    width: 64px;
-    height: 132px;
-    border: 2px solid var(--accent);
-    border-radius: 2px;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 3%, transparent));
-    box-shadow:
-      0 0 14px var(--accent-glow),
-      0 0 60px color-mix(in srgb, var(--accent) 35%, transparent),
-      inset 0 0 26px color-mix(in srgb, var(--accent) 30%, transparent);
-    animation: breathe 5s ease-in-out infinite;
-  }
-  .portal-reflection {
-    position: absolute;
-    left: calc(46% - 52px);
-    bottom: 12%;
-    width: 168px;
-    height: 70px;
-    background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 40%, transparent), transparent);
-    filter: blur(6px);
-  }
-  .portal-rock {
-    position: absolute;
-    bottom: 22%;
-    background: linear-gradient(160deg, var(--portal-rock) 0%, var(--portal-rock-shade) 70%);
-  }
-  .portal-rock.left {
-    left: 12%;
-    width: 140px;
-    height: 140px;
-    clip-path: polygon(0 100%, 12% 30%, 40% 0, 70% 18%, 100% 100%);
-  }
-  .portal-rock.right {
-    right: -8%;
-    width: 170px;
-    height: 210px;
-    clip-path: polygon(0 100%, 20% 20%, 55% 0, 85% 12%, 100% 100%);
-    background: linear-gradient(200deg, var(--portal-rock-lit) 0%, var(--portal-rock-shade) 75%);
-  }
 }
 
 @keyframes shimmer {
   to {
     background-position: -200% 0;
-  }
-}
-
-@keyframes breathe {
-  50% {
-    box-shadow:
-      0 0 20px var(--accent-glow),
-      0 0 90px color-mix(in srgb, var(--accent) 45%, transparent),
-      inset 0 0 34px color-mix(in srgb, var(--accent) 40%, transparent);
   }
 }
 
@@ -391,7 +305,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .reveal,
-  .portal-door,
   .skeleton {
     animation: none;
   }
