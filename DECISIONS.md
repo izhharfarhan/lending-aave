@@ -1,7 +1,7 @@
 # Keputusan Desain: Lending ala Aave (proyek belajar)
 
 Sumber keputusan sampai spec dibuat. Bagian "Keputusan scope" dan "Arahan desain"
-sudah final (sesi belajar 2026-10-27). Hasil grilling (Q1–Q23, 2026-10-27) dicatat di bagian
+sudah final (sesi belajar 2026-10-27). Hasil grilling (Q1–Q25) dan review spec (Q26–Q30), 2026-10-27, dicatat di bagian
 "Keputusan per pertanyaan".
 
 ## Konteks
@@ -193,7 +193,7 @@ Tiga journey. Withdraw/repay biasa ikut pola J1/J2.
 |---|---|---|
 | Buka app | Utang di chain lain tersembunyi | Ringkasan + HF terendah (Q2–Q4) |
 | Lihat peringatan | Cari sendiri chain yang bahaya | Banner + "Lihat <chain>" |
-| Ambil tindakan | Bingung repay atau tambah jaminan | Panel menawarkan Repay / Supply jaminan + HF sesudah |
+| Ambil tindakan | Bingung repay atau tambah jaminan | Panel menawarkan Repay / Supply jaminan + HF sesudah (Q29) |
 | Ganti network & tx | ETH kurang di chain itu | Badge ETH di kartu (Q10) |
 | Sudah dilikuidasi | Nggak tahu kenapa jaminan berkurang | Riwayat LiquidationCall dari indexer: jaminan yang dijual, jumlah, penalti, HF waktu itu; banner sekali di dashboard "Posisi Anda di <chain> dilikuidasi pada <waktu>" (detail di ronde 2) |
 
@@ -354,6 +354,50 @@ Pola mengikuti Q23 swap-web.
 5. **E2E Playwright**: alur utama (supply → borrow → repay) + skenario reject saja.
    9 state Q22 diuji di level 1–2, tidak diulang di browser.
 
+### Q26 — MAX per aksi (review spec 2026-10-27)
+- **Supply**: ERC20 → saldo wallet; ETH → saldo − cadangan gas (pola `maxSpendable`
+  swap-web tiket 14). Keduanya dibatasi sisa supply cap (Q27).
+- **Withdraw**: yang terkecil dari saldo supply, jumlah yang masih menjaga posisi di
+  bawah batas LTV (#9; jaminan yang dibutuhkan utang tidak ikut), dan likuiditas pool
+  (Q27). Kalau hasilnya = seluruh saldo dan tanpa utang yang bergantung padanya, kirim
+  `type(uint256).max` supaya nggak ada sisa debu bunga (ETH: izin aWETH berbantalan, #8).
+- **Borrow**: sampai batas LTV, dibatasi sisa borrow cap dan likuiditas pool (Q27).
+  MAX **tidak melewati** konfirmasi risiko: tier #9 (centang / ketik "confirm") tetap
+  berlaku untuk jumlah hasil MAX.
+- **Repay**: min(utang, saldo wallet); repay ETH menyisakan cadangan gas. Pakai
+  `type(uint256).max` hanya kalau saldo cukup untuk melunasi semua + bantalan bunga;
+  selain itu kirim jumlah persis.
+
+### Q27 — Kapasitas pool (review spec 2026-10-27)
+- Modul domain dan `nextStep` mengecek supply cap, borrow cap, dan likuiditas tersedia
+  (`virtualUnderlyingBalance`) dengan aturan kontrak (V8). Aksi yang pasti ditolak
+  kontrak → tombol dikunci dengan pesan jelas, mis. "Kuota supply aset ini penuh",
+  "Kuota pinjaman aset ini penuh", "Likuiditas pool tidak cukup, tersedia X".
+- MAX (Q26) sudah memperhitungkan kapasitas ini, jadi MAX nggak pernah menghasilkan
+  jumlah yang ditolak karena kapasitas.
+
+### Q28 — Isolation mode level reserve: tidak ada di v3.7 (review spec 2026-10-27)
+- Usulan review: deteksi jaminan isolated (debt ceiling, `borrowableInIsolation`) dan
+  batasi daftar pinjam. **Tidak dipakai**, karena fiturnya sudah dihapus di v3.7 (V8):
+  isolation mode dan siloed borrowing dihapus, aset yang dulu ber-debt-ceiling sudah
+  LTV 0, dan Aave meminta frontend menghapus UI status isolation mode.
+- Keputusan: tidak ada UI atau logika isolation mode. Field lama di UiPoolDataProvider
+  (`debtCeiling`, `borrowableInIsolation`, `isolationModeTotalDebt`, `isSiloedBorrowing`)
+  diabaikan. Pembatasan yang masih berlaku ditangani lewat E-Mode `isolated`/`ltvzero`
+  (Q13) dan aturan ltv0 (V6). Kalau `POOL_REVISION` berubah, cek ulang.
+
+### Q29 — "Lihat <chain>" di banner Bahaya (review spec 2026-10-27)
+- Tombol "Lihat <chain>" memilih chain itu dan membuka panel **penyelamatan** yang
+  menawarkan dua pilihan sesuai J3: **Repay** atau **Supply jaminan**, masing-masing
+  dengan HF sesudah (dihitung dari MAX yang masuk akal untuk user: repay = Q26, supply
+  jaminan = saldo wallet aset jaminan yang tersedia). Bukan langsung ke tab Repay.
+- Memilih salah satu membuka tab aksi itu dengan jumlah kosong.
+
+### Q30 — Waktu relatif dari timestamp blok (review spec 2026-10-27)
+- Semua waktu relatif (banner likuidasi 30 hari, "x menit lalu" di riwayat) dihitung
+  dari **timestamp blok terbaru chain itu**, bukan `Date.now()`, supaya tetap benar di
+  fork setelah "maju waktu" dan saat jam Anvil tertinggal.
+
 ## Hasil verifikasi (spike 2026-10-27)
 
 Sumber yang dicek:
@@ -478,6 +522,23 @@ Keputusan #10 tetap. Detail tambahan:
   `anvil_setCode(akun, 0x)` saat fork dinyalakan.
 - RPC publik (publicnode) menolak permintaan state lama ("archive"), jadi fork Base cepat
   rusak. Fork harus pakai RPC dengan archive (Alchemy, seperti mode fork swap-web).
+
+### V8 — Kapasitas pool, withdraw, isolation mode (dicek 2026-10-27)
+Sumber: `ValidationLogic`, `ReserveLogic`, `docs/3.7/mode-removal.md` (kode v3.7 yang sama).
+- **Supply cap**: `(scaledTotalSupply aToken + amount + accruedToTreasury) × liquidityIndex
+  ≤ supplyCap × 10^decimals`; `supplyCap = 0` = tanpa batas. Error `SupplyCapExceeded`.
+- **Borrow cap**: `(total utang variabel + amount) ≤ borrowCap × 10^decimals`;
+  `borrowCap = 0` = tanpa batas. Error `BorrowCapExceeded`.
+- **Likuiditas**: borrow dan withdraw mengurangi `virtualUnderlyingBalance` reserve
+  (tersedia di UiPoolDataProvider); jumlah di atasnya gagal.
+- **Withdraw / matikan jaminan**: kontrak hanya mensyaratkan HF sesudah ≥ 1 (LT), plus
+  aturan ltv0. Borrow mensyaratkan jaminan menutup utang sesuai LTV
+  (`CollateralCannotCoverNewBorrow`). Aturan app #9 (dikunci kalau melewati batas LTV,
+  juga untuk withdraw) **lebih ketat dari kontrak**, sengaja (Show the Risk).
+- **Isolation mode & siloed borrowing dihapus di v3.7** (`mode-removal.md`): fungsi,
+  event, dan error terkait dihapus; aset yang dulu ber-debt-ceiling sudah LTV 0; "No active
+  isolated positions exist in production deployments". DataProvider masih mengembalikan
+  nilai lama yang sudah nonaktif (`isolationModeTotalDebt` = 0, siloed = false).
 
 ## Catatan teknis untuk spec
 
