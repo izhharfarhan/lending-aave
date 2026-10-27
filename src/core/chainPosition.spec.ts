@@ -100,6 +100,19 @@ describe('buildChainView()', () => {
       expect(view.borrows.map((r) => r.symbol)).toEqual(['ETH']);
       expect(collateralUsd).toBeCloseTo(11_550.48484004, 1);
     });
+
+    it('counts every supply in totalSupplyUsd, collateral or not (getUserAccountData only counts collateral)', () => {
+      // Semua supply jadi jaminan: sama dengan totalCollateralBase kontrak.
+      expect(buildChainView(read('ethCollateralUsdcDebt'), WHITELIST).totalSupplyUsd).toBeCloseTo(13_148.60476537, 1);
+      // Jaminan ETH dimatikan: nilai supply-nya tetap terhitung.
+      const base = read('ethCollateralUsdcDebt');
+      const notCollateral: ChainRead = {
+        ...base,
+        user: { ...base.user!, reserves: base.user!.reserves.map((r) => ({ ...r, usageAsCollateralEnabledOnUser: false })) },
+      };
+      expect(buildChainView(notCollateral, WHITELIST).totalSupplyUsd).toBeCloseTo(13_148.60476537, 1);
+      expect(buildChainView(guest, WHITELIST).totalSupplyUsd).toBe(0);
+    });
   });
 
   describe('positive: Dibekukan & Dijeda', () => {

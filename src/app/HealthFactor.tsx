@@ -4,6 +4,8 @@ import { hf } from './format';
 
 // Aman = netral; cuma Waspada/Bahaya yang berwarna (Q20).
 export const RISK_TONE: Record<RiskLevel, string> = { aman: 'text-ink', waspada: 'text-warn', bahaya: 'text-danger' };
+// Warna bar batas pinjam = tier HF chain-nya (Q24), bukan ambang persen sendiri.
+export const RISK_BAR: Record<RiskLevel, string> = { aman: 'bg-muted', waspada: 'bg-warn', bahaya: 'bg-danger' };
 
 /** HF + tingkat risiko; `null` = tidak ada utang. */
 export function HealthFactor({ value, withLabel = true }: { value: number | null; withLabel?: boolean }) {

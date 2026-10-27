@@ -163,6 +163,8 @@ export type BorrowMarketRow = MarketRowBase & {
 export type ChainView = {
   /** `null` = wallet belum terhubung. */
   account: AccountView | null;
+  /** Semua supply termasuk yang bukan jaminan dan aset luar, USD (`account.totalCollateralUsd` cuma jaminan). */
+  totalSupplyUsd: number;
   supplies: SupplyRow[];
   borrows: DebtRow[];
   /** Semua aset whitelist yang bisa di-supply; filter saldo 0 lewat `visibleSupplyMarket`. */
@@ -176,9 +178,11 @@ const BPS = 10_000;
 const SECONDS_PER_YEAR = 365n * 24n * 60n * 60n;
 
 // Ambang tingkat risiko (#9, Q2): Aman ≥ 2,0 · Waspada 1,5–2,0 · Bahaya < 1,5.
+export const RISK_THRESHOLD = { waspada: 1.5, aman: 2 } as const;
+
 export function riskLevel(healthFactor: number): RiskLevel {
-  if (healthFactor >= 2) return 'aman';
-  if (healthFactor >= 1.5) return 'waspada';
+  if (healthFactor >= RISK_THRESHOLD.aman) return 'aman';
+  if (healthFactor >= RISK_THRESHOLD.waspada) return 'waspada';
   return 'bahaya';
 }
 
@@ -271,7 +275,14 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
       ...nativeOf(asset, user?.gatewayAllowances?.borrow),
     }));
 
-  return { account: user ? accountView(user.account, toUsd) : null, supplies, borrows, supplyMarket, borrowMarket };
+  return {
+    account: user ? accountView(user.account, toUsd) : null,
+    totalSupplyUsd: supplies.reduce((total, r) => total + r.amountUsd, 0),
+    supplies,
+    borrows,
+    supplyMarket,
+    borrowMarket,
+  };
 }
 
 /** "Pasar supply" menyembunyikan aset bersaldo 0 di wallet kecuali "Tampilkan semua" (#4); belum connect = semua. */

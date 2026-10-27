@@ -63,6 +63,42 @@ export const POSITION = {
     'Harga ETH (oracle chain ini) yang membuat health factor tepat 1, dengan harga aset lain dianggap tetap. Bunga membuat angka ini terus bergeser.',
 };
 
+// Dashboard semua chain (ADR 0001, Q2, Q3, Q10, Q21, Q24).
+export const DASHBOARD = {
+  lowestHf: 'Health factor terendah · semua chain',
+  lowestHfInfo: `${POSITION.hfInfo} Dihitung dari chain yang punya utang.`,
+  /** Skala HF 1,0 → 3,0+ (Q20); HF di atas 3 menempel di ujung kanan. */
+  scaleTicks: [
+    [1, '1,0'],
+    [1.5, '1,5'],
+    [2, '2,0'],
+    [3, '3,0+'],
+  ] as [number, string][],
+  liquidationTick: 'likuidasi',
+  marker: (chain: string, hf: string) => `${chain}, health factor ${hf}`,
+  totalSupply: 'Total supply',
+  totalDebt: 'Total utang',
+  net: 'Net',
+  limitUsed: 'Batas pinjam terpakai · tertinggi:',
+  limitInfo:
+    'Batas pinjam berlaku per chain: jaminan di Ethereum tidak bisa menutup utang di Base. Yang ditampilkan chain yang paling dekat batasnya; pemakaian tiap chain ada di garis tipis pada segmen chain.',
+  remaining: 'sisa',
+  supplyDebt: (supply: string, debt: string) => `${supply} supply · ${debt} utang`,
+  noPosition: 'Belum ada posisi',
+  canSupply: (amount: string) => `${amount} di wallet bisa di-supply`,
+  ethShort: 'ETH kurang untuk bertransaksi',
+  noDebt: POSITION.noDebt,
+  failed: 'Gagal dimuat',
+};
+
+// Banner Bahaya di atas hero (Q2): chain HF terendah dulu, sisanya "+N chain lain".
+export const DANGER = {
+  tag: 'BAHAYA',
+  hf: (chain: string) => `Health factor ${chain}`,
+  more: (n: number) => `+${n} chain lain.`,
+  view: (chain: string) => `Lihat ${chain} →`,
+};
+
 // Harga likuidasi (Q14, Q15): "saat ini" = harga oracle chain ini di blok yang dibaca.
 export const LIQUIDATION = {
   price: (dir: 'turun' | 'naik', price: string, pct: string) => `Dilikuidasi kalau ETH ${dir} ke ${price} (${pct})`,

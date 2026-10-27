@@ -1,14 +1,15 @@
-import Link from 'next/link';
+import type { CSSProperties } from 'react';
 
-import { chainFromParam, SUPPORTED_CHAINS } from '@/config/chains';
-import { CHAIN_PICKER, NAV } from '@/copy';
+import { chainFromParam } from '@/config/chains';
+import { NAV } from '@/copy';
 
 import { ChainDetail } from './ChainDetail';
+import { Dashboard } from './Dashboard';
 import { Sidebar } from './Sidebar';
 import { WalletButton, WalletOverview } from './WalletStatus';
 
 // Chain terpilih dari `?chain=` (Q5): ganti chain = ganti URL, tanpa popup wallet. Wallet baru diminta ganti network
-// saat bertransaksi (langkah "Ganti ke <chain>" di panel aksi). Kartu chain dashboard menyusul di tiket 11.
+// saat bertransaksi (langkah "Ganti ke <chain>" di panel aksi). Segmen chain di dashboard = pemilih chain.
 export default async function Home({ searchParams }: PageProps<'/'>) {
   const { chain } = await searchParams;
   const selected = chainFromParam(typeof chain === 'string' ? chain : null);
@@ -21,21 +22,13 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
           <WalletButton />
         </header>
         <main className="flex flex-col gap-8 px-4 pb-16 md:px-8">
-          <nav aria-label={CHAIN_PICKER.label} className="flex w-fit gap-1 rounded-md bg-raised p-1">
-            {SUPPORTED_CHAINS.map((c) => (
-              <Link
-                key={c.slug}
-                href={`/?chain=${c.slug}`}
-                aria-current={c.chainId === selected.chainId ? 'page' : undefined}
-                className={`rounded px-3 py-1.5 text-sm ${c.chainId === selected.chainId ? 'bg-panel-hover text-ink' : 'text-muted'}`}
-              >
-                {c.name}
-              </Link>
-            ))}
-          </nav>
           <WalletOverview chainId={selected.chainId} />
-          {/* `key`: pilihan baris/tab panel milik chain sebelumnya dibuang saat ganti chain. */}
-          <ChainDetail key={selected.chainId} chainId={selected.chainId} />
+          <Dashboard selectedChainId={selected.chainId} />
+          {/* Langkah ketiga animasi masuk; di luar `key` biar ganti chain nggak memutarnya lagi. `key`: pilihan
+              baris/tab panel milik chain sebelumnya dibuang saat ganti chain. */}
+          <div className="reveal" style={{ ['--i' as string]: 2 } as CSSProperties}>
+            <ChainDetail key={selected.chainId} chainId={selected.chainId} />
+          </div>
         </main>
       </div>
     </div>

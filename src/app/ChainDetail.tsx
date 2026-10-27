@@ -11,14 +11,13 @@ import {
   type AccountView,
   type ChainView,
   type ReserveStatus,
-  type RiskLevel,
 } from '@/core/chainPosition';
 import { panelAssets, type PanelTab } from '@/core/panel';
 import { liquidationPrice, type LiqPrice } from '@/core/simulate';
 import { PANEL, POSITION, TABLE } from '@/copy';
 import { ActionPanel } from './ActionPanel';
 import { pct, tokenAmount, usd } from './format';
-import { HealthFactor } from './HealthFactor';
+import { HealthFactor, RISK_BAR } from './HealthFactor';
 import { LiquidationText } from './LiquidationText';
 import { TokenIcon } from './TokenIcon';
 
@@ -59,7 +58,7 @@ export function ChainDetail({ chainId }: { chainId: number }) {
   const clickable = (tab: PanelTab) => new Set(panelAssets(view, tab).map((r) => r.asset));
 
   return (
-    <section className="reveal flex flex-col gap-4">
+    <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <h2 className="display text-2xl font-normal">{name}</h2>
         {view.account && <AccountFacts account={view.account} liquidation={liquidationPrice(data.read, WHITELIST[chainId])} />}
@@ -107,9 +106,6 @@ export function ChainDetail({ chainId }: { chainId: number }) {
     </section>
   );
 }
-
-// Warna bar batas pinjam = tier HF (Q24).
-const RISK_BAR: Record<RiskLevel, string> = { aman: 'bg-muted', waspada: 'bg-warn', bahaya: 'bg-danger' };
 
 function AccountFacts({ account, liquidation }: { account: AccountView; liquidation: LiqPrice }) {
   return (
