@@ -125,13 +125,24 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
 function ConnectHero() {
   const { openConnectModal } = useConnectModal();
   return (
-    <section className="surface p-5 md:p-10">
+    <HeroFrame>
       <p className="text-sm text-muted">{DASHBOARD.lowestHf}</p>
-      <p className="display mt-3 text-[72px] font-extralight leading-[0.9] text-faint md:text-[120px]">{DASHBOARD.unknownHf}</p>
+      <p className="display mt-3 text-[64px] font-extralight leading-[0.95] text-faint md:text-[88px]">{DASHBOARD.unknownHf}</p>
       <p className="mt-5 max-w-sm text-sm text-muted">{DASHBOARD.connectPrompt(list(SUPPORTED_CHAINS.map((c) => c.name)))}</p>
       <button type="button" className="btn-accent mt-4 px-5 py-2.5" onClick={openConnectModal} disabled={!openConnectModal}>
         {DASHBOARD.connect}
       </button>
+    </HeroFrame>
+  );
+}
+
+// Kerangka hero: isi di kiri, separuh kanan pola abstrak statis (kisi titik + garis tipis beraksen, `.hero-pattern`).
+// `attached` = banner Bahaya menempel di atasnya.
+function HeroFrame({ attached = false, children }: { attached?: boolean; children: ReactNode }) {
+  return (
+    <section className={`surface relative overflow-hidden ${attached ? 'rounded-t-none' : ''}`}>
+      <div className="hero-pattern absolute inset-y-0 right-0 hidden w-[52%] md:block" aria-hidden />
+      <div className="relative z-10 p-5 md:p-8 md:pr-[46%]">{children}</div>
     </section>
   );
 }
@@ -176,58 +187,53 @@ function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Lo
   const unreadNames = incomplete && list(incomplete.unreadChains.map(chainNameOf));
   const money = (n: number) => (loading ? <span className="skeleton mt-1 block h-6 w-24" /> : usd(n));
 
-  // Tipografi saja (tanpa gambar): angka HF jadi pusat di kiri, skala + statistik di kolom kanan.
   return (
-    <section className={`surface ${summary.dangerChains.length > 0 ? 'rounded-t-none' : ''}`}>
-      <div className="grid gap-x-12 gap-y-4 p-5 md:grid-cols-[minmax(0,1fr)_minmax(0,520px)] md:items-center md:p-10">
-        <div>
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-            <span title={DASHBOARD.lowestHfInfo}>
-              {DASHBOARD.lowestHf}
-              <span className="ml-1 text-[10px] text-faint">ⓘ</span>
-            </span>
-            {!loading && incomplete && (
-              <span className="badge badge-warn">{DASHBOARD.incomplete(incomplete.readCount, incomplete.totalCount)}</span>
-            )}
+    <HeroFrame attached={summary.dangerChains.length > 0}>
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+        <span title={DASHBOARD.lowestHfInfo}>
+          {DASHBOARD.lowestHf}
+          <span className="ml-1 text-[10px] text-faint">ⓘ</span>
+        </span>
+        {!loading && incomplete && <span className="badge badge-warn">{DASHBOARD.incomplete(incomplete.readCount, incomplete.totalCount)}</span>}
+      </p>
+      {loading ? (
+        <span className="skeleton mt-4 block h-14 w-40 md:h-[88px] md:w-72" />
+      ) : lowest ? (
+        <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-1">
+          <p className={`display text-[64px] font-extralight leading-[0.95] tracking-tight md:text-[104px] ${HERO_TONE[lowest.risk]}`}>
+            {incomplete && <span className="mr-1 text-[0.5em]">{DASHBOARD.atMost}</span>}
+            {hf(lowest.healthFactor)}
           </p>
-          {loading ? (
-            <span className="skeleton mt-4 block h-14 w-40 md:h-[150px] md:w-96" />
-          ) : lowest ? (
-            <div className="mt-3 flex flex-wrap items-end gap-x-5 gap-y-1">
-              <p className={`display text-[72px] font-extralight leading-[0.9] tracking-tight md:text-[168px] ${HERO_TONE[lowest.risk]}`}>
-                {incomplete && <span className="mr-1 text-[0.5em]">{DASHBOARD.atMost}</span>}
-                {hf(lowest.healthFactor)}
-              </p>
-              <p className="pb-5 text-base">
-                <span className={lowest.risk === 'aman' ? 'text-ink' : HERO_TONE[lowest.risk]}>{RISK[lowest.risk]}</span>
-                <span className="text-muted"> · {chainNameOf(lowest.chainId)}</span>
-              </p>
-            </div>
-          ) : incomplete ? (
-            // Chain yang terbaca tanpa utang, tapi chain yang gagal bisa saja punya utang: jangan tulis "Tidak ada utang".
-            <p className="display mt-3 text-[72px] font-extralight leading-[0.9] text-faint md:text-[120px]">{DASHBOARD.unknownHf}</p>
-          ) : (
-            <p className="display mt-4 mb-6 text-4xl font-extralight text-muted md:text-5xl">{POSITION.noDebt}</p>
-          )}
-          {!loading && unreadNames && (
-            <p className="mt-3 text-xs text-warn">{lowest ? DASHBOARD.hfMayBeLower(unreadNames) : DASHBOARD.mayHaveDebt(unreadNames)}</p>
-          )}
+          <p className="pb-3 text-sm">
+            <span className={lowest.risk === 'aman' ? 'text-ink' : HERO_TONE[lowest.risk]}>{RISK[lowest.risk]}</span>
+            <span className="text-muted"> · {chainNameOf(lowest.chainId)}</span>
+          </p>
         </div>
-        <div>
-          {!loading && lowest && <HfScale indebted={props.indebted} selectedChainId={props.selectedChainId} />}
-          <dl className="mt-2 grid max-w-[560px] grid-cols-3">
-            <Stat label={DASHBOARD.totalSupply} first>
-              {money(summary.totalSupplyUsd)}
-            </Stat>
-            <Stat label={DASHBOARD.totalDebt}>{money(summary.totalDebtUsd)}</Stat>
-            <Stat label={DASHBOARD.net}>{money(summary.netUsd)}</Stat>
-          </dl>
-          {!loading && summary.highestBorrowLimitUsed && (
-            <BorrowLimitBar top={summary.highestBorrowLimitUsed} note={unreadNames ? DASHBOARD.limitMayBeHigher(unreadNames) : null} />
-          )}
+      ) : incomplete ? (
+        // Chain yang terbaca tanpa utang, tapi chain yang gagal bisa saja punya utang: jangan tulis "Tidak ada utang".
+        <p className="display mt-3 text-[64px] font-extralight leading-[0.95] text-faint md:text-[88px]">{DASHBOARD.unknownHf}</p>
+      ) : (
+        <p className="display mt-4 mb-6 text-4xl font-extralight text-muted md:text-5xl">{POSITION.noDebt}</p>
+      )}
+      {!loading && unreadNames && (
+        <p className="mt-2 text-xs text-warn">{lowest ? DASHBOARD.hfMayBeLower(unreadNames) : DASHBOARD.mayHaveDebt(unreadNames)}</p>
+      )}
+      {!loading && lowest && (
+        <div className="mt-5">
+          <HfScale indebted={props.indebted} selectedChainId={props.selectedChainId} />
         </div>
-      </div>
-    </section>
+      )}
+      <dl className="mt-2 grid max-w-[560px] grid-cols-3">
+        <Stat label={DASHBOARD.totalSupply} first>
+          {money(summary.totalSupplyUsd)}
+        </Stat>
+        <Stat label={DASHBOARD.totalDebt}>{money(summary.totalDebtUsd)}</Stat>
+        <Stat label={DASHBOARD.net}>{money(summary.netUsd)}</Stat>
+      </dl>
+      {!loading && summary.highestBorrowLimitUsed && (
+        <BorrowLimitBar top={summary.highestBorrowLimitUsed} note={unreadNames ? DASHBOARD.limitMayBeHigher(unreadNames) : null} />
+      )}
+    </HeroFrame>
   );
 }
 
