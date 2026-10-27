@@ -7,7 +7,7 @@ import { WHITELIST } from '../../src/config/assets';
 import { AAVE } from '../../src/config/contracts';
 import { buildChainView } from '../../src/core/chainPosition';
 import type { WalletStepName } from '../../src/core/nextStep';
-import { evaluatePanel, type PanelInput, type PanelState } from '../../src/core/panel';
+import { evaluatePanel, MAIN_STEP, type PanelInput, type PanelState } from '../../src/core/panel';
 import { publicClient, TEST_ACCOUNT, walletClient } from './clients';
 
 export const contracts = AAVE[1];
@@ -37,13 +37,22 @@ export async function panelState(tab: PanelInput['tab'], asset: Address, amount:
 // utama terkirim. Mengembalikan langkah yang dikirim ke wallet, berurutan.
 export async function runLikeTheApp(tab: PanelInput['tab'], asset: Address, amount: bigint, options: Options = {}) {
   const sent: { step: WalletStepName; approveAmount?: bigint }[] = [];
+  const main = MAIN_STEP[tab];
   for (;;) {
-    const { step, plan } = await panelState(tab, asset, amount, options);
-    if (step.step !== 'resetApproval' && step.step !== 'approve' && step.step !== tab) throw new Error(`Berhenti di ${step.step}`);
-    const request = poolRequest(step, { pool: contracts.pool, asset, amount: plan?.send ?? amount, user: TEST_ACCOUNT });
+    const { step, plan, withdraw } = await panelState(tab, asset, amount, options);
+    if (step.step !== 'resetApproval' && step.step !== 'approve' && step.step !== main) throw new Error(`Berhenti di ${step.step}`);
+    // Toggle jaminan membalik status jaminan aset itu sekarang, seperti panel.
+    const supply = buildChainView(await read(), whitelist).supplies.find((r) => r.asset === asset);
+    const request = poolRequest(step, {
+      pool: contracts.pool,
+      asset,
+      amount: plan?.send ?? withdraw?.send ?? amount,
+      user: TEST_ACCOUNT,
+      useAsCollateral: !supply?.collateral,
+    });
     const hash = await walletClient.writeContract({ ...request, gas: await gasLimitFor(publicClient, request, TEST_ACCOUNT) } as never);
     expect((await publicClient.waitForTransactionReceipt({ hash })).status).toBe('success');
     sent.push(step.step === 'approve' ? { step: step.step, approveAmount: step.amount } : { step: step.step });
-    if (step.step === tab) return sent;
+    if (step.step === main) return sent;
   }
 }

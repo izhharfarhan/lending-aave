@@ -16,14 +16,15 @@ const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
   allowance: 0n,
   approvalMode: 'exact',
   requiresApprovalReset: false,
+  paused: false,
   action: { action: 'supply' },
   ...overrides,
 });
 // Borrow 100 USDC dengan jaminan cukup, HF sesudahnya ≥ 2.
 const borrow = (action: Partial<Extract<NextStepInput['action'], { action: 'borrow' }>> = {}, overrides: Partial<NextStepInput> = {}) =>
-  input({ balance: 0n, action: { action: 'borrow', hasCollateral: true, gate: 'none', riskChecked: false, riskTyped: false, ...action }, ...overrides });
+  input({ balance: 0n, action: { action: 'borrow', hasCollateral: true, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false, ...action }, ...overrides });
 // Repay 100 USDC sebagian (bukan lunas penuh).
-const repay = (plan: RepayPlan | null = { full: false, send: USDC(100), spend: USDC(100) }, overrides: Partial<NextStepInput> = {}) =>
+const repay = (plan: RepayPlan | null = { full: false, send: USDC(100), spend: USDC(100), required: USDC(100) }, overrides: Partial<NextStepInput> = {}) =>
   input({ action: { action: 'repay', plan }, ...overrides });
 
 describe('nextStep()', () => {
@@ -54,6 +55,11 @@ describe('nextStep()', () => {
     it('waits for the position, or reports it failed to load', () => {
       expect(nextStep(input({ data: 'loading' }))).toEqual({ step: 'loading' });
       expect(nextStep(input({ data: 'error' }))).toEqual({ step: 'loadFailed' });
+    });
+
+    it('disables every action on a paused (Dijeda) reserve, but still asks to connect first', () => {
+      expect(nextStep(input({ paused: true }))).toEqual({ step: 'paused' });
+      expect(nextStep(input({ paused: true, connected: false }))).toEqual({ step: 'connect' });
     });
 
     it('locks every transaction while the fork guard is not safe', () => {
@@ -124,10 +130,17 @@ describe('nextStep()', () => {
     });
 
     it('approves debt + interest cushion for a full repay sent as type(uint256).max', () => {
-      const full: RepayPlan = { full: true, send: maxUint256, spend: USDC(100) + 12n };
+      const full: RepayPlan = { full: true, send: maxUint256, spend: USDC(100) + 12n, required: USDC(100) + 1n };
 
       expect(nextStep(repay(full, { allowance: USDC(100) }))).toEqual({ step: 'approve', amount: USDC(100) + 12n });
       expect(nextStep(repay(full, { allowance: USDC(100) + 12n }))).toEqual({ step: 'repay' });
+    });
+
+    it('does not ask for a second approve when interest grew a little after the cushioned approve', () => {
+      // Dibaca ulang sesudah approve: utang + bantalan baru sedikit di atas izin, tapi izin masih menutup utang + 1 jam.
+      const reread: RepayPlan = { full: true, send: maxUint256, spend: USDC(100) + 13n, required: USDC(100) + 2n };
+
+      expect(nextStep(repay(reread, { allowance: USDC(100) + 12n }))).toEqual({ step: 'repay' });
     });
 
     it('blocks a repay above the wallet balance', () => {
@@ -136,6 +149,61 @@ describe('nextStep()', () => {
 
     it('resets a leftover USDT allowance before approving the repay', () => {
       expect(nextStep(repay(undefined, { requiresApprovalReset: true, allowance: USDC(30) }))).toEqual({ step: 'resetApproval' });
+    });
+  });
+
+  describe('withdraw', () => {
+    // Tarik 100 USDC dari supply 500 USDC.
+    const withdraw = (action: Partial<Extract<NextStepInput['action'], { action: 'withdraw' }>> = {}, overrides: Partial<NextStepInput> = {}) =>
+      input({
+        allowance: 0n,
+        action: { action: 'withdraw', plan: { all: false, send: USDC(100) }, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false, ...action },
+        ...overrides,
+      });
+
+    it('withdraws without any approve', () => {
+      expect(nextStep(withdraw())).toEqual({ step: 'withdraw' });
+    });
+
+    it('blocks withdrawing more than the supply, unless it is "withdraw everything"', () => {
+      expect(nextStep(withdraw({}, { amount: USDC(501) }))).toEqual({ step: 'insufficientBalance' });
+      expect(nextStep(withdraw({ plan: { all: true, send: maxUint256 } }, { amount: USDC(500) + 3n }))).toEqual({ step: 'withdraw' });
+    });
+
+    it('locks past the LTV limit, explains the LTV-0 rule, and asks for the stricter confirmations', () => {
+      expect(nextStep(withdraw({ gate: 'locked' }))).toEqual({ step: 'overLtv' });
+      expect(nextStep(withdraw({ ltvZero: true }))).toEqual({ step: 'ltvZero' });
+      expect(nextStep(withdraw({ gate: 'check' }))).toEqual({ step: 'confirmRisk', gate: 'check' });
+      expect(nextStep(withdraw({ gate: 'type', riskTyped: true }))).toEqual({ step: 'withdraw' });
+    });
+  });
+
+  describe('collateral toggle', () => {
+    const toggle = (action: Partial<Extract<NextStepInput['action'], { action: 'collateral' }>> = {}, overrides: Partial<NextStepInput> = {}) =>
+      input({
+        amount: null,
+        action: { action: 'collateral', enable: false, canEnable: true, gate: 'none', ltvZero: false, riskChecked: false, riskTyped: false, ...action },
+        ...overrides,
+      });
+
+    it('needs no amount: one transaction to turn collateral on or off', () => {
+      expect(nextStep(toggle())).toEqual({ step: 'setCollateral' });
+      expect(nextStep(toggle({ enable: true }))).toEqual({ step: 'setCollateral' });
+    });
+
+    it('locks turning off collateral the debt still needs, and the LTV-0 rule', () => {
+      expect(nextStep(toggle({ gate: 'locked' }))).toEqual({ step: 'overLtv' });
+      expect(nextStep(toggle({ ltvZero: true }))).toEqual({ step: 'ltvZero' });
+      expect(nextStep(toggle({ gate: 'check' }))).toEqual({ step: 'confirmRisk', gate: 'check' });
+    });
+
+    it('refuses to turn on an asset that cannot be collateral (LTV 0)', () => {
+      expect(nextStep(toggle({ enable: true, canEnable: false }))).toEqual({ step: 'cannotBeCollateral' });
+    });
+
+    it('still waits for the wallet, the data and the fork guard first', () => {
+      expect(nextStep(toggle({}, { connected: false }))).toEqual({ step: 'connect' });
+      expect(nextStep(toggle({}, { txLocked: true }))).toEqual({ step: 'locked' });
     });
   });
 });

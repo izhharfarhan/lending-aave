@@ -96,7 +96,16 @@ type PositionRowBase = {
   outside: boolean;
   status: ReserveStatus;
 };
-export type SupplyRow = PositionRowBase & { collateral: boolean };
+export type SupplyRow = PositionRowBase & {
+  collateral: boolean;
+  /** LTV reserve ≠ 0: boleh dinyalakan sebagai jaminan (kontrak menolak aset ber-LTV 0). */
+  canBeCollateral: boolean;
+  priceUsd: number;
+  /** APR supply (ray), untuk kelonggaran "withdraw semua". */
+  supplyRate: bigint;
+  /** ETH: withdraw lewat gateway (tiket 07); toggle jaminannya tetap langsung ke Pool. */
+  native: boolean;
+};
 export type DebtRow = PositionRowBase & {
   /** Saldo wallet & izin ke Pool untuk tab Repay. `null` = aset luar (tanpa aksi) atau aset `native`. */
   walletBalance: bigint | null;
@@ -182,6 +191,10 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
     .map(({ position, reserve }) => ({
       ...row(reserve, suppliedBalance(position.scaledATokenBalance, reserve, read.blockTimestamp), reserve.liquidityRate),
       collateral: position.usageAsCollateralEnabledOnUser,
+      canBeCollateral: reserve.baseLTVasCollateral > 0n,
+      priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
+      supplyRate: reserve.liquidityRate,
+      native: listed.get(key(reserve.underlyingAsset))?.asset.native ?? false,
     }))
     .sort(order);
   const borrows = rows

@@ -194,6 +194,19 @@ describe('buildChainView()', () => {
       expect(view.borrows.find((r) => r.symbol === 'GHO')).toMatchObject({ walletBalance: null, allowance: null });
     });
 
+    it('carries what the Withdraw tab and collateral toggle need on each supply row', () => {
+      const view = buildChainView(read('bahayaWithOutsideAssets'), WHITELIST);
+
+      expect(view.supplies.find((r) => r.symbol === 'ETH')).toMatchObject({
+        native: true,
+        canBeCollateral: true,
+        priceUsd: 2_306.77,
+        supplyRate: 12_967_341_922_595_086_691_268_399n,
+      });
+      // Aset luar nggak punya aksi, tapi tetap ditandai bisa/tidaknya jadi jaminan dari LTV reserve-nya.
+      expect(view.supplies.find((r) => r.symbol === 'tBTC')).toMatchObject({ native: false, canBeCollateral: true });
+    });
+
     it('shows assets and APY read-only before connecting, without hiding anything', () => {
       const { supplyMarket, borrowMarket } = buildChainView(guest, WHITELIST);
 

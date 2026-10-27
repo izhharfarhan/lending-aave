@@ -90,6 +90,9 @@ export const TABLE = {
   aaveApp: 'app.aave.com ↗',
   dibekukan: 'Dibekukan',
   dijeda: 'Dijeda',
+  /** Penjelasan di samping label (spec 49–50). */
+  dibekukanNote: 'supply & borrow baru ditutup; withdraw dan repay tetap bisa',
+  dijedaNote: 'semua aksi nonaktif sementara oleh Aave',
 };
 
 export const PANEL = {
@@ -101,10 +104,20 @@ export const PANEL = {
   interest: (usdPerYear: string, apy: string) => `bunga ≈ ${usdPerYear} per tahun (APY ${apy})`,
   borrowInterest: (usdPerYear: string, apy: string) => `bunga pinjaman ≈ ${usdPerYear} per tahun (APY ${apy})`,
   debt: 'Utang',
+  supplied: 'Di-supply',
   collateralOf: (chain: string) => `Jaminan Anda di ${chain}:`,
   noCollateral: 'belum ada',
   changeCollateral: 'Ubah',
   noDebts: 'Tidak ada utang yang bisa dilunasi dari panel ini.',
+  noSupplies: 'Tidak ada supply yang bisa ditarik dari panel ini.',
+  noSupplyAssets: 'Tidak ada aset yang bisa di-supply dari panel ini.',
+  withdrawAll: (amount: string, symbol: string) =>
+    `Withdraw semua: seluruh ${symbol} ditarik saat transaksi dijalankan (sekarang ${amount} ${symbol}, termasuk bunga yang terus bertambah).`,
+  collateralTitle: (symbol: string) => `Jaminan ${symbol}`,
+  collateralOn: (symbol: string) =>
+    `Saat ini ${symbol} dihitung sebagai jaminan. Kalau dimatikan, batas pinjam dan health factor ikut turun, tetapi ${symbol} tetap tersimpan dan tetap berbunga.`,
+  collateralOff: (symbol: string) =>
+    `${symbol} belum dihitung sebagai jaminan. Kalau diaktifkan, batas pinjam Anda naik, tetapi ${symbol} bisa ikut dijual saat likuidasi.`,
   noBorrowAssets: 'Tidak ada aset yang bisa dipinjam dari panel ini.',
   repayFull: (debt: string, symbol: string, cushion: string) =>
     `Lunas penuh: Aave menarik utang persis saat transaksi dijalankan (sekarang ${debt} ${symbol}, terus bertambah oleh bunga). Izin diberi bantalan bunga, total ${cushion} ${symbol}.`,
@@ -127,6 +140,10 @@ export const CTA = {
   insufficientBalance: (symbol: string) => `Saldo ${symbol} tidak cukup`,
   needCollateral: 'Supply jaminan dulu',
   overLtv: 'Melebihi batas pinjam',
+  collateralNeeded: 'Jaminan ini masih dibutuhkan',
+  paused: 'Aset ini sedang Dijeda',
+  ltvZero: 'Tarik jaminan ber-LTV 0 dulu',
+  cannotBeCollateral: 'Aset ini tidak bisa jadi jaminan',
   confirmRisk: { check: 'Centang pernyataan risiko dulu', type: 'Ketik "confirm" dulu' },
   resetApproval: (symbol: string, action: string) => `Reset izin ${symbol}, lalu ${action}`,
   approve: (symbol: string, action: string) => `Approve ${symbol}, lalu ${action}`,
@@ -134,18 +151,32 @@ export const CTA = {
   borrow: (amount: string, symbol: string) => `Borrow ${amount} ${symbol}`,
   repay: (amount: string, symbol: string) => `Repay ${amount} ${symbol}`,
   repayFull: (symbol: string) => `Lunasi utang ${symbol}`,
+  withdraw: (amount: string, symbol: string) => `Withdraw ${amount} ${symbol}`,
+  withdrawAll: (symbol: string) => `Withdraw semua ${symbol}`,
+  setCollateral: (enable: boolean, symbol: string) => (enable ? `Aktifkan jaminan ${symbol}` : `Matikan jaminan ${symbol}`),
 };
 
 // Konfirmasi risiko #9 sesuai HF sesudah aksi.
 export const RISK_CONFIRM = {
-  warn: (hf: string) => `Health factor sesudahnya ${hf}, Waspada. Harga ETH yang turun sedikit saja bisa membuat posisi ini berbahaya.`,
-  check: (hf: string, liquidation: string) => `Health factor sesudahnya ${hf}, Bahaya. ${liquidation}. Saya memahami risikonya.`,
+  warn: (hf: string) => `Health factor sesudahnya ${hf}, Waspada. Harga jaminan yang turun sedikit saja bisa membuat posisi ini berbahaya.`,
+  /** `liquidation` = kalimat harga likuidasi, atau kosong kalau posisinya nggak punya angka harga likuidasi. */
+  check: (hf: string, liquidation: string) =>
+    `Health factor sesudahnya ${hf}, Bahaya. ${liquidation ? `${liquidation}. ` : ''}Saya memahami risikonya.`,
   type: (hf: string) =>
     `Health factor sesudahnya ${hf}, sangat dekat dengan 1. Penurunan harga kecil saja bisa membuat jaminan Anda dilikuidasi. Ketik "confirm" jika tetap ingin melanjutkan.`,
   typePlaceholder: 'Ketik "confirm"',
   typeLabel: 'Konfirmasi risiko',
   word: 'confirm',
   locked: 'Jumlah ini melebihi batas pinjam (LTV). Kurangi jumlahnya atau tambah jaminan.',
+  // V8: withdraw & mematikan jaminan dikunci di batas LTV, lebih ketat dari kontrak (yang cuma mensyaratkan HF ≥ 1).
+  lockedWithdraw: 'Sisa jaminan sesudah withdraw ini tidak cukup untuk utang Anda (melewati batas LTV). Kurangi jumlahnya atau lunasi sebagian utang dulu.',
+  lockedCollateral: (symbol: string, chain: string) =>
+    `Utang Anda di ${chain} masih memakai ${symbol} sebagai jaminan. Lunasi sebagian utang dulu.`,
+  /** `assets` = jaminan ber-LTV 0 milik user; `elsewhere` = semuanya aset luar (cuma bisa diatur di app.aave.com). */
+  ltvZero: (assets: string, elsewhere: boolean) =>
+    `Anda punya jaminan ber-LTV 0 (sudah tidak bisa dipakai untuk meminjam): ${assets}. Selama jaminan itu masih aktif, Aave menolak withdraw atau mematikan jaminan lain. Tarik atau matikan ${assets} dulu${elsewhere ? ' di app.aave.com' : ''}.`,
+  paused: 'Aave sedang menjeda aset ini: withdraw, repay, dan toggle jaminan nonaktif sementara. Posisi Anda tetap tersimpan dan tetap dihitung di health factor.',
+  cannotBeCollateral: (symbol: string) => `${symbol} tidak bisa dijadikan jaminan di Aave (LTV 0).`,
 };
 
 // Approve default exact; unlimited hanya pilihan eksplisit user (#8, pola Q7 swap).
@@ -184,6 +215,15 @@ export const STEPS = {
     title: (amount: string, symbol: string) => `Borrow ${amount} ${symbol}`,
     detail: 'Aave Pool mengirim pinjaman ke wallet Anda, dengan bunga variabel. Ada biaya jaringan.',
   },
+  withdraw: {
+    title: (amount: string, symbol: string) => `Withdraw ${amount} ${symbol}`,
+    titleAll: (symbol: string) => `Withdraw semua ${symbol}`,
+    detail: 'Aave Pool mengirim aset ke wallet Anda. Ada biaya jaringan.',
+  },
+  setCollateral: {
+    title: (enable: boolean, symbol: string) => (enable ? `Aktifkan ${symbol} sebagai jaminan` : `Matikan ${symbol} sebagai jaminan`),
+    detail: 'Mengubah status jaminan di Aave Pool; saldo Anda tidak berpindah. Ada biaya jaringan.',
+  },
   repay: {
     title: (amount: string, symbol: string) => `Repay ${amount} ${symbol}`,
     titleFull: (symbol: string) => `Lunasi utang ${symbol}`,
@@ -210,6 +250,9 @@ export const TX = {
     supply: (amount: string, symbol: string) => `Supply ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
     borrow: (amount: string, symbol: string) => `Borrow ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
     repay: (amount: string, symbol: string) => `Repay ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
+    withdraw: (amount: string, symbol: string) => `Withdraw ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
+    collateralOn: (_amount: string, symbol: string) => `${symbol} sekarang dihitung sebagai jaminan.`,
+    collateralOff: (_amount: string, symbol: string) => `${symbol} tidak lagi dihitung sebagai jaminan.`,
   },
   explorer: 'explorer ↗',
   forkTx: 'tx fork lokal, tidak ada di explorer publik',
@@ -233,7 +276,11 @@ export const TX_ERROR = {
     BorrowCapExceeded: 'Kuota pinjaman aset ini penuh.',
     CollateralCannotCoverNewBorrow: 'Jaminan Anda tidak cukup untuk pinjaman ini. Kurangi jumlahnya atau tambah jaminan.',
     HealthFactorLowerThanLiquidationThreshold: 'Pinjaman ini membuat health factor di bawah 1. Kurangi jumlahnya atau tambah jaminan.',
-    LtvValidationFailed: 'Jaminan Anda saat ini tidak bisa dipakai untuk meminjam (LTV 0). Atur jaminan di app.aave.com.',
+    LtvValidationFailed:
+      'Ditolak aturan LTV Aave: jaminan Anda tidak bisa dipakai untuk aksi ini (LTV 0). Kalau Anda punya jaminan ber-LTV 0 (mis. USDC.e), tarik atau matikan jaminan itu dulu.',
     NoDebtOfSelectedType: 'Tidak ada utang aset ini yang bisa dilunasi.',
+    NotEnoughAvailableUserBalance: 'Saldo supply Anda tidak cukup untuk jumlah ini.',
+    UnderlyingBalanceZero: 'Supply aset ini dulu sebelum menjadikannya jaminan.',
+    UserHasAssetWithZeroLtv: 'Aset ini tidak bisa dijadikan jaminan (LTV 0).',
   } as Record<string, string>,
 };

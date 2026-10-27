@@ -3,7 +3,7 @@ import type { Address } from 'viem';
 
 import type { ChainRead, WhitelistAsset } from './chainPosition';
 import { parseBigint } from './fixtures/bigintJson';
-import { accountFromReserves, confirmationGate, liquidationPrice, repayPlan, simulate } from './simulate';
+import { accountFromReserves, confirmationGate, liquidationPrice, repayPlan, simulate, withdrawPlan } from './simulate';
 
 // Fixture asli yang sama dengan chainPosition.spec (Ethereum blok pin 26.282.000, akun mainnet nyata).
 type Fixture = Omit<ChainRead, 'user'> & { users: Record<string, NonNullable<ChainRead['user']>> };
@@ -14,13 +14,18 @@ const withReserve = (base: ChainRead, asset: Address, flags: Partial<ChainRead['
   ...base,
   reserves: base.reserves.map((r) => (r.underlyingAsset === asset ? { ...r, ...flags } : r)),
 });
+const withUserReserve = (base: ChainRead, asset: Address, fields: Partial<NonNullable<ChainRead['user']>['reserves'][number]>): ChainRead => ({
+  ...base,
+  user: { ...base.user!, reserves: base.user!.reserves.map((r) => (r.underlyingAsset === asset ? { ...r, ...fields } : r)) },
+});
 const usdc = (n: number) => BigInt(Math.round(n * 1e6));
-const eth = (n: number) => BigInt(n) * 10n ** 18n;
+const eth = (n: number) => BigInt(Math.round(n * 1e6)) * 10n ** 12n;
 // Harga oracle di blok pin: ETH $2.306,77, USDC $0,99979651.
 
 const WETH: Address = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
 const USDC: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const USDT: Address = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const TBTC: Address = '0x18084fbA666a33d37592fA2633fD49a74DD93a88';
 const WHITELIST: WhitelistAsset[] = [
   { address: WETH, symbol: 'ETH', native: true },
   { address: USDC, symbol: 'USDC', native: false },
@@ -107,6 +112,114 @@ describe('simulate()', () => {
   });
 });
 
+// Posisi ethCollateralUsdcDebt: jaminan 5,700007 ETH ($13.148,60), utang $1.999,60. Batas LTV tercapai di sisa jaminan
+// $2.483,98 (≈ 4,6232 ETH ditarik); HF 1 baru di sisa $2.409,16 (≈ 4,6556 ETH ditarik).
+describe('simulate(): withdraw & toggle jaminan', () => {
+  describe('positive', () => {
+    it('shows HF, remaining borrow limit and liquidation price after withdrawing collateral', () => {
+      const sim = simulate(read('ethCollateralUsdcDebt'), WHITELIST, { action: 'withdraw', asset: WETH, amount: eth(1) });
+
+      // Sisa jaminan $10.841,83 × 0,83 ÷ $1.999,60.
+      expect(sim.account.healthFactor).toBeCloseTo(4.500259, 5);
+      expect(sim.account.availableBorrowsUsd).toBeCloseTo(6_728.0758, 2);
+      expect(sim.liquidation).toMatchObject({ kind: 'price', dir: 'turun', price: expect.closeTo(512.586, 2) });
+      expect(sim).toMatchObject({ overLtv: false, ltvZero: false, gate: 'none' });
+    });
+
+    it('turning collateral off without debt changes nothing risky', () => {
+      const sim = simulate(read('noDebt'), WHITELIST, { action: 'collateral', asset: USDC, enable: false });
+
+      expect(sim.account.totalCollateralUsd).toBe(0);
+      expect(sim.account.healthFactor).toBeNull();
+      expect(sim.gate).toBe('none');
+    });
+
+    it('turning ETH back on as collateral restores the real HF of the position', () => {
+      const off = withUserReserve(read('ethCollateralUsdcDebt'), WETH, { usageAsCollateralEnabledOnUser: false });
+
+      const sim = simulate(off, WHITELIST, { action: 'collateral', asset: WETH, enable: true });
+      expect(sim.account.healthFactor).toBeCloseTo(5.457759, 6);
+      expect(sim.gate).toBe('none');
+    });
+  });
+
+  describe('negative', () => {
+    it('asks for "confirm" just inside the LTV limit and locks just past it', () => {
+      const inside = simulate(read('ethCollateralUsdcDebt'), WHITELIST, { action: 'withdraw', asset: WETH, amount: eth(4.62) });
+      const past = simulate(read('ethCollateralUsdcDebt'), WHITELIST, { action: 'withdraw', asset: WETH, amount: eth(4.64) });
+
+      expect(inside.account.healthFactor).toBeCloseTo(1.034107, 4);
+      expect(inside.gate).toBe('type');
+      expect(past.gate).toBe('locked');
+    });
+
+    // V8: kontrak cuma mensyaratkan HF ≥ 1 untuk withdraw dan mematikan jaminan. App sengaja lebih ketat: dikunci begitu
+    // utang melewati batas LTV, supaya user nggak bisa sekali klik langsung ke posisi yang nyaris dilikuidasi.
+    it('locks a withdraw the contract would still accept (HF 1,015 ≥ 1 but past the LTV limit), on purpose', () => {
+      const sim = simulate(read('ethCollateralUsdcDebt'), WHITELIST, { action: 'withdraw', asset: WETH, amount: eth(4.64) });
+
+      expect(sim.account.healthFactor).toBeCloseTo(1.014957, 4);
+      expect(sim.account.healthFactor!).toBeGreaterThan(1);
+      expect(sim.overLtv).toBe(true);
+      expect(sim.gate).toBe('locked');
+    });
+
+    it('locks turning off the only collateral while there is debt', () => {
+      const sim = simulate(read('ethCollateralUsdcDebt'), WHITELIST, { action: 'collateral', asset: WETH, enable: false });
+
+      expect(sim.overLtv).toBe(true);
+      expect(sim.gate).toBe('locked');
+    });
+
+    // Aturan ltv0 kontrak (validateHFAndLtvzero): selama masih ada jaminan ber-LTV 0, yang boleh ditarik/dimatikan
+    // cuma aset ber-LTV 0 itu sendiri. Di sini tBTC (aset luar) dibuat ber-LTV 0, seperti USDC.e di Arbitrum.
+    it('blocks withdrawing or turning off other collateral while an LTV-0 collateral remains', () => {
+      const ltvZero = withReserve(read('bahayaWithOutsideAssets'), TBTC, { baseLTVasCollateral: 0n });
+
+      expect(simulate(ltvZero, WHITELIST, { action: 'withdraw', asset: WETH, amount: eth(0.01) }).ltvZero).toBe(true);
+      expect(simulate(ltvZero, WHITELIST, { action: 'collateral', asset: WETH, enable: false }).ltvZero).toBe(true);
+      // Tanpa jaminan ber-LTV 0, aturan ini nggak berlaku.
+      expect(simulate(read('bahayaWithOutsideAssets'), WHITELIST, { action: 'withdraw', asset: WETH, amount: eth(0.01) }).ltvZero).toBe(false);
+    });
+  });
+
+  describe('edge case', () => {
+    it('does not ask for confirmation when withdrawing a supply that is not collateral', () => {
+      const notCollateral = withUserReserve(read('waspada'), WETH, { usageAsCollateralEnabledOnUser: false });
+      const plus = withUserReserve(notCollateral, USDC, { scaledATokenBalance: 1_000_000_000n, usageAsCollateralEnabledOnUser: true });
+
+      const sim = simulate(plus, WHITELIST, { action: 'withdraw', asset: WETH, amount: eth(1) });
+      expect(sim.gate).toBe('none');
+    });
+
+    it('treats withdrawing more than the supply as withdrawing all of it', () => {
+      const sim = simulate(read('noDebt'), WHITELIST, { action: 'withdraw', asset: USDC, amount: usdc(10_000_000) });
+
+      expect(sim.account.totalCollateralUsd).toBe(0);
+      expect(sim.gate).toBe('none');
+    });
+  });
+});
+
+describe('withdrawPlan()', () => {
+  const supplied = usdc(1_000);
+  // Bantalan = bunga supply 1 hari: APR 3,7743% → 1.000 × 0,037743 ÷ 365 ≈ 0,1034 USDC.
+  const rate = 37_743_000_000_000_000_000_000_000n;
+
+  it('withdraws everything with type(uint256).max when the amount covers the supply (up to a day of interest)', () => {
+    expect(withdrawPlan({ supplied, amount: supplied, liquidityRate: rate })).toEqual({ all: true, send: 2n ** 256n - 1n });
+    expect(withdrawPlan({ supplied, amount: supplied - 100_000n, liquidityRate: rate })).toEqual({ all: true, send: 2n ** 256n - 1n });
+  });
+
+  it('does not turn a typo far above the supply into "withdraw everything"', () => {
+    expect(withdrawPlan({ supplied, amount: supplied * 10n, liquidityRate: rate })).toEqual({ all: false, send: supplied * 10n });
+  });
+
+  it('withdraws exactly the typed amount otherwise', () => {
+    expect(withdrawPlan({ supplied, amount: supplied - 200_000n, liquidityRate: rate })).toEqual({ all: false, send: supplied - 200_000n });
+  });
+});
+
 describe('confirmationGate()', () => {
   it('maps HF after the action to the #9 tiers, with exact boundaries', () => {
     expect(confirmationGate(2, false)).toBe('none');
@@ -160,10 +273,13 @@ describe('repayPlan()', () => {
   const rate = 44_794_710_292_724_102_718_356_564n;
 
   it('repays in full with type(uint256).max and a cushioned allowance when the wallet covers debt + cushion', () => {
+    // Yang di-approve: utang + bunga 1 hari. Yang cukup untuk lanjut: utang + bunga 1 jam (0,005114 USDC), supaya bunga
+    // beberapa detik antara approve dan baca ulang nggak memicu approve kedua.
     expect(repayPlan({ debt, balance: usdc(1_000.2), amount: debt, variableBorrowRate: rate })).toEqual({
       full: true,
       send: 2n ** 256n - 1n,
       spend: 1_000_122_726n,
+      required: 1_000_005_114n,
     });
   });
 
@@ -178,11 +294,13 @@ describe('repayPlan()', () => {
       full: false,
       send: debt,
       spend: debt,
+      required: debt,
     });
     expect(repayPlan({ debt, balance: usdc(5_000), amount: usdc(400), variableBorrowRate: rate })).toEqual({
       full: false,
       send: usdc(400),
       spend: usdc(400),
+      required: usdc(400),
     });
   });
 });

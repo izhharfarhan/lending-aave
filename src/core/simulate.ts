@@ -17,8 +17,11 @@ const RAY = 10n ** 27n;
 const BPS = 10_000n;
 const SECONDS_PER_YEAR = 365n * 24n * 60n * 60n;
 
-/** Aksi yang disimulasikan; supply/withdraw/toggle jaminan menyusul di tiket 05. */
-export type PositionChange = { action: 'borrow' | 'repay'; asset: Address; amount: bigint };
+/** Aksi yang disimulasikan; supply menyusul (panel supply belum menampilkan HF sesudah). */
+export type PositionChange =
+  | { action: 'borrow' | 'repay' | 'withdraw'; asset: Address; amount: bigint }
+  /** Menyalakan / mematikan aset sebagai jaminan. */
+  | { action: 'collateral'; asset: Address; enable: boolean };
 
 /** Tingkat konfirmasi #9 sesudah aksi. */
 export type Gate = 'none' | 'warn' | 'check' | 'type' | 'locked';
@@ -39,6 +42,11 @@ export type Simulation = {
   account: AccountView;
   /** Posisi sesudah aksi melewati batas LTV (aturan `validateHFAndLtv` kontrak). */
   overLtv: boolean;
+  /**
+   * Aturan ltv0 kontrak (`validateHFAndLtvzero`): selama masih ada jaminan ber-LTV 0, withdraw/mematikan jaminan lain
+   * ditolak (`LtvValidationFailed`). Aset ber-LTV 0 itu yang harus ditarik/dimatikan dulu.
+   */
+  ltvZero: boolean;
   gate: Gate;
   liquidation: LiqPrice;
 };
@@ -64,15 +72,23 @@ function holdings(read: ChainRead): Holding[] {
 
 /** Posisi chain sesudah aksi, dihitung dengan aturan kontrak yang sama dengan `accountFromReserves`. */
 export function simulate(read: ChainRead, whitelist: WhitelistAsset[], change: PositionChange): Simulation {
-  const after = applyChange(read, holdings(read), change);
+  const list = holdings(read);
+  const wasCollateral = findHolding(list, change.asset)?.collateral ?? false;
+  const after = applyChange(read, list, change);
   const account = accountOf(after);
   const view = accountView(account, baseToUsd(read.baseCurrency));
   const overLtv = exceedsLtv(account);
+  // Withdraw / mematikan jaminan cuma berisiko kalau aset itu memang sedang jadi jaminan.
+  const reducesCollateral =
+    wasCollateral && (change.action === 'withdraw' || (change.action === 'collateral' && !change.enable));
+  // Repay dan menyalakan jaminan cuma bisa memperbaiki posisi: nggak pernah dikunci atau minta konfirmasi.
+  const risky = change.action === 'borrow' || reducesCollateral;
   return {
     account: view,
     overLtv,
-    // Repay cuma bisa memperbaiki posisi: nggak pernah dikunci atau minta konfirmasi.
-    gate: change.action === 'repay' ? 'none' : confirmationGate(view.healthFactor, overLtv),
+    ltvZero: reducesCollateral && breaksLtvZeroRule(after, change, account),
+    // V8: withdraw dan mematikan jaminan dikunci di batas LTV, lebih ketat dari kontrak (yang cuma mensyaratkan HF ≥ 1).
+    gate: risky ? confirmationGate(view.healthFactor, overLtv) : 'none',
     liquidation: liquidationOf(read, after, whitelist),
   };
 }
@@ -96,8 +112,13 @@ export type RepayPlan = {
   full: boolean;
   /** Argumen `amount` untuk `Pool.repay`. */
   send: bigint;
-  /** Yang harus tersedia di wallet dan diizinkan ke Pool (utang + bantalan bunga kalau lunas penuh). */
+  /** Yang di-approve dan harus ada di wallet: utang + bantalan bunga 1 hari kalau lunas penuh. */
   spend: bigint;
+  /**
+   * Izin minimum untuk lanjut ke repay: utang + bunga 1 jam kalau lunas penuh. Lebih longgar dari `spend` supaya bunga
+   * beberapa detik antara approve dan baca ulang nggak memicu approve kedua.
+   */
+  required: bigint;
 };
 
 // Bunga terus berjalan antara baca, approve, dan repay; bantalan = bunga 1 hari pada APR pinjaman saat ini.
@@ -110,10 +131,34 @@ const CUSHION_SECONDS = 24n * 60n * 60n;
  */
 export function repayPlan(input: { debt: bigint; balance: bigint; amount: bigint; variableBorrowRate: bigint }): RepayPlan {
   const { debt, balance, amount } = input;
-  const computed = ceilDiv(debt * input.variableBorrowRate * CUSHION_SECONDS, SECONDS_PER_YEAR * RAY);
-  const cushion = computed > 0n ? computed : 1n;
-  if (amount + cushion >= debt && balance >= debt + cushion) return { full: true, send: maxUint256, spend: debt + cushion };
-  return { full: false, send: amount, spend: amount };
+  const interest = (seconds: bigint) => {
+    const value = ceilDiv(debt * input.variableBorrowRate * seconds, SECONDS_PER_YEAR * RAY);
+    return value > 0n ? value : 1n;
+  };
+  const cushion = interest(CUSHION_SECONDS);
+  if (amount + cushion >= debt && balance >= debt + cushion) {
+    return { full: true, send: maxUint256, spend: debt + cushion, required: debt + interest(60n * 60n) };
+  }
+  return { full: false, send: amount, spend: amount, required: amount };
+}
+
+export type WithdrawPlan = {
+  /** Withdraw semua: dikirim sebagai `type(uint256).max`, Pool membakar seluruh aToken saat tx dieksekusi (tanpa debu). */
+  all: boolean;
+  /** Argumen `amount` untuk `Pool.withdraw`. */
+  send: bigint;
+};
+
+/**
+ * Q26: withdraw semua kalau jumlahnya menutup saldo supply, dengan kelonggaran bunga supply 1 hari (saldo yang dilihat
+ * user selalu tertinggal bunga beberapa detik, sama seperti repay penuh).
+ */
+export function withdrawPlan(input: { supplied: bigint; amount: bigint; liquidityRate: bigint }): WithdrawPlan {
+  const { supplied, amount } = input;
+  const cushion = ceilDiv(supplied * input.liquidityRate * CUSHION_SECONDS, SECONDS_PER_YEAR * RAY);
+  // Jauh di atas saldo = salah ketik, bukan "semua": biar nextStep menolaknya sebagai saldo nggak cukup.
+  if (amount + cushion >= supplied && amount <= supplied + cushion) return { all: true, send: maxUint256 };
+  return { all: false, send: amount };
 }
 
 /** `getUserAccountData` yang dihitung ulang dari data per reserve (dasar simulasi; dibuktikan sama oleh test paritas). */
@@ -154,16 +199,40 @@ function accountOf(list: Holding[]): AccountRead {
 
 const ceilDiv = (a: bigint, b: bigint) => (a + b - 1n) / b;
 
-function applyChange(read: ChainRead, list: Holding[], { action, asset, amount }: PositionChange): Holding[] {
-  const key = asset.toLowerCase();
-  const existing = list.find((h) => h.reserve.underlyingAsset.toLowerCase() === key);
-  const reserve = existing?.reserve ?? read.reserves.find((r) => r.underlyingAsset.toLowerCase() === key);
-  if (!reserve) throw new Error(`Reserve ${asset} tidak ada di chain ini`);
+const findHolding = (list: Holding[], asset: Address) =>
+  list.find((h) => h.reserve.underlyingAsset.toLowerCase() === asset.toLowerCase());
+const min = (a: bigint, b: bigint) => (a < b ? a : b);
+
+function applyChange(read: ChainRead, list: Holding[], change: PositionChange): Holding[] {
+  const existing = findHolding(list, change.asset);
+  const reserve = existing?.reserve ?? read.reserves.find((r) => r.underlyingAsset.toLowerCase() === change.asset.toLowerCase());
+  if (!reserve) throw new Error(`Reserve ${change.asset} tidak ada di chain ini`);
   const before = existing ?? { reserve, supplied: 0n, collateral: false, debt: 0n };
-  // Pool menarik paling banyak sebesar utang; kelebihan jumlah repay nggak dipakai.
-  const debt = action === 'borrow' ? before.debt + amount : before.debt - (amount < before.debt ? amount : before.debt);
-  const changed = { ...before, debt };
+  const changed = ((): Holding => {
+    switch (change.action) {
+      case 'borrow':
+        return { ...before, debt: before.debt + change.amount };
+      case 'repay':
+        // Pool menarik paling banyak sebesar utang; kelebihan jumlah repay nggak dipakai.
+        return { ...before, debt: before.debt - min(change.amount, before.debt) };
+      case 'withdraw': {
+        const supplied = before.supplied - min(change.amount, before.supplied);
+        // Saldo habis = kontrak mematikan flag jaminannya.
+        return { ...before, supplied, collateral: supplied > 0n && before.collateral };
+      }
+      case 'collateral':
+        return { ...before, collateral: change.enable };
+    }
+  })();
   return existing ? list.map((h) => (h === existing ? changed : h)) : [...list, changed];
+}
+
+// Withdraw jaminan cuma dicek kontrak kalau user punya utang; mematikan jaminan selalu dicek.
+function breaksLtvZeroRule(after: Holding[], change: PositionChange, account: AccountRead): boolean {
+  if (change.action === 'withdraw' && account.totalDebtBase === 0n) return false;
+  const hasZeroLtvCollateral = after.some((h) => h.collateral && h.supplied > 0n && h.reserve.baseLTVasCollateral === 0n);
+  const asset = findHolding(after, change.asset);
+  return hasZeroLtvCollateral && (asset?.reserve.baseLTVasCollateral ?? 0n) !== 0n;
 }
 
 // ValidationLogic.validateHFAndLtv: LTV rata-rata ≠ 0, HF ≥ 1, dan jaminan ≥ percentDivCeil(utang, LTV).

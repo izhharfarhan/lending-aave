@@ -28,3 +28,4 @@
   - ABI yang dipakai sekarang ada di `src/aave/abis.ts` (`getEModes` sengaja belum dimasukkan).
 
 - 2026-10-27 (dari tiket 04): `src/core/simulate.ts` (`accountOf`, `liquidationOf`, `exceedsLtv`) masih memakai LT/LTV reserve (`reserveLiquidationThreshold`, `baseLTVasCollateral`). Untuk user dengan `eModeCategoryId ≠ 0`, HF/sisa batas pinjam/harga likuidasi "sesudah" dan tier #9 bisa beda dari kontrak sampai aturan V4 dimasukkan di sini. Angka "saat ini" aman karena dari `getUserAccountData`. Test paritas fork (`borrowRepay.fork.spec.ts`) tinggal ditambah posisi E-Mode.
+- 2026-10-27 (dari tiket 05): dua tempat lagi yang masih memakai `baseLTVasCollateral` reserve dan harus ikut aturan V4: `SupplyRow.canBeCollateral` (`buildChainView`) dan `breaksLtvZeroRule` (`simulate.ts`, aturan ltv0 harus memakai `ltvzeroBitmap` kategori untuk user di E-Mode).

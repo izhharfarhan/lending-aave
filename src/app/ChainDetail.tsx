@@ -15,7 +15,7 @@ import {
 } from '@/core/chainPosition';
 import { panelAssets, type PanelTab } from '@/core/panel';
 import { liquidationPrice, type LiqPrice } from '@/core/simulate';
-import { POSITION, TABLE } from '@/copy';
+import { PANEL, POSITION, TABLE } from '@/copy';
 import { ActionPanel } from './ActionPanel';
 import { pct, tokenAmount, usd } from './format';
 import { HealthFactor } from './HealthFactor';
@@ -28,8 +28,8 @@ const AAVE_APP_URL = 'https://app.aave.com/';
 type Picked = { tab: PanelTab; asset?: Address };
 
 // Detail chain terpilih (Q20, prototype): kepala HF + harga likuidasi + sisa batas pinjam, empat tabel datar, dan panel
-// aksi di kanan. Klik baris ERC20 membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Utang Anda →
-// Repay (ETH lewat gateway di tiket 06/07, withdraw dari Supply Anda di tiket 05).
+// aksi di kanan. Klik baris ERC20 membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Supply Anda →
+// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay (ETH lewat gateway di tiket 06/07).
 export function ChainDetail({ chainId }: { chainId: number }) {
   const { data, isPending, isError, refetch } = useChainView(chainId);
   const [picked, setPicked] = useState<Picked>({ tab: 'supply' });
@@ -67,7 +67,17 @@ export function ChainDetail({ chainId }: { chainId: number }) {
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-4">
           {view.account && (
-            <PositionTables view={view} activeDebt={active('repay')} repayable={clickable('repay')} onRepay={pick('repay')} />
+            <PositionTables
+              view={view}
+              activeSupply={active('withdraw') ?? active('collateral')}
+              activeDebt={active('repay')}
+              withdrawable={clickable('withdraw')}
+              togglable={clickable('collateral')}
+              onWithdraw={pick('withdraw')}
+              onToggle={pick('collateral')}
+              repayable={clickable('repay')}
+              onRepay={pick('repay')}
+            />
           )}
           <MarketTables
             view={view}
@@ -150,7 +160,17 @@ function Fact({ label, info, children }: { label: string; info?: string; childre
   );
 }
 
-function PositionTables(props: { view: ChainView; activeDebt: Address | undefined; repayable: Set<Address>; onRepay: (asset: Address) => void }) {
+function PositionTables(props: {
+  view: ChainView;
+  activeSupply: Address | undefined;
+  activeDebt: Address | undefined;
+  withdrawable: Set<Address>;
+  togglable: Set<Address>;
+  repayable: Set<Address>;
+  onWithdraw: (asset: Address) => void;
+  onToggle: (asset: Address) => void;
+  onRepay: (asset: Address) => void;
+}) {
   const { view } = props;
   return (
     <div className="grid gap-4 2xl:grid-cols-2">
@@ -161,10 +181,29 @@ function PositionTables(props: { view: ChainView; activeDebt: Address | undefine
           key: row.asset,
           symbol: row.symbol,
           note: <AssetNote outside={row.outside} status={row.status} />,
+          active: row.asset === props.activeSupply,
+          // ETH lewat gateway menyusul di tiket 07; toggle jaminannya sudah bisa (langsung ke Pool).
+          onClick: props.withdrawable.has(row.asset) ? () => props.onWithdraw(row.asset) : undefined,
           cells: [
             <span key="apy" className="num">{pct(row.apy)}</span>,
             <span key="amount" className="num">{tokenAmount(row.amount, row.decimals)}</span>,
-            <span key="collateral" className="text-xs text-muted">{row.collateral ? TABLE.collateralOn : TABLE.none}</span>,
+            props.togglable.has(row.asset) ? (
+              // Switch menunjukkan status sekarang; klik membuka panel penjelasan + HF sesudah, bukan langsung mengubah.
+              <button
+                key="collateral"
+                type="button"
+                role="switch"
+                aria-checked={row.collateral}
+                aria-label={PANEL.collateralTitle(row.symbol)}
+                className="switch align-middle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onToggle(row.asset);
+                }}
+              />
+            ) : (
+              <span key="collateral" className="text-xs text-muted">{row.collateral ? TABLE.collateralOn : TABLE.none}</span>
+            ),
           ],
         }))}
         heads={[TABLE.apy, TABLE.balance, TABLE.collateral]}
@@ -262,7 +301,12 @@ function MarketTables(props: {
 function AssetNote({ outside, status }: { outside: boolean; status: ReserveStatus }) {
   return (
     <>
-      {status !== 'aktif' && <span className="badge badge-muted">{TABLE[status]}</span>}
+      {status !== 'aktif' && (
+        <>
+          <span className="badge badge-muted">{TABLE[status]}</span>
+          <span className="text-xs text-muted">{status === 'dijeda' ? TABLE.dijedaNote : TABLE.dibekukanNote}</span>
+        </>
+      )}
       {outside && (
         <span className="text-xs text-muted">
           {TABLE.outside}{' '}

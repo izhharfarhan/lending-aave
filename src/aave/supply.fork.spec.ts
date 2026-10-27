@@ -5,11 +5,9 @@ import { aaveErrorName } from '@/core/walletError';
 import { publicClient, TEST_ACCOUNT, walletClient } from '../../test/fork/clients';
 import { fundErc20 } from '../../test/fork/fund';
 import { contracts, read, runLikeTheApp, whitelist } from '../../test/fork/likeTheApp';
+import { USDC, USDT, units } from '../../test/fork/position';
 import { poolRequest } from './poolTx';
 
-const USDC: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
-const USDT: Address = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
-const units = (n: number) => BigInt(n) * 1_000_000n;
 const supplyLikeTheApp = (asset: Address, amount: bigint, approvalMode: 'exact' | 'unlimited' = 'exact') =>
   runLikeTheApp('supply', asset, amount, { approvalMode });
 

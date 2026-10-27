@@ -11,9 +11,9 @@ import { WHITELIST } from '@/config/assets';
 import { chainName } from '@/config/chains';
 import { AAVE } from '@/config/contracts';
 import { explorerAddressUrl, explorerTxUrl, revokeCashUrl } from '@/config/explorer';
-import type { ChainRead, ChainView } from '@/core/chainPosition';
+import type { ChainRead, ChainView, SupplyRow } from '@/core/chainPosition';
 import type { NextStep, NextStepInput, WalletStepName } from '@/core/nextStep';
-import { evaluatePanel, panelAssets, type PanelAsset, type PanelTab } from '@/core/panel';
+import { evaluatePanel, MAIN_STEP, panelAssets, type PanelAsset, type PanelTab } from '@/core/panel';
 import { parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
 import { APPROVAL, CTA, PANEL, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
@@ -25,7 +25,6 @@ import { TokenIcon } from './TokenIcon';
 
 const SMART_ACCOUNT_NOTE_KEY = 'lending-web:smartAccountNoteDismissed';
 const TABS = ['supply', 'withdraw', 'borrow', 'repay'] as const;
-const isPanelTab = (tab: (typeof TABS)[number]): tab is PanelTab => tab !== 'withdraw';
 
 export type ChainData = { read: ChainRead; view: ChainView };
 
@@ -40,8 +39,9 @@ type Props = {
   refetch: () => Promise<ChainData>;
 };
 
-// Panel aksi di samping detail chain (Q20): tab Supply, Borrow, Repay untuk ERC20; Withdraw menyusul (tiket 05). Panel
-// cuma dirender sesudah data posisi siap (sebelumnya skeleton / "gagal dimuat"), jadi `data` selalu `ready` di sini.
+// Panel aksi di samping detail chain (Q20): tab Supply, Withdraw, Borrow, Repay untuk ERC20, plus mode toggle jaminan
+// (dari switch di "Supply Anda"). Panel cuma dirender sesudah data posisi siap (sebelumnya skeleton / "gagal dimuat"),
+// jadi `data` selalu `ready` di sini.
 export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Props) {
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
@@ -75,15 +75,20 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       riskTyped: riskTyped.trim().toLowerCase() === RISK_CONFIRM.word,
     });
 
-  const { sim, plan } = evaluate(data, false);
-  // Repay lunas penuh: yang dikirim `type(uint256).max`, yang ditampilkan & dicatat utang saat ini.
-  const shownAmount = plan?.full ? (row?.debt ?? 0n) : (amount ?? 0n);
+  const { sim, plan, withdraw } = evaluate(data, false);
+  // Repay lunas penuh / withdraw semua: yang dikirim `type(uint256).max`, yang ditampilkan & dicatat utang/saldo saat
+  // ini. Toggle jaminan mencatat saldo supply-nya.
+  const shownAmount = plan?.full ? (row?.debt ?? 0n) : withdraw?.all || tab === 'collateral' ? (row?.supplied ?? 0n) : (amount ?? 0n);
+  const enable = !row?.collateral;
+  const historyKind = tab === 'collateral' ? (enable ? 'collateralOn' : 'collateralOff') : tab;
   const poolTx = usePoolTx({
     chainId,
     user: address,
-    main: tab,
+    main: MAIN_STEP[tab],
+    historyKind,
+    useAsCollateral: enable,
     asset: { address: row?.asset ?? '0x', symbol: row?.symbol ?? '', decimals: row?.decimals ?? 0 },
-    send: plan?.send ?? amount ?? 0n,
+    send: plan?.send ?? withdraw?.send ?? amount ?? 0n,
     amount: shownAmount,
     refreshStep: async () => evaluate(await refetch(), false).step,
   });
@@ -106,17 +111,29 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   const startOver = () => {
     if (tx.status === 'success' || tx.status === 'error') poolTx.reset();
   };
-  const select = (nextTab: PanelTab, nextAsset?: Address) => {
-    startOver();
+  // Pilihan baru (dari tab, dropdown aset, atau klik tabel/switch di detail chain) = transaksi baru: status lama, jumlah,
+  // izin, dan konfirmasi risiko dibuang.
+  const selection = `${tab}:${asset ?? ''}`;
+  const [shownSelection, setShownSelection] = useState(selection);
+  if (selection !== shownSelection) {
+    setShownSelection(selection);
     setAmountText('');
     setApprovalMode('exact');
     resetRisk();
-    onSelect(nextTab, nextAsset);
-  };
+    if (tx.status === 'success' || tx.status === 'error') poolTx.reset();
+  }
 
   const amountShown = tokenAmount(shownAmount, row?.decimals ?? 0);
   const approveShown = tokenAmount(plan?.spend ?? amount ?? 0n, row?.decimals ?? 0);
-  const cta = row ? ctaFor(step, row.symbol, amountShown, tab, plan?.full ?? false) : null;
+  const copy: StepCopy = {
+    symbol: row?.symbol ?? '',
+    amount: amountShown,
+    approveAmount: approveShown,
+    full: plan?.full ?? withdraw?.all ?? false,
+    enable,
+    unlimited: approvalMode === 'unlimited',
+  };
+  const cta = row ? ctaFor(step, tab, copy) : null;
   const showSteps = isWalletStep(step) && tx.status === 'idle';
   const asksApproval = step.step === 'approve' || step.step === 'resetApproval';
   const amountUsd = row && amount !== null ? Number(formatUnits(amount, row.decimals)) * row.priceUsd : 0;
@@ -131,11 +148,9 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
             type="button"
             role="tab"
             aria-selected={t === tab}
-            aria-disabled={!isPanelTab(t)}
-            title={isPanelTab(t) ? undefined : PANEL.soon}
             disabled={tx.status === 'running'}
-            onClick={() => isPanelTab(t) && t !== tab && select(t)}
-            className={`tab text-sm ${isPanelTab(t) ? '' : 'cursor-not-allowed opacity-40'}`}
+            onClick={() => t !== tab && onSelect(t)}
+            className="tab text-sm"
           >
             {PANEL.tabs[t]}
           </button>
@@ -143,13 +158,28 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       </div>
 
       {!row ? (
-        <p className="text-sm text-muted">{tab === 'repay' ? PANEL.noDebts : PANEL.noBorrowAssets}</p>
+        <p className="text-sm text-muted">{EMPTY[tab]}</p>
       ) : (
         <>
+          {tab === 'collateral' ? (
+            <div>
+              <p className="flex items-center gap-2.5 text-base font-medium">
+                <TokenIcon symbol={row.symbol} /> {PANEL.collateralTitle(row.symbol)}
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                {row.collateral ? PANEL.collateralOn(row.symbol) : PANEL.collateralOff(row.symbol)}
+              </p>
+            </div>
+          ) : (
           <div>
             <div className="flex items-center justify-between gap-3 text-xs text-muted">
               <span>{PANEL.amount}</span>
               <span className="flex gap-3">
+                {tab === 'withdraw' && row.supplied !== undefined && (
+                  <span>
+                    {PANEL.supplied} <span className="num text-ink">{tokenAmount(row.supplied, row.decimals)}</span>
+                  </span>
+                )}
                 {row.debt !== undefined && (
                   <span>
                     {PANEL.debt} <span className="num text-ink">{tokenAmount(row.debt, row.decimals)}</span>
@@ -186,7 +216,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
                 <select
                   value={row.asset}
                   disabled={tx.status === 'running'}
-                  onChange={(e) => select(tab, e.target.value as Address)}
+                  onChange={(e) => onSelect(tab, e.target.value as Address)}
                   className="bg-transparent pr-1 text-sm font-medium outline-none"
                   aria-label={PANEL.asset}
                 >
@@ -205,7 +235,9 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
             )}
             <p className="num mt-2 text-xs text-muted">
               ≈ {usd(amountUsd)} ·{' '}
-              {tab === 'supply' ? PANEL.interest(usd(amountUsd * row.apy), pct(row.apy)) : PANEL.borrowInterest(usd(amountUsd * row.apy), pct(row.apy))}
+              {tab === 'supply' || tab === 'withdraw'
+                ? PANEL.interest(usd(amountUsd * row.apy), pct(row.apy))
+                : PANEL.borrowInterest(usd(amountUsd * row.apy), pct(row.apy))}
             </p>
             {isConnected && tab === 'borrow' && (
               <p className="mt-3 text-xs text-muted">
@@ -216,7 +248,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
                     : PANEL.noCollateral}
                 </span>{' '}
                 ·{' '}
-                <button type="button" className="link" onClick={() => select('supply')}>
+                <button type="button" className="link" onClick={() => onSelect('supply')}>
                   {PANEL.changeCollateral}
                 </button>
               </p>
@@ -226,14 +258,28 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
                 {PANEL.repayFull(tokenAmount(row.debt, row.decimals), row.symbol, tokenAmount(plan.spend, row.decimals))}
               </p>
             )}
+            {withdraw?.all && row.supplied !== undefined && (
+              <p className="mt-3 text-xs text-muted">{PANEL.withdrawAll(tokenAmount(row.supplied, row.decimals), row.symbol)}</p>
+            )}
           </div>
+          )}
 
           {isConnected && tab !== 'supply' && data.view.account && (
             <Outlook data={data} chainId={chainId} sim={sim} />
           )}
-          {tab === 'borrow' && sim && tx.status === 'idle' && (
+          {sim && tx.status === 'idle' && (
             <RiskConfirm
               sim={sim}
+              step={step}
+              supplies={data.view.supplies}
+              symbol={row.symbol}
+              lockedText={
+                tab === 'collateral'
+                  ? RISK_CONFIRM.lockedCollateral(row.symbol, chainName(chainId))
+                  : tab === 'withdraw'
+                    ? RISK_CONFIRM.lockedWithdraw
+                    : RISK_CONFIRM.locked
+              }
               checked={riskChecked}
               onCheck={setRiskChecked}
               typed={riskTyped}
@@ -241,6 +287,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
             />
           )}
 
+          {step.step === 'paused' && <p className="rounded-md bg-raised px-4 py-3 text-sm text-muted">{RISK_CONFIRM.paused}</p>}
           {asksApproval && (
             <ApprovalSettings
               mode={approvalMode}
@@ -251,31 +298,16 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
               chainId={chainId}
             />
           )}
-          {showSteps && (
-            <WalletSteps
-              chainId={chainId}
-              steps={plannedSteps(step, tab)}
-              token={row.asset}
-              symbol={row.symbol}
-              amount={amountShown}
-              approveAmount={approveShown}
-              full={plan?.full ?? false}
-              unlimited={approvalMode === 'unlimited'}
-            />
-          )}
+          {showSteps && <WalletSteps {...copy} chainId={chainId} steps={plannedSteps(step, MAIN_STEP[tab])} token={row.asset} />}
         </>
       )}
       {progressRow && tx.status !== 'idle' && (
         <TxProgress
+          {...copy}
+          symbol={progressRow.symbol}
           chainId={chainId}
           tx={tx}
-          main={tab}
-          symbol={progressRow.symbol}
-          amount={amountShown}
-          approveAmount={approveShown}
-          full={plan?.full ?? false}
           tokenAmount={(a) => tokenAmount(a, progressRow.decimals)}
-          unlimited={approvalMode === 'unlimited'}
           onRetry={() => (isWalletStep(step) ? void poolTx.run(step) : poolTx.reset())}
         />
       )}
@@ -287,7 +319,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
           disabled={!cta.enabled}
           onClick={() => {
             if (step.step === 'connect') openConnectModal?.();
-            else if (step.step === 'needCollateral') select('supply');
+            else if (step.step === 'needCollateral') onSelect('supply');
             else if (isWalletStep(step)) void poolTx.run(step);
           }}
         >
@@ -298,26 +330,41 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   );
 }
 
-function ctaFor(step: NextStep, symbol: string, amount: string, tab: PanelTab, full: boolean): { label: string; enabled: boolean } {
+const EMPTY: Record<PanelTab, string> = {
+  supply: PANEL.noSupplyAssets,
+  withdraw: PANEL.noSupplies,
+  borrow: PANEL.noBorrowAssets,
+  repay: PANEL.noDebts,
+  collateral: PANEL.noSupplies,
+};
+
+function ctaFor(step: NextStep, tab: PanelTab, c: StepCopy): { label: string; enabled: boolean } {
   switch (step.step) {
     case 'connect':
       return { label: CTA.connect, enabled: true };
     case 'needCollateral':
       return { label: CTA.needCollateral, enabled: true };
     case 'insufficientBalance':
-      return { label: CTA.insufficientBalance(symbol), enabled: false };
+      return { label: CTA.insufficientBalance(c.symbol), enabled: false };
+    case 'overLtv':
+      // Menarik / mematikan jaminan = "Jaminan ini masih dibutuhkan"; "Melebihi batas pinjam" cuma untuk borrow.
+      return { label: tab === 'borrow' ? CTA.overLtv : CTA.collateralNeeded, enabled: false };
     case 'confirmRisk':
       return { label: CTA.confirmRisk[step.gate], enabled: false };
     case 'resetApproval':
-      return { label: CTA.resetApproval(symbol, tab), enabled: true };
+      return { label: CTA.resetApproval(c.symbol, tab), enabled: true };
     case 'approve':
-      return { label: CTA.approve(symbol, tab), enabled: true };
+      return { label: CTA.approve(c.symbol, tab), enabled: true };
     case 'supply':
-      return { label: CTA.supply(amount, symbol), enabled: true };
+      return { label: CTA.supply(c.amount, c.symbol), enabled: true };
+    case 'withdraw':
+      return { label: c.full ? CTA.withdrawAll(c.symbol) : CTA.withdraw(c.amount, c.symbol), enabled: true };
     case 'borrow':
-      return { label: CTA.borrow(amount, symbol), enabled: true };
+      return { label: CTA.borrow(c.amount, c.symbol), enabled: true };
     case 'repay':
-      return { label: full ? CTA.repayFull(symbol) : CTA.repay(amount, symbol), enabled: true };
+      return { label: c.full ? CTA.repayFull(c.symbol) : CTA.repay(c.amount, c.symbol), enabled: true };
+    case 'setCollateral':
+      return { label: CTA.setCollateral(c.enable, c.symbol), enabled: true };
     default:
       return { label: CTA[step.step], enabled: false };
   }
@@ -371,9 +418,32 @@ function OutlookRow({ label, info, children }: { label: string; info?: string; c
 }
 
 // Tingkat konfirmasi #9: amber cuma peringatan; centang dan ketik "confirm" menahan tombol utama (lewat nextStep).
-function RiskConfirm(props: { sim: Simulation; checked: boolean; onCheck: (v: boolean) => void; typed: string; onType: (v: string) => void }) {
+// Aturan kontrak yang menolak aksi (ltv0, aset ber-LTV 0) didahulukan dari tier #9: penjelasannya beda.
+function RiskConfirm(props: {
+  sim: Simulation;
+  step: NextStep;
+  /** Untuk menyebut jaminan ber-LTV 0 di pesan aturan ltv0. */
+  supplies: SupplyRow[];
+  lockedText: string;
+  symbol: string;
+  checked: boolean;
+  onCheck: (v: boolean) => void;
+  typed: string;
+  onType: (v: string) => void;
+}) {
   const { sim } = props;
   const hfAfter = sim.account.healthFactor === null ? '' : hf(sim.account.healthFactor);
+  if (props.step.step === 'paused') return null;
+  if (props.step.step === 'ltvZero') {
+    const ltvZero = props.supplies.filter((s) => s.collateral && !s.canBeCollateral);
+    const names = ltvZero.map((s) => s.symbol).join(', ');
+    return (
+      <p className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{RISK_CONFIRM.ltvZero(names, ltvZero.every((s) => s.outside))}</p>
+    );
+  }
+  if (props.step.step === 'cannotBeCollateral') {
+    return <p className="rounded-md bg-raised px-4 py-3 text-sm text-muted">{RISK_CONFIRM.cannotBeCollateral(props.symbol)}</p>;
+  }
   switch (sim.gate) {
     case 'warn':
       return <p className="rounded-md bg-warn-soft px-4 py-3 text-sm text-warn">{RISK_CONFIRM.warn(hfAfter)}</p>;
@@ -381,7 +451,7 @@ function RiskConfirm(props: { sim: Simulation; checked: boolean; onCheck: (v: bo
       return (
         <label className="flex cursor-pointer items-start gap-3 rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">
           <input type="checkbox" className="mt-1 accent-[var(--danger)]" checked={props.checked} onChange={(e) => props.onCheck(e.target.checked)} />
-          <span>{RISK_CONFIRM.check(hfAfter, liquidationText(sim.liquidation)?.text ?? '')}</span>
+          <span>{RISK_CONFIRM.check(hfAfter, sim.liquidation.kind === 'price' ? (liquidationText(sim.liquidation)?.text ?? '') : '')}</span>
         </label>
       );
     case 'type':
@@ -398,7 +468,7 @@ function RiskConfirm(props: { sim: Simulation; checked: boolean; onCheck: (v: bo
         </div>
       );
     case 'locked':
-      return <p className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{RISK_CONFIRM.locked}</p>;
+      return <p className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger">{props.lockedText}</p>;
     default:
       return null;
   }
@@ -447,7 +517,16 @@ function ApprovalSettings(props: {
 
 const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
-type StepCopy = { symbol: string; amount: string; approveAmount: string; full: boolean; unlimited: boolean };
+type StepCopy = {
+  symbol: string;
+  amount: string;
+  approveAmount: string;
+  /** Repay lunas penuh / withdraw semua. */
+  full: boolean;
+  /** Toggle jaminan: nyalakan atau matikan. */
+  enable: boolean;
+  unlimited: boolean;
+};
 
 function stepText(name: WalletStepName, c: StepCopy) {
   switch (name) {
@@ -464,6 +543,10 @@ function stepText(name: WalletStepName, c: StepCopy) {
       return { title: STEPS.borrow.title(c.amount, c.symbol), detail: STEPS.borrow.detail };
     case 'repay':
       return { title: c.full ? STEPS.repay.titleFull(c.symbol) : STEPS.repay.title(c.amount, c.symbol), detail: STEPS.repay.detail };
+    case 'withdraw':
+      return { title: c.full ? STEPS.withdraw.titleAll(c.symbol) : STEPS.withdraw.title(c.amount, c.symbol), detail: STEPS.withdraw.detail };
+    case 'setCollateral':
+      return { title: STEPS.setCollateral.title(c.enable, c.symbol), detail: STEPS.setCollateral.detail };
   }
 }
 
@@ -546,7 +629,6 @@ function TxProgress(
   props: StepCopy & {
     chainId: number;
     tx: Exclude<TxState, { status: 'idle' }>;
-    main: PanelTab;
     tokenAmount: (amount: bigint) => string;
     onRetry: () => void;
   },
@@ -560,6 +642,7 @@ function TxProgress(
     amount,
     approveAmount: done && tx.approved !== undefined ? props.tokenAmount(tx.approved) : props.approveAmount,
     unlimited: done && tx.approved !== undefined ? tx.approved === maxUint256 : props.unlimited,
+    enable: done ? tx.kind === 'collateralOn' : props.enable,
   };
   const statusOf = (i: number) => {
     if (tx.status === 'success' || i < tx.index) return <span className="text-ink">{TX.done}</span>;
@@ -585,7 +668,7 @@ function TxProgress(
       </ol>
       {tx.status === 'success' && (
         <p className="mt-3 text-sm">
-          <span className="text-accent">✓</span> {TX.success[props.main](amount, props.symbol)}
+          <span className="text-accent">✓</span> {TX.success[tx.kind](amount, props.symbol)}
         </p>
       )}
       {tx.status === 'error' && (

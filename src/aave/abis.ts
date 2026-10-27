@@ -18,6 +18,8 @@ export const poolAbi = parseAbi([
   'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
   'function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf)',
   'function repay(address asset, uint256 amount, uint256 interestRateMode, address onBehalfOf) returns (uint256)',
+  'function withdraw(address asset, uint256 amount, address to) returns (uint256)',
+  'function setUserUseReserveAsCollateral(address asset, bool useAsCollateral)',
   'error InvalidAmount()',
   'error ReserveInactive()',
   'error ReserveFrozen()',
@@ -29,5 +31,8 @@ export const poolAbi = parseAbi([
   'error HealthFactorLowerThanLiquidationThreshold()',
   'error LtvValidationFailed()',
   'error NoDebtOfSelectedType()',
+  'error NotEnoughAvailableUserBalance()',
+  'error UnderlyingBalanceZero()',
+  'error UserHasAssetWithZeroLtv()',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
 ]);
