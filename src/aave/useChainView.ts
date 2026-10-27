@@ -7,7 +7,7 @@ import { buildChainView } from '@/core/chainPosition';
 import { readChain } from './readChain';
 
 // Posisi satu chain: dibaca ulang tiap ±30 detik dan saat tab kembali difokuskan (Q4). Belum connect = cuma data
-// reserve (daftar aset + APY, Q6).
+// reserve (daftar aset + APY, Q6). `read` mentah ikut dikembalikan untuk simulasi dan harga likuidasi.
 export function useChainView(chainId: number) {
   const { address } = useAccount();
   const client = usePublicClient({ chainId });
@@ -16,7 +16,7 @@ export function useChainView(chainId: number) {
     queryKey: ['chainRead', chainId, address ?? null],
     queryFn: () => readChain(client!, { contracts: AAVE[chainId], whitelist: WHITELIST[chainId], user: address }),
     enabled: Boolean(client),
-    select: (read) => buildChainView(read, WHITELIST[chainId]),
+    select: (read) => ({ read, view: buildChainView(read, WHITELIST[chainId]) }),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });

@@ -51,6 +51,18 @@ export const POSITION = {
   loading: 'Memuat posisi…',
   failed: (chain: string) => `Posisi di ${chain} gagal dimuat.`,
   retry: 'Coba lagi',
+  liquidation: 'Harga likuidasi',
+  liquidationInfo:
+    'Harga ETH (oracle chain ini) yang membuat health factor tepat 1, dengan harga aset lain dianggap tetap. Bunga membuat angka ini terus bergeser.',
+};
+
+// Harga likuidasi (Q14, Q15): "saat ini" = harga oracle chain ini di blok yang dibaca.
+export const LIQUIDATION = {
+  price: (dir: 'turun' | 'naik', price: string, pct: string) => `Dilikuidasi kalau ETH ${dir} ke ${price} (${pct})`,
+  now: 'Sudah bisa dilikuidasi sekarang',
+  none: 'Tidak dipengaruhi harga ETH',
+  mixed: 'Harga likuidasi tidak bisa dihitung untuk campuran aset ini, lihat Health factor',
+  current: 'saat ini',
 };
 
 export const TABLE = {
@@ -87,6 +99,17 @@ export const PANEL = {
   asset: 'Aset',
   wallet: 'Wallet',
   interest: (usdPerYear: string, apy: string) => `bunga ≈ ${usdPerYear} per tahun (APY ${apy})`,
+  borrowInterest: (usdPerYear: string, apy: string) => `bunga pinjaman ≈ ${usdPerYear} per tahun (APY ${apy})`,
+  debt: 'Utang',
+  collateralOf: (chain: string) => `Jaminan Anda di ${chain}:`,
+  noCollateral: 'belum ada',
+  changeCollateral: 'Ubah',
+  noDebts: 'Tidak ada utang yang bisa dilunasi dari panel ini.',
+  noBorrowAssets: 'Tidak ada aset yang bisa dipinjam dari panel ini.',
+  repayFull: (debt: string, symbol: string, cushion: string) =>
+    `Lunas penuh: Aave menarik utang persis saat transaksi dijalankan (sekarang ${debt} ${symbol}, terus bertambah oleh bunga). Izin diberi bantalan bunga, total ${cushion} ${symbol}.`,
+  arrow: '→',
+  pendingAfter: '…',
   invalid: {
     not_a_number: 'Jumlah tidak valid.',
     too_many_decimals: (decimals: number) => `Maksimal ${decimals} angka di belakang koma.`,
@@ -102,9 +125,27 @@ export const CTA = {
   busy: 'Sedang diproses…',
   enterAmount: 'Masukkan jumlah',
   insufficientBalance: (symbol: string) => `Saldo ${symbol} tidak cukup`,
-  resetApproval: (symbol: string) => `Reset izin ${symbol}, lalu supply`,
-  approve: (symbol: string) => `Approve ${symbol}, lalu supply`,
+  needCollateral: 'Supply jaminan dulu',
+  overLtv: 'Melebihi batas pinjam',
+  confirmRisk: { check: 'Centang pernyataan risiko dulu', type: 'Ketik "confirm" dulu' },
+  resetApproval: (symbol: string, action: string) => `Reset izin ${symbol}, lalu ${action}`,
+  approve: (symbol: string, action: string) => `Approve ${symbol}, lalu ${action}`,
   supply: (amount: string, symbol: string) => `Supply ${amount} ${symbol}`,
+  borrow: (amount: string, symbol: string) => `Borrow ${amount} ${symbol}`,
+  repay: (amount: string, symbol: string) => `Repay ${amount} ${symbol}`,
+  repayFull: (symbol: string) => `Lunasi utang ${symbol}`,
+};
+
+// Konfirmasi risiko #9 sesuai HF sesudah aksi.
+export const RISK_CONFIRM = {
+  warn: (hf: string) => `Health factor sesudahnya ${hf}, Waspada. Harga ETH yang turun sedikit saja bisa membuat posisi ini berbahaya.`,
+  check: (hf: string, liquidation: string) => `Health factor sesudahnya ${hf}, Bahaya. ${liquidation}. Saya memahami risikonya.`,
+  type: (hf: string) =>
+    `Health factor sesudahnya ${hf}, sangat dekat dengan 1. Penurunan harga kecil saja bisa membuat jaminan Anda dilikuidasi. Ketik "confirm" jika tetap ingin melanjutkan.`,
+  typePlaceholder: 'Ketik "confirm"',
+  typeLabel: 'Konfirmasi risiko',
+  word: 'confirm',
+  locked: 'Jumlah ini melebihi batas pinjam (LTV). Kurangi jumlahnya atau tambah jaminan.',
 };
 
 // Approve default exact; unlimited hanya pilihan eksplisit user (#8, pola Q7 swap).
@@ -113,7 +154,7 @@ export const APPROVAL = {
   ariaMode: 'Jenis izin',
   exact: 'Exact',
   unlimited: 'Unlimited',
-  exactNote: (amount: string, symbol: string) => `Hanya ${amount} ${symbol}. Paling aman; supply berikutnya perlu approve lagi.`,
+  exactNote: (amount: string, symbol: string) => `Hanya ${amount} ${symbol}. Paling aman; transaksi berikutnya perlu approve lagi.`,
   unlimitedWarning: (symbol: string) =>
     `Aave Pool boleh menarik ${symbol} berapa pun, tanpa batas waktu. Kalau izin ini disalahgunakan, seluruh saldo ${symbol} bisa ditarik.`,
   revoke: 'Periksa atau cabut izin di revoke.cash ↗',
@@ -139,6 +180,15 @@ export const STEPS = {
     title: (amount: string, symbol: string) => `Supply ${amount} ${symbol}`,
     detail: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
   },
+  borrow: {
+    title: (amount: string, symbol: string) => `Borrow ${amount} ${symbol}`,
+    detail: 'Aave Pool mengirim pinjaman ke wallet Anda, dengan bunga variabel. Ada biaya jaringan.',
+  },
+  repay: {
+    title: (amount: string, symbol: string) => `Repay ${amount} ${symbol}`,
+    titleFull: (symbol: string) => `Lunasi utang ${symbol}`,
+    detail: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
+  },
   pool: 'Aave Pool',
   token: (symbol: string) => `Kontrak ${symbol}`,
   spender: 'Izin untuk Aave Pool',
@@ -156,7 +206,11 @@ export const TX = {
   done: '✓ selesai',
   rejectedStep: 'ditolak di wallet',
   failedStep: 'gagal',
-  success: (amount: string, symbol: string) => `Supply ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
+  success: {
+    supply: (amount: string, symbol: string) => `Supply ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
+    borrow: (amount: string, symbol: string) => `Borrow ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
+    repay: (amount: string, symbol: string) => `Repay ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
+  },
   explorer: 'explorer ↗',
   forkTx: 'tx fork lokal, tidak ada di explorer publik',
   retry: 'Coba lagi',
@@ -175,5 +229,11 @@ export const TX_ERROR = {
     ReservePaused: 'Aset ini sedang Dijeda: semua aksi nonaktif sementara.',
     ReserveInactive: 'Aset ini tidak aktif di Aave.',
     InvalidAmount: 'Jumlah harus lebih dari 0.',
+    BorrowingNotEnabled: 'Aset ini tidak bisa dipinjam.',
+    BorrowCapExceeded: 'Kuota pinjaman aset ini penuh.',
+    CollateralCannotCoverNewBorrow: 'Jaminan Anda tidak cukup untuk pinjaman ini. Kurangi jumlahnya atau tambah jaminan.',
+    HealthFactorLowerThanLiquidationThreshold: 'Pinjaman ini membuat health factor di bawah 1. Kurangi jumlahnya atau tambah jaminan.',
+    LtvValidationFailed: 'Jaminan Anda saat ini tidak bisa dipakai untuk meminjam (LTV 0). Atur jaminan di app.aave.com.',
+    NoDebtOfSelectedType: 'Tidak ada utang aset ini yang bisa dilunasi.',
   } as Record<string, string>,
 };

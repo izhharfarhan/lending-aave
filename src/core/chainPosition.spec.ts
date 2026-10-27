@@ -172,6 +172,28 @@ describe('buildChainView()', () => {
       expect(borrowMarket[1].apy).toBeCloseTo(0.045813, 5);
     });
 
+    it('carries what the Borrow and Repay tabs need: oracle price, wallet balance, allowance and borrow rate', () => {
+      const view = buildChainView(read('bahayaWithOutsideAssets'), WHITELIST);
+      const usdcDebt = view.borrows.find((r) => r.symbol === 'USDC')!;
+
+      expect(view.borrowMarket.map((r) => [r.symbol, r.native, r.priceUsd])).toEqual([
+        ['ETH', true, 2_306.77],
+        ['USDC', false, 0.99979651],
+        ['USDT', false, 0.99838],
+      ]);
+      // Wallet 200 USDC, belum ada izin ke Pool; APR pinjaman USDC (ray) untuk bantalan bunga repay penuh.
+      expect(usdcDebt).toMatchObject({
+        walletBalance: 200_000_000n,
+        allowance: 0n,
+        priceUsd: 0.99979651,
+        borrowRate: 44_794_710_292_724_102_718_356_564n,
+        native: false,
+        requiresApprovalReset: false,
+      });
+      // Aset luar (GHO) nggak punya aksi: saldo wallet & izinnya nggak dibaca.
+      expect(view.borrows.find((r) => r.symbol === 'GHO')).toMatchObject({ walletBalance: null, allowance: null });
+    });
+
     it('shows assets and APY read-only before connecting, without hiding anything', () => {
       const { supplyMarket, borrowMarket } = buildChainView(guest, WHITELIST);
 

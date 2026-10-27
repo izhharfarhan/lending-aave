@@ -1,7 +1,7 @@
 import type { Address, PublicClient } from 'viem';
 
 import { withGasMargin } from '@/core/gasMargin';
-import type { WalletRequest } from './supplyTx';
+import type { WalletRequest } from './poolTx';
 
 // Gas limit tiap tx dari app (dan test fork, biar jalurnya sama): estimasi di blok terakhir + margin. Tanpa margin,
 // wallet/viem pakai estimasi polos yang bisa kurang begitu tx ditambang di blok baru.

@@ -17,6 +17,8 @@ export type ReserveRead = {
   symbol: string;
   decimals: bigint;
   baseLTVasCollateral: bigint;
+  /** bps. */
+  reserveLiquidationThreshold: bigint;
   usageAsCollateralEnabled: boolean;
   borrowingEnabled: boolean;
   isActive: boolean;
@@ -95,7 +97,16 @@ type PositionRowBase = {
   status: ReserveStatus;
 };
 export type SupplyRow = PositionRowBase & { collateral: boolean };
-export type DebtRow = PositionRowBase;
+export type DebtRow = PositionRowBase & {
+  /** Saldo wallet & izin ke Pool untuk tab Repay. `null` = aset luar (tanpa aksi) atau aset `native`. */
+  walletBalance: bigint | null;
+  allowance: bigint | null;
+  priceUsd: number;
+  /** APR pinjaman variabel (ray), untuk bantalan bunga repay penuh. */
+  borrowRate: bigint;
+  native: boolean;
+  requiresApprovalReset: boolean;
+};
 
 type MarketRowBase = { asset: Address; symbol: string; decimals: number; apy: number };
 export type SupplyMarketRow = MarketRowBase & {
@@ -113,6 +124,9 @@ export type SupplyMarketRow = MarketRowBase & {
 export type BorrowMarketRow = MarketRowBase & {
   /** Sisa batas pinjam dalam token ini. `null` = wallet belum terhubung. */
   borrowable: bigint | null;
+  priceUsd: number;
+  /** ETH dipinjam lewat gateway (tiket 07). */
+  native: boolean;
 };
 
 export type ChainView = {
@@ -172,9 +186,19 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
     .sort(order);
   const borrows = rows
     .filter(({ position }) => position.scaledVariableDebt > 0n)
-    .map(({ position, reserve }) =>
-      row(reserve, debtBalance(position.scaledVariableDebt, reserve, read.blockTimestamp), reserve.variableBorrowRate),
-    )
+    .map(({ position, reserve }) => {
+      const asset = listed.get(key(reserve.underlyingAsset))?.asset;
+      const erc20 = asset && !asset.native ? asset : undefined;
+      return {
+        ...row(reserve, debtBalance(position.scaledVariableDebt, reserve, read.blockTimestamp), reserve.variableBorrowRate),
+        walletBalance: erc20 ? (read.user?.walletBalances[erc20.address] ?? 0n) : null,
+        allowance: erc20 ? (read.user?.allowances[erc20.address] ?? 0n) : null,
+        priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
+        borrowRate: reserve.variableBorrowRate,
+        native: asset?.native ?? false,
+        requiresApprovalReset: asset?.requiresApprovalReset ?? false,
+      };
+    })
     .sort(order);
 
   // Pasar cuma berisi aset whitelist yang reserve-nya aktif, tidak Dibekukan, dan tidak Dijeda (#4). Posisi lama di
@@ -207,6 +231,8 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
       borrowable: user
         ? (user.account.availableBorrowsBase * 10n ** reserve.decimals) / reserve.priceInMarketReferenceCurrency
         : null,
+      priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
+      native: asset.native,
     }));
 
   return { account: user ? accountView(user.account, toUsd) : null, supplies, borrows, supplyMarket, borrowMarket };
@@ -227,13 +253,13 @@ function reserveStatus(reserve: ReserveRead): ReserveStatus {
 
 // Saldo aToken & utang persis seperti kontrak v3.7 (ReserveLogic.getNormalizedIncome/Debt, MathUtils, TokenMath):
 // bunga supply linear, bunga pinjaman majemuk (pendekatan binomial 3 suku), aToken dibulatkan ke bawah, utang ke atas.
-function suppliedBalance(scaled: bigint, reserve: ReserveRead, now: bigint): bigint {
+export function suppliedBalance(scaled: bigint, reserve: ReserveRead, now: bigint): bigint {
   const elapsed = now - BigInt(reserve.lastUpdateTimestamp);
   const income = elapsed <= 0n ? reserve.liquidityIndex : rayMul(RAY + (reserve.liquidityRate * elapsed) / SECONDS_PER_YEAR, reserve.liquidityIndex);
   return (scaled * income) / RAY;
 }
 
-function debtBalance(scaled: bigint, reserve: ReserveRead, now: bigint): bigint {
+export function debtBalance(scaled: bigint, reserve: ReserveRead, now: bigint): bigint {
   const elapsed = now - BigInt(reserve.lastUpdateTimestamp);
   let index = reserve.variableBorrowIndex;
   if (elapsed > 0n) {
@@ -254,7 +280,7 @@ function aprToApy(rate: bigint): number {
 }
 
 // Angka "saat ini" langsung dari getUserAccountData (sumber kebenaran, termasuk aset luar dan E-Mode).
-function accountView(account: AccountRead, toUsd: (base: bigint) => number): AccountView {
+export function accountView(account: AccountRead, toUsd: (base: bigint) => number): AccountView {
   const hasDebt = account.totalDebtBase > 0n;
   const healthFactor = hasDebt ? Number(account.healthFactor) / Number(WAD) : null;
   const totalDebtUsd = toUsd(account.totalDebtBase);
@@ -271,7 +297,7 @@ function accountView(account: AccountRead, toUsd: (base: bigint) => number): Acc
 
 // Nilai mata uang referensi pasar → USD. Di Aave V3 referensinya USD (unit 1e8, harga 1e8), tapi tetap dikonversi
 // lewat BaseCurrencyInfo biar nggak diam-diam salah kalau ada market berreferensi lain.
-function baseToUsd({ marketReferenceCurrencyUnit, marketReferenceCurrencyPriceInUsd }: ChainRead['baseCurrency']) {
+export function baseToUsd({ marketReferenceCurrencyUnit, marketReferenceCurrencyPriceInUsd }: ChainRead['baseCurrency']) {
   const USD_DECIMALS = 1e8;
   return (base: bigint) =>
     (Number(base) / Number(marketReferenceCurrencyUnit)) * (Number(marketReferenceCurrencyPriceInUsd) / USD_DECIMALS);

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import type { Address } from 'viem';
 
 import { useChainView } from '@/aave/useChainView';
+import { WHITELIST } from '@/config/assets';
 import { chainName } from '@/config/chains';
 import {
   visibleSupplyMarket,
@@ -12,18 +13,26 @@ import {
   type ReserveStatus,
   type RiskLevel,
 } from '@/core/chainPosition';
-import { POSITION, RISK, TABLE } from '@/copy';
+import { panelAssets, type PanelTab } from '@/core/panel';
+import { liquidationPrice, type LiqPrice } from '@/core/simulate';
+import { POSITION, TABLE } from '@/copy';
 import { ActionPanel } from './ActionPanel';
-import { hf, pct, tokenAmount, usd } from './format';
+import { pct, tokenAmount, usd } from './format';
+import { HealthFactor } from './HealthFactor';
+import { LiquidationText } from './LiquidationText';
 import { TokenIcon } from './TokenIcon';
 
 const AAVE_APP_URL = 'https://app.aave.com/';
 
-// Detail chain terpilih (Q20, prototype): kepala HF + sisa batas pinjam, empat tabel datar, dan panel aksi di kanan.
-// Tiket 03: baris ERC20 di Pasar supply membuka panel Supply; baris lain menyusul (ETH lewat gateway di tiket 06).
+/** Baris yang dibuka di panel: tab + aset. `asset` kosong = aset pertama tab itu (belum dipilih dari tabel). */
+type Picked = { tab: PanelTab; asset?: Address };
+
+// Detail chain terpilih (Q20, prototype): kepala HF + harga likuidasi + sisa batas pinjam, empat tabel datar, dan panel
+// aksi di kanan. Klik baris ERC20 membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Utang Anda →
+// Repay (ETH lewat gateway di tiket 06/07, withdraw dari Supply Anda di tiket 05).
 export function ChainDetail({ chainId }: { chainId: number }) {
-  const { data: view, isPending, isError, refetch } = useChainView(chainId);
-  const [picked, setPicked] = useState<Address | null>(null);
+  const { data, isPending, isError, refetch } = useChainView(chainId);
+  const [picked, setPicked] = useState<Picked>({ tab: 'supply' });
   const name = chainName(chainId);
 
   if (isPending)
@@ -43,59 +52,66 @@ export function ChainDetail({ chainId }: { chainId: number }) {
       </div>
     );
 
-  // Panel selalu ada di kanan (prototype); baris baru ditandai setelah user memilihnya.
-  const supplyAssets = view.supplyMarket.filter((r) => !r.native);
-  const asset = picked ?? supplyAssets[0]?.asset;
+  const { view } = data;
+  // Panel selalu ada di kanan (prototype); baris ditandai setelah user memilihnya dari tabel.
+  const pick = (tab: PanelTab) => (asset: Address) => setPicked({ tab, asset });
+  const active = (tab: PanelTab) => (picked.tab === tab ? picked.asset : undefined);
+  const clickable = (tab: PanelTab) => new Set(panelAssets(view, tab).map((r) => r.asset));
 
   return (
     <section className="reveal flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <h2 className="display text-2xl font-normal">{name}</h2>
-        {view.account && <AccountFacts account={view.account} />}
+        {view.account && <AccountFacts account={view.account} liquidation={liquidationPrice(data.read, WHITELIST[chainId])} />}
       </div>
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-4">
-          {view.account && <PositionTables view={view} />}
-          <MarketTables view={view} activeAsset={picked ?? undefined} onSupply={setPicked} />
+          {view.account && (
+            <PositionTables view={view} activeDebt={active('repay')} repayable={clickable('repay')} onRepay={pick('repay')} />
+          )}
+          <MarketTables
+            view={view}
+            activeSupply={active('supply')}
+            activeBorrow={active('borrow')}
+            borrowable={clickable('borrow')}
+            onSupply={pick('supply')}
+            onBorrow={pick('borrow')}
+          />
         </div>
-        {asset && (
-          <div className="xl:sticky xl:top-6">
-            <ActionPanel
-              chainId={chainId}
-              assets={supplyAssets}
-              asset={asset}
-              onAssetChange={setPicked}
-              refetch={async () => {
-                const result = await refetch();
-                // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
-                if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
-                return result.data;
-              }}
-            />
-          </div>
-        )}
+        <div className="xl:sticky xl:top-6">
+          <ActionPanel
+            chainId={chainId}
+            data={data}
+            tab={picked.tab}
+            asset={picked.asset}
+            onSelect={(tab, asset) => setPicked({ tab, asset })}
+            refetch={async () => {
+              const result = await refetch();
+              // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
+              if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
+              return result.data;
+            }}
+          />
+        </div>
       </div>
     </section>
   );
 }
 
-// Aman = netral; cuma Waspada/Bahaya yang berwarna (Q20).
-const RISK_TONE: Record<RiskLevel, string> = { aman: 'text-ink', waspada: 'text-warn', bahaya: 'text-danger' };
+// Warna bar batas pinjam = tier HF (Q24).
 const RISK_BAR: Record<RiskLevel, string> = { aman: 'bg-muted', waspada: 'bg-warn', bahaya: 'bg-danger' };
 
-function AccountFacts({ account }: { account: AccountView }) {
+function AccountFacts({ account, liquidation }: { account: AccountView; liquidation: LiqPrice }) {
   return (
     <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
       <Fact label={POSITION.healthFactor} info={POSITION.hfInfo}>
-        {account.healthFactor === null || account.risk === null ? (
-          <span className="text-muted">{POSITION.noDebt}</span>
-        ) : (
-          <span className={RISK_TONE[account.risk]}>
-            <span className="num">{hf(account.healthFactor)}</span>
-            <span className="ml-1.5 text-[0.85em] opacity-80">{RISK[account.risk]}</span>
-          </span>
-        )}
+        <HealthFactor value={account.healthFactor} />
       </Fact>
+      {liquidation.kind !== 'noDebt' && (
+        <Fact label={POSITION.liquidation} info={POSITION.liquidationInfo}>
+          <LiquidationText liq={liquidation} current />
+        </Fact>
+      )}
       <Fact label={POSITION.available}>
         <span className="num">{usd(account.availableBorrowsUsd)}</span>
       </Fact>
@@ -134,7 +150,8 @@ function Fact({ label, info, children }: { label: string; info?: string; childre
   );
 }
 
-function PositionTables({ view }: { view: ChainView }) {
+function PositionTables(props: { view: ChainView; activeDebt: Address | undefined; repayable: Set<Address>; onRepay: (asset: Address) => void }) {
+  const { view } = props;
   return (
     <div className="grid gap-4 2xl:grid-cols-2">
       <FlatTable
@@ -159,6 +176,8 @@ function PositionTables({ view }: { view: ChainView }) {
           key: row.asset,
           symbol: row.symbol,
           note: <AssetNote outside={row.outside} status={row.status} />,
+          active: row.asset === props.activeDebt,
+          onClick: props.repayable.has(row.asset) ? () => props.onRepay(row.asset) : undefined,
           cells: [
             <span key="apy" className="num">{pct(row.apy)}</span>,
             <span key="amount" className="num">{tokenAmount(row.amount, row.decimals)}</span>,
@@ -172,8 +191,11 @@ function PositionTables({ view }: { view: ChainView }) {
 
 function MarketTables(props: {
   view: ChainView;
-  activeAsset: Address | undefined;
+  activeSupply: Address | undefined;
+  activeBorrow: Address | undefined;
+  borrowable: Set<Address>;
   onSupply: (asset: Address) => void;
+  onBorrow: (asset: Address) => void;
 }) {
   const { view } = props;
   const [showAll, setShowAll] = useState(false);
@@ -202,7 +224,7 @@ function MarketTables(props: {
         rows={visibleSupplyMarket(view.supplyMarket, showAll).map((row) => ({
           key: row.asset,
           symbol: row.symbol,
-          active: row.asset === props.activeAsset,
+          active: row.asset === props.activeSupply,
           // ETH lewat gateway menyusul di tiket 06.
           onClick: row.native ? undefined : () => props.onSupply(row.asset),
           cells: [
@@ -221,6 +243,9 @@ function MarketTables(props: {
         rows={view.borrowMarket.map((row) => ({
           key: row.asset,
           symbol: row.symbol,
+          active: row.asset === props.activeBorrow,
+          // ETH lewat gateway menyusul di tiket 07.
+          onClick: props.borrowable.has(row.asset) ? () => props.onBorrow(row.asset) : undefined,
           cells: [
             <span key="apy" className="num">{pct(row.apy)}</span>,
             <span key="borrowable" className="num text-muted">

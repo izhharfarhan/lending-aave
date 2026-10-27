@@ -1,6 +1,7 @@
 import { maxUint256 } from 'viem';
 
 import { nextStep, type NextStepInput } from './nextStep';
+import type { RepayPlan } from './simulate';
 
 const USDC = (n: number) => BigInt(n) * 1_000_000n;
 
@@ -15,8 +16,15 @@ const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
   allowance: 0n,
   approvalMode: 'exact',
   requiresApprovalReset: false,
+  action: { action: 'supply' },
   ...overrides,
 });
+// Borrow 100 USDC dengan jaminan cukup, HF sesudahnya ≥ 2.
+const borrow = (action: Partial<Extract<NextStepInput['action'], { action: 'borrow' }>> = {}, overrides: Partial<NextStepInput> = {}) =>
+  input({ balance: 0n, action: { action: 'borrow', hasCollateral: true, gate: 'none', riskChecked: false, riskTyped: false, ...action }, ...overrides });
+// Repay 100 USDC sebagian (bukan lunas penuh).
+const repay = (plan: RepayPlan | null = { full: false, send: USDC(100), spend: USDC(100) }, overrides: Partial<NextStepInput> = {}) =>
+  input({ action: { action: 'repay', plan }, ...overrides });
 
 describe('nextStep()', () => {
   describe('positive', () => {
@@ -76,6 +84,58 @@ describe('nextStep()', () => {
       // Dari 0 langsung approve; sisa izin yang sudah cukup langsung supply.
       expect(nextStep(input({ requiresApprovalReset: true }))).toEqual({ step: 'approve', amount: USDC(100) });
       expect(nextStep(input({ requiresApprovalReset: true, allowance: USDC(100) }))).toEqual({ step: 'supply' });
+    });
+  });
+
+  describe('borrow', () => {
+    it('borrows straight away: no approve, no wallet balance needed', () => {
+      expect(nextStep(borrow())).toEqual({ step: 'borrow' });
+    });
+
+    it('asks to supply collateral first when there is none, before asking for an amount', () => {
+      expect(nextStep(borrow({ hasCollateral: false }, { amount: null }))).toEqual({ step: 'needCollateral' });
+    });
+
+    it('locks a borrow past the LTV limit', () => {
+      expect(nextStep(borrow({ gate: 'locked', riskChecked: true, riskTyped: true }))).toEqual({ step: 'overLtv' });
+    });
+
+    it('lets an amber warning through but requires the checkbox or typed "confirm" for the stricter tiers', () => {
+      expect(nextStep(borrow({ gate: 'warn' }))).toEqual({ step: 'borrow' });
+      expect(nextStep(borrow({ gate: 'check' }))).toEqual({ step: 'confirmRisk', gate: 'check' });
+      expect(nextStep(borrow({ gate: 'type' }))).toEqual({ step: 'confirmRisk', gate: 'type' });
+      expect(nextStep(borrow({ gate: 'check', riskChecked: true }))).toEqual({ step: 'borrow' });
+      expect(nextStep(borrow({ gate: 'type', riskTyped: true }))).toEqual({ step: 'borrow' });
+    });
+
+    it('does not let a ticked checkbox pass once the tier rises to typing "confirm"', () => {
+      expect(nextStep(borrow({ gate: 'type', riskChecked: true }))).toEqual({ step: 'confirmRisk', gate: 'type' });
+    });
+
+    it('still asks for an amount before judging the risk', () => {
+      expect(nextStep(borrow({ gate: 'locked' }, { amount: null }))).toEqual({ step: 'enterAmount' });
+    });
+  });
+
+  describe('repay', () => {
+    it('approves exactly the repaid amount, then repays', () => {
+      expect(nextStep(repay())).toEqual({ step: 'approve', amount: USDC(100) });
+      expect(nextStep(repay(undefined, { allowance: USDC(100) }))).toEqual({ step: 'repay' });
+    });
+
+    it('approves debt + interest cushion for a full repay sent as type(uint256).max', () => {
+      const full: RepayPlan = { full: true, send: maxUint256, spend: USDC(100) + 12n };
+
+      expect(nextStep(repay(full, { allowance: USDC(100) }))).toEqual({ step: 'approve', amount: USDC(100) + 12n });
+      expect(nextStep(repay(full, { allowance: USDC(100) + 12n }))).toEqual({ step: 'repay' });
+    });
+
+    it('blocks a repay above the wallet balance', () => {
+      expect(nextStep(repay(undefined, { balance: USDC(99) }))).toEqual({ step: 'insufficientBalance' });
+    });
+
+    it('resets a leftover USDT allowance before approving the repay', () => {
+      expect(nextStep(repay(undefined, { requiresApprovalReset: true, allowance: USDC(30) }))).toEqual({ step: 'resetApproval' });
     });
   });
 });

@@ -2,9 +2,10 @@ import type { Hash } from 'viem';
 
 import type { AppMode } from './forkGuard';
 
-// Jenis riwayat spec (Supply/Withdraw/Borrow/Repay/…); tiket 03 baru supply. Approve/reset sengaja nggak dicatat:
-// bukan jenis riwayat, dan nggak pernah punya pasangan di indexer saat digabung per txHash (tiket 22).
-const KINDS = ['supply'] as const;
+// Jenis riwayat spec (Supply/Withdraw/Borrow/Repay/…); withdraw dan lainnya menyusul di tiketnya. Approve/reset
+// sengaja nggak dicatat: bukan jenis riwayat, dan nggak pernah punya pasangan di indexer saat digabung per txHash
+// (tiket 22).
+const KINDS = ['supply', 'borrow', 'repay'] as const;
 const STATUSES = ['confirmed', 'failed'] as const;
 
 /**

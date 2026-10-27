@@ -1,53 +1,17 @@
 import { erc20Abi, maxUint256, type Address } from 'viem';
 
-import { WHITELIST } from '@/config/assets';
-import { AAVE } from '@/config/contracts';
-import { buildChainView, type ChainRead } from '@/core/chainPosition';
-import { nextStep, type NextStepInput, type WalletStepName } from '@/core/nextStep';
+import { buildChainView } from '@/core/chainPosition';
 import { aaveErrorName } from '@/core/walletError';
 import { publicClient, TEST_ACCOUNT, walletClient } from '../../test/fork/clients';
 import { fundErc20 } from '../../test/fork/fund';
-import { gasLimitFor } from './gasLimit';
-import { readChain } from './readChain';
-import { supplyRequest } from './supplyTx';
+import { contracts, read, runLikeTheApp, whitelist } from '../../test/fork/likeTheApp';
+import { poolRequest } from './poolTx';
 
 const USDC: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 const USDT: Address = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
-const contracts = AAVE[1];
-const whitelist = WHITELIST[1];
 const units = (n: number) => BigInt(n) * 1_000_000n;
-
-const read = () => readChain(publicClient, { contracts, whitelist, user: TEST_ACCOUNT });
-// Masukan nextStep diambil dari baris Pasar supply, persis seperti panel aksi.
-const stepFor = (chain: ChainRead, asset: Address, amount: bigint, approvalMode: NextStepInput['approvalMode']) => {
-  const row = buildChainView(chain, whitelist).supplyMarket.find((r) => r.asset === asset)!;
-  return nextStep({
-    connected: true,
-    txLocked: false,
-    data: 'ready',
-    txRunning: false,
-    amount,
-    balance: row.walletBalance!,
-    allowance: row.allowance!,
-    approvalMode,
-    requiresApprovalReset: row.requiresApprovalReset,
-  });
-};
-
-// Jalur yang sama dengan panel aksi: baca state → nextStep → kirim langkah itu → baca ulang, sampai supply terkirim.
-// Mengembalikan langkah yang dikirim ke wallet, berurutan.
-async function supplyLikeTheApp(asset: Address, amount: bigint, approvalMode: NextStepInput['approvalMode'] = 'exact') {
-  const sent: { step: WalletStepName; approveAmount?: bigint }[] = [];
-  for (;;) {
-    const step = stepFor(await read(), asset, amount, approvalMode);
-    if (step.step !== 'resetApproval' && step.step !== 'approve' && step.step !== 'supply') throw new Error(`Berhenti di ${step.step}`);
-    const request = supplyRequest(step, { pool: contracts.pool, asset, amount, user: TEST_ACCOUNT });
-    const hash = await walletClient.writeContract({ ...request, gas: await gasLimitFor(publicClient, request, TEST_ACCOUNT) } as never);
-    expect((await publicClient.waitForTransactionReceipt({ hash })).status).toBe('success');
-    sent.push(step.step === 'approve' ? { step: step.step, approveAmount: step.amount } : { step: step.step });
-    if (step.step === 'supply') return sent;
-  }
-}
+const supplyLikeTheApp = (asset: Address, amount: bigint, approvalMode: 'exact' | 'unlimited' = 'exact') =>
+  runLikeTheApp('supply', asset, amount, { approvalMode });
 
 const allowanceToPool = (asset: Address) =>
   publicClient.readContract({ address: asset, abi: erc20Abi, functionName: 'allowance', args: [TEST_ACCOUNT, contracts.pool] });
@@ -103,7 +67,7 @@ describe('supply ERC20 (fork Ethereum)', () => {
 
   describe('negative', () => {
     it('decodes an Aave revert into its custom error name for translation', async () => {
-      const request = supplyRequest({ step: 'supply' }, { pool: contracts.pool, asset: USDC, amount: 0n, user: TEST_ACCOUNT });
+      const request = poolRequest({ step: 'supply' }, { pool: contracts.pool, asset: USDC, amount: 0n, user: TEST_ACCOUNT });
       const error = await publicClient.simulateContract({ ...request, account: TEST_ACCOUNT }).catch((e: unknown) => e);
 
       expect(aaveErrorName(error)).toBe('InvalidAmount');
