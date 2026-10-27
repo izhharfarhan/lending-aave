@@ -52,6 +52,8 @@ export type NextStepInput = {
   approvalMode: 'exact' | 'unlimited';
   /** Token yang menolak approve dari izin ≠ 0 ke nilai ≠ 0 (USDT Ethereum). */
   requiresApprovalReset: boolean;
+  /** ETH lewat WrappedTokenGateway: dikirim sebagai `value` transaksi, tanpa approve (`balance` = saldo ETH). */
+  native: boolean;
 };
 
 export type NextStep =
@@ -115,7 +117,7 @@ export function nextStep(input: NextStepInput): NextStep {
   // Sebelum approve: approve cuma buang gas kalau transaksinya nggak mungkin jalan.
   if (spend > input.balance) return { step: 'insufficientBalance' };
 
-  if (allowance < (plan ? plan.required : amount)) {
+  if (!input.native && allowance < (plan ? plan.required : amount)) {
     if (input.requiresApprovalReset && allowance > 0n) return { step: 'resetApproval' };
     return { step: 'approve', amount: input.approvalMode === 'unlimited' ? maxUint256 : spend };
   }

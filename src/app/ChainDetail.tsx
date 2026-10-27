@@ -28,8 +28,8 @@ const AAVE_APP_URL = 'https://app.aave.com/';
 type Picked = { tab: PanelTab; asset?: Address };
 
 // Detail chain terpilih (Q20, prototype): kepala HF + harga likuidasi + sisa batas pinjam, empat tabel datar, dan panel
-// aksi di kanan. Klik baris ERC20 membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Supply Anda →
-// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay (ETH lewat gateway di tiket 06/07).
+// aksi di kanan. Klik baris membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Supply Anda →
+// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. Withdraw & borrow ETH lewat gateway di tiket 07.
 export function ChainDetail({ chainId }: { chainId: number }) {
   const { data, isPending, isError, refetch } = useChainView(chainId);
   const [picked, setPicked] = useState<Picked>({ tab: 'supply' });
@@ -264,8 +264,7 @@ function MarketTables(props: {
           key: row.asset,
           symbol: row.symbol,
           active: row.asset === props.activeSupply,
-          // ETH lewat gateway menyusul di tiket 06.
-          onClick: row.native ? undefined : () => props.onSupply(row.asset),
+          onClick: () => props.onSupply(row.asset),
           cells: [
             <span key="apy" className="num">{pct(row.apy)}</span>,
             <span key="wallet" className="num text-muted">

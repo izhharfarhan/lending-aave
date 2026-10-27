@@ -107,7 +107,7 @@ export type SupplyRow = PositionRowBase & {
   native: boolean;
 };
 export type DebtRow = PositionRowBase & {
-  /** Saldo wallet & izin ke Pool untuk tab Repay. `null` = aset luar (tanpa aksi) atau aset `native`. */
+  /** Saldo wallet & izin ke Pool untuk tab Repay. `null` = aset luar (tanpa aksi); izin juga `null` untuk aset `native`. */
   walletBalance: bigint | null;
   allowance: bigint | null;
   priceUsd: number;
@@ -204,7 +204,8 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
       const erc20 = asset && !asset.native ? asset : undefined;
       return {
         ...row(reserve, debtBalance(position.scaledVariableDebt, reserve, read.blockTimestamp), reserve.variableBorrowRate),
-        walletBalance: erc20 ? (read.user?.walletBalances[erc20.address] ?? 0n) : null,
+        // Aset `native`: saldo ETH (repay lewat gateway, tanpa izin).
+        walletBalance: asset ? (read.user?.walletBalances[asset.address] ?? 0n) : null,
         allowance: erc20 ? (read.user?.allowances[erc20.address] ?? 0n) : null,
         priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
         borrowRate: reserve.variableBorrowRate,

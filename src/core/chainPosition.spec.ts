@@ -192,6 +192,12 @@ describe('buildChainView()', () => {
       });
       // Aset luar (GHO) nggak punya aksi: saldo wallet & izinnya nggak dibaca.
       expect(view.borrows.find((r) => r.symbol === 'GHO')).toMatchObject({ walletBalance: null, allowance: null });
+      // Utang ETH (reserve WETH) dilunasi dengan ETH lewat gateway: saldonya saldo ETH, tanpa izin.
+      expect(buildChainView(read('ethDebtOutsideNonCollateral'), WHITELIST).borrows.find((r) => r.symbol === 'ETH')).toMatchObject({
+        native: true,
+        walletBalance: 76_277_248_076_830_282n,
+        allowance: null,
+      });
     });
 
     it('carries what the Withdraw tab and collateral toggle need on each supply row', () => {

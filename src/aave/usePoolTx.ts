@@ -5,10 +5,10 @@ import { usePublicClient, useWriteContract } from 'wagmi';
 import { AAVE } from '@/config/contracts';
 import type { NextStep, WalletStepName } from '@/core/nextStep';
 import type { LocalTxEntry } from '@/core/localHistory';
-import type { MainStep } from '@/core/panel';
+import type { MainStep, PanelTx } from '@/core/panel';
 import { aaveErrorName, walletErrorKind, type WalletErrorKind } from '@/core/walletError';
 import { gasLimitFor } from './gasLimit';
-import { poolRequest } from './poolTx';
+import { requestFor } from './poolTx';
 import { useAddLocalHistory } from './useLocalHistory';
 
 export type WalletStep = Extract<NextStep, { step: WalletStepName }>;
@@ -51,23 +51,17 @@ export function plannedSteps(step: WalletStep, main: MainStep): WalletStepName[]
 type PoolTxArgs = {
   chainId: number;
   user: Address | undefined;
-  /** Transaksi utama tab aksi, dan jenisnya di riwayat. */
-  main: MainStep;
-  historyKind: LocalTxEntry['kind'];
-  /** Toggle jaminan: nyalakan atau matikan. */
-  useAsCollateral?: boolean;
   asset: { address: Address; symbol: string; decimals: number };
-  /** Argumen `amount` transaksi utama (repay lunas penuh = `type(uint256).max`). */
-  send: bigint;
-  /** Jumlah yang ditampilkan & dicatat di riwayat (repay lunas penuh = utang saat dibaca). */
-  amount: bigint;
+  /** Transaksi utama, jumlah yang dikirim/dicatat, dan jalur ETH (dari `panelTx`). */
+  plan: PanelTx;
   /** Baca ulang posisi + izin, lalu hitung nextStep dari data baru itu. Harus melempar kalau pembacaan gagal. */
   refreshStep: () => Promise<NextStep>;
 };
 
 // Satu klik menjalankan semua langkah yang tersisa (reset → approve → aksi). Tiap langkah selesai, state dibaca
 // ulang dan nextStep dihitung lagi dari on-chain, jadi approve yang ternyata sudah cukup nggak diminta dua kali.
-export function usePoolTx({ chainId, user, main, historyKind, useAsCollateral, asset, send, amount, refreshStep }: PoolTxArgs) {
+export function usePoolTx({ chainId, user, asset, plan, refreshStep }: PoolTxArgs) {
+  const { main, historyKind, shown: amount } = plan;
   const [tx, setTx] = useState<TxState>({ status: 'idle' });
   const { writeContractAsync } = useWriteContract();
   const client = usePublicClient({ chainId });
@@ -85,7 +79,7 @@ export function usePoolTx({ chainId, user, main, historyKind, useAsCollateral, a
       setTx({ status: 'running', steps, index, phase: 'wallet', sent: { ...sent } });
       let hash: Hash;
       try {
-        const request = poolRequest(step, { pool: AAVE[chainId].pool, asset: asset.address, amount: send, user, useAsCollateral });
+        const request = requestFor(step, { contracts: AAVE[chainId], asset: asset.address, user, plan });
         // Estimasi juga yang pertama menangkap revert kontrak (mis. melewati batas pinjam) sebelum popup wallet.
         const gas = await gasLimitFor(client, request, user);
         hash = await writeContractAsync({ ...request, chainId, gas } as Parameters<typeof writeContractAsync>[0]);

@@ -36,3 +36,10 @@ export const poolAbi = parseAbi([
   'error UserHasAssetWithZeroLtv()',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
 ]);
+
+// WrappedTokenGatewayV3 (aave-v3-origin): ETH dibungkus jadi WETH oleh gateway. Argumen pertama (pool) diabaikan kontrak
+// v3.7 (gateway terikat ke satu Pool), tapi tetap diisi alamat Pool resmi.
+export const gatewayAbi = parseAbi([
+  'function depositETH(address pool, address onBehalfOf, uint16 referralCode) payable',
+  'function repayETH(address pool, uint256 amount, address onBehalfOf) payable',
+]);

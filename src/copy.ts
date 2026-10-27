@@ -111,6 +111,8 @@ export const PANEL = {
   noDebts: 'Tidak ada utang yang bisa dilunasi dari panel ini.',
   noSupplies: 'Tidak ada supply yang bisa ditarik dari panel ini.',
   noSupplyAssets: 'Tidak ada aset yang bisa di-supply dari panel ini.',
+  repayFullEth: (debt: string, sent: string) =>
+    `Lunas penuh: Aave menarik utang persis saat transaksi dijalankan (sekarang ${debt} ETH, terus bertambah oleh bunga). Anda mengirim ${sent} ETH; kelebihannya dikembalikan otomatis oleh gateway.`,
   withdrawAll: (amount: string, symbol: string) =>
     `Withdraw semua: seluruh ${symbol} ditarik saat transaksi dijalankan (sekarang ${amount} ${symbol}, termasuk bunga yang terus bertambah).`,
   collateralTitle: (symbol: string) => `Jaminan ${symbol}`,
@@ -210,6 +212,7 @@ export const STEPS = {
   supply: {
     title: (amount: string, symbol: string) => `Supply ${amount} ${symbol}`,
     detail: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
+    detailEth: 'ETH dikirim ke gateway resmi Aave, dibungkus jadi WETH, lalu di-supply atas nama Anda. Tanpa approve. Ada biaya jaringan.',
   },
   borrow: {
     title: (amount: string, symbol: string) => `Borrow ${amount} ${symbol}`,
@@ -228,8 +231,10 @@ export const STEPS = {
     title: (amount: string, symbol: string) => `Repay ${amount} ${symbol}`,
     titleFull: (symbol: string) => `Lunasi utang ${symbol}`,
     detail: 'Transaksi utama ke Aave Pool. Ada biaya jaringan.',
+    detailEth: 'ETH dikirim ke gateway resmi Aave untuk melunasi utang Anda. Kelebihan ETH dikembalikan otomatis. Tanpa approve. Ada biaya jaringan.',
   },
   pool: 'Aave Pool',
+  gateway: 'Aave WrappedTokenGateway',
   token: (symbol: string) => `Kontrak ${symbol}`,
   spender: 'Izin untuk Aave Pool',
   official: '✓ alamat resmi Aave',

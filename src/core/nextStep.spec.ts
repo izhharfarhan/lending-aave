@@ -17,6 +17,7 @@ const input = (overrides: Partial<NextStepInput> = {}): NextStepInput => ({
   approvalMode: 'exact',
   requiresApprovalReset: false,
   paused: false,
+  native: false,
   action: { action: 'supply' },
   ...overrides,
 });
@@ -204,6 +205,30 @@ describe('nextStep()', () => {
     it('still waits for the wallet, the data and the fork guard first', () => {
       expect(nextStep(toggle({}, { connected: false }))).toEqual({ step: 'connect' });
       expect(nextStep(toggle({}, { txLocked: true }))).toEqual({ step: 'locked' });
+    });
+  });
+
+  describe('ETH lewat gateway', () => {
+    // Saldo 500 ETH (helper `input`), jumlah dalam wei.
+    const ETH = (n: number) => BigInt(n) * 10n ** 18n;
+    const eth = (overrides: Partial<NextStepInput> = {}) => input({ native: true, amount: ETH(100), balance: ETH(500), ...overrides });
+    it('supplies ETH straight away: no approve, no reset, whatever the allowance', () => {
+      expect(nextStep(eth())).toEqual({ step: 'supply' });
+      expect(nextStep(eth({ requiresApprovalReset: true, allowance: ETH(30) }))).toEqual({ step: 'supply' });
+    });
+
+    it('repays ETH without approve, also in full with the cushioned value', () => {
+      const full: RepayPlan = { full: true, send: maxUint256, spend: ETH(100) + 12n, required: ETH(100) + 1n };
+      const partial: RepayPlan = { full: false, send: ETH(100), spend: ETH(100), required: ETH(100) };
+
+      expect(nextStep(eth({ action: { action: 'repay', plan: partial } }))).toEqual({ step: 'repay' });
+      expect(nextStep(eth({ action: { action: 'repay', plan: full } }))).toEqual({ step: 'repay' });
+    });
+
+    it('still blocks an amount above the ETH balance', () => {
+      expect(nextStep(eth({ amount: ETH(501) }))).toEqual({ step: 'insufficientBalance' });
+      const full: RepayPlan = { full: true, send: maxUint256, spend: ETH(600), required: ETH(600) };
+      expect(nextStep(eth({ action: { action: 'repay', plan: full } }))).toEqual({ step: 'insufficientBalance' });
     });
   });
 });

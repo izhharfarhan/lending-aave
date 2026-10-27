@@ -13,7 +13,7 @@ import { AAVE } from '@/config/contracts';
 import { explorerAddressUrl, explorerTxUrl, revokeCashUrl } from '@/config/explorer';
 import type { ChainRead, ChainView, SupplyRow } from '@/core/chainPosition';
 import type { NextStep, NextStepInput, WalletStepName } from '@/core/nextStep';
-import { evaluatePanel, PANEL_TABS, panelAssets, panelTx, type PanelAsset, type PanelTab } from '@/core/panel';
+import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelTx, type PanelAsset, type PanelTab } from '@/core/panel';
 import { parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
 import { APPROVAL, CTA, PANEL, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
@@ -108,12 +108,8 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   const poolTx = usePoolTx({
     chainId,
     user: address,
-    main: PANEL_TABS[tab].main,
-    historyKind: ptx?.historyKind ?? 'supply',
-    useAsCollateral: ptx?.useAsCollateral ?? false,
     asset: { address: row?.asset ?? '0x', symbol: row?.symbol ?? '', decimals: row?.decimals ?? 0 },
-    send: ptx?.send ?? 0n,
-    amount: ptx?.shown ?? 0n,
+    plan: ptx ?? idleTx(tab),
     refreshStep: async () => evaluate(await refetch(), false).step,
   });
   const { tx } = poolTx;
@@ -152,6 +148,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
     amount: tokenAmount(ptx?.shown ?? 0n, row?.decimals ?? 0),
     approveAmount: tokenAmount(repay?.spend ?? amount ?? 0n, row?.decimals ?? 0),
     full: ptx?.full ?? false,
+    native: ptx?.gateway != null,
     enable: ptx?.useAsCollateral ?? false,
     unlimited: approvalMode === 'unlimited',
   };
@@ -253,7 +250,9 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
               )}
               {row.tab === 'repay' && repay?.full && (
                 <p className="mt-3 text-xs text-muted">
-                  {PANEL.repayFull(tokenAmount(row.debt, row.decimals), row.symbol, tokenAmount(repay.spend, row.decimals))}
+                  {row.native
+                    ? PANEL.repayFullEth(tokenAmount(row.debt, row.decimals), tokenAmount(repay.spend, row.decimals))
+                    : PANEL.repayFull(tokenAmount(row.debt, row.decimals), row.symbol, tokenAmount(repay.spend, row.decimals))}
                 </p>
               )}
               {row.tab === 'withdraw' && withdraw?.all && (
@@ -531,6 +530,8 @@ type StepCopy = {
   /** Toggle jaminan: nyalakan atau matikan. */
   enable: boolean;
   unlimited: boolean;
+  /** Transaksi utama ETH lewat WrappedTokenGateway. */
+  native: boolean;
 };
 
 function stepText(name: WalletStepName, c: StepCopy) {
@@ -543,11 +544,14 @@ function stepText(name: WalletStepName, c: StepCopy) {
         detail: STEPS.approve.detail(c.approveAmount, c.symbol, c.unlimited),
       };
     case 'supply':
-      return { title: STEPS.supply.title(c.amount, c.symbol), detail: STEPS.supply.detail };
+      return { title: STEPS.supply.title(c.amount, c.symbol), detail: c.native ? STEPS.supply.detailEth : STEPS.supply.detail };
     case 'borrow':
       return { title: STEPS.borrow.title(c.amount, c.symbol), detail: STEPS.borrow.detail };
     case 'repay':
-      return { title: c.full ? STEPS.repay.titleFull(c.symbol) : STEPS.repay.title(c.amount, c.symbol), detail: STEPS.repay.detail };
+      return {
+        title: c.full ? STEPS.repay.titleFull(c.symbol) : STEPS.repay.title(c.amount, c.symbol),
+        detail: c.native ? STEPS.repay.detailEth : STEPS.repay.detail,
+      };
     case 'withdraw':
       return { title: c.full ? STEPS.withdraw.titleAll(c.symbol) : STEPS.withdraw.title(c.amount, c.symbol), detail: STEPS.withdraw.detail };
     case 'setCollateral':
@@ -558,7 +562,12 @@ function stepText(name: WalletStepName, c: StepCopy) {
 const isApproval = (name: WalletStepName) => name === 'approve' || name === 'resetApproval';
 
 function WalletSteps(props: StepCopy & { chainId: number; steps: WalletStepName[]; token: Address }) {
-  const pool = AAVE[props.chainId].pool;
+  const contracts = AAVE[props.chainId];
+  // Transaksi utama ETH ditujukan ke gateway; approve (ERC20) dan aksi lain ke Pool.
+  const target = (name: WalletStepName) =>
+    props.native && !isApproval(name)
+      ? { label: STEPS.gateway, address: contracts.wrappedTokenGateway }
+      : { label: isApproval(name) ? STEPS.spender : STEPS.pool, address: contracts.pool };
   return (
     <div>
       <h3 className="text-xs text-muted">{STEPS.heading}</h3>
@@ -576,7 +585,7 @@ function WalletSteps(props: StepCopy & { chainId: number; steps: WalletStepName[
                 {/* Approve dikirim ke kontrak token (itu yang tampil di wallet), dan yang diberi izin Aave Pool: dua-duanya
                     perlu bisa dicocokkan (spec 89). */}
                 {isApproval(name) && <OfficialAddress chainId={props.chainId} label={STEPS.token(props.symbol)} address={props.token} />}
-                <OfficialAddress chainId={props.chainId} label={isApproval(name) ? STEPS.spender : STEPS.pool} address={pool} />
+                <OfficialAddress chainId={props.chainId} {...target(name)} />
               </div>
             </li>
           );

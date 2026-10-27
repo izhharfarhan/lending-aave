@@ -3,7 +3,7 @@ import { maxUint256, type Address } from 'viem';
 
 import { buildChainView, type ChainRead, type WhitelistAsset } from './chainPosition';
 import { parseBigint } from './fixtures/bigintJson';
-import { evaluatePanel, panelAssets, type PanelInput } from './panel';
+import { evaluatePanel, panelAssets, panelTx, type PanelInput } from './panel';
 
 type Fixture = Omit<ChainRead, 'user'> & { users: Record<string, NonNullable<ChainRead['user']>> };
 const fixture = parseBigint<Fixture>(readFileSync('src/core/fixtures/ethereum.position.json', 'utf8'));
@@ -45,9 +45,19 @@ describe('panelAssets()', () => {
     expect(panelAssets(view, 'borrow').map((r) => r.symbol)).toEqual(['USDC', 'USDT']);
   });
 
-  it('offers only whitelisted ERC20 debts to repay, never outside assets or ETH debt', () => {
+  it('offers whitelisted debts to repay, ETH included (through the gateway), never outside assets', () => {
     expect(panelAssets(buildChainView(read('bahayaWithOutsideAssets'), WHITELIST), 'repay').map((r) => r.symbol)).toEqual(['USDC']);
-    expect(panelAssets(buildChainView(read('ethDebtOutsideNonCollateral'), WHITELIST), 'repay')).toEqual([]);
+    expect(panelAssets(buildChainView(read('ethDebtOutsideNonCollateral'), WHITELIST), 'repay')).toEqual([
+      expect.objectContaining({ symbol: 'ETH', native: true }),
+    ]);
+  });
+
+  it('offers ETH to supply next to the ERC20s', () => {
+    expect(panelAssets(buildChainView(read('noDebt'), WHITELIST), 'supply').map((r) => [r.symbol, r.native])).toEqual([
+      ['ETH', true],
+      ['USDC', false],
+      ['USDT', false],
+    ]);
   });
 
   it('keeps a frozen or paused position in the panel; the button decides what is allowed', () => {
@@ -122,5 +132,48 @@ describe('evaluatePanel()', () => {
       .toEqual({ step: 'approve', amount: 1_000_000n });
     expect(evaluate(paused, { tab: 'withdraw', asset: USDC, amount: 1_000_000n }).step).toEqual({ step: 'paused' });
     expect(evaluate(paused, { tab: 'collateral', asset: USDC }).step).toEqual({ step: 'paused' });
+  });
+
+  describe('ETH lewat gateway', () => {
+    it('supplies ETH from the wallet ETH balance with no approve step', () => {
+      // Wallet noDebt: 0,088035 ETH.
+      expect(evaluate('noDebt', { tab: 'supply', asset: WETH, amount: 50_000_000_000_000_000n }).step).toEqual({ step: 'supply' });
+      expect(evaluate('noDebt', { tab: 'supply', asset: WETH, amount: 90_000_000_000_000_000n }).step).toEqual({
+        step: 'insufficientBalance',
+      });
+    });
+
+    it('repays part of an ETH debt with exactly the typed ETH and no approve', () => {
+      // Utang ETH ±3,63 tapi wallet cuma 0,0763 ETH: repay 0,05 ETH sebagian.
+      const amount = 50_000_000_000_000_000n;
+      const partial = evaluate('ethDebtOutsideNonCollateral', { tab: 'repay', asset: WETH, amount });
+      const row = panelAssets(buildChainView(read('ethDebtOutsideNonCollateral'), WHITELIST), 'repay')[0];
+
+      expect(partial.repay?.full).toBe(false);
+      expect(partial.step).toEqual({ step: 'repay' });
+      expect(panelTx(row, partial, amount)).toMatchObject({ send: amount, gateway: { value: amount } });
+    });
+
+    it('repays a whole ETH debt with type(uint256).max, sending debt + cushion as value', () => {
+      // Posisi yang sama, wallet diisi 10 ETH supaya cukup untuk utang + bantalan.
+      const base = read('ethDebtOutsideNonCollateral');
+      const rich: ChainRead = { ...base, user: { ...base.user!, walletBalances: { ...base.user!.walletBalances, [WETH]: 10n * 10n ** 18n } } };
+      const row = panelAssets(buildChainView(rich, WHITELIST), 'repay')[0];
+      if (row.tab !== 'repay') throw new Error('baris repay');
+      const state = evaluate(rich, { tab: 'repay', asset: WETH, amount: row.debt });
+
+      expect(state.repay?.full).toBe(true);
+      expect(state.step).toEqual({ step: 'repay' });
+      expect(panelTx(row, state, row.debt)).toMatchObject({ send: maxUint256, shown: row.debt, gateway: { value: state.repay!.spend } });
+      expect(state.repay!.spend).toBeGreaterThan(row.debt);
+    });
+
+    it('toggles ETH collateral straight on the Pool, not through the gateway', () => {
+      const row = panelAssets(buildChainView(read('ethCollateralUsdcDebt'), WHITELIST), 'collateral')[0];
+      const state = evaluate('ethCollateralUsdcDebt', { tab: 'collateral', asset: WETH });
+
+      expect(row.native).toBe(true);
+      expect(panelTx(row, state, null).gateway).toBeNull();
+    });
   });
 });

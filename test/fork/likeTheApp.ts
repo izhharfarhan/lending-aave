@@ -1,7 +1,7 @@
 import type { Address } from 'viem';
 
 import { gasLimitFor } from '../../src/aave/gasLimit';
-import { poolRequest } from '../../src/aave/poolTx';
+import { requestFor } from '../../src/aave/poolTx';
 import { readChain } from '../../src/aave/readChain';
 import { WHITELIST } from '../../src/config/assets';
 import { AAVE } from '../../src/config/contracts';
@@ -45,13 +45,13 @@ export async function runLikeTheApp(tab: PanelInput['tab'], asset: Address, amou
     const state = evaluatePanel(chain, view, whitelist, panelInput(tab, asset, amount, options));
     const row = panelAssets(view, tab).find((r) => r.asset === asset)!;
     // Yang dikirim ke kontrak dihitung persis seperti panel (uint256.max untuk lunas/withdraw semua, arah toggle jaminan).
-    const { main, send, useAsCollateral } = panelTx(row, state, amount);
+    const plan = panelTx(row, state, amount);
     const { step } = state;
-    if (step.step !== 'resetApproval' && step.step !== 'approve' && step.step !== main) throw new Error(`Berhenti di ${step.step}`);
-    const request = poolRequest(step, { pool: contracts.pool, asset, amount: send, user: TEST_ACCOUNT, useAsCollateral });
+    if (step.step !== 'resetApproval' && step.step !== 'approve' && step.step !== plan.main) throw new Error(`Berhenti di ${step.step}`);
+    const request = requestFor(step, { contracts, asset, user: TEST_ACCOUNT, plan });
     const hash = await walletClient.writeContract({ ...request, gas: await gasLimitFor(publicClient, request, TEST_ACCOUNT) } as never);
     expect((await publicClient.waitForTransactionReceipt({ hash })).status).toBe('success');
     sent.push(step.step === 'approve' ? { step: step.step, approveAmount: step.amount } : { step: step.step });
-    if (step.step === main) return sent;
+    if (step.step === plan.main) return sent;
   }
 }

@@ -19,6 +19,8 @@ type AssetBase = {
   apy: number;
   /** Reserve Dijeda: posisinya tetap bisa dibuka di panel, tapi semua aksi nonaktif dengan penjelasan. */
   paused: boolean;
+  /** ETH (reserve WETH): supply/repay lewat WrappedTokenGateway, dibayar dengan ETH, tanpa approve. */
+  native: boolean;
 };
 /** Aset yang keluar dari wallet lewat approve ke Pool. `null` = belum connect. */
 type FromWallet = { walletBalance: bigint | null; allowance: bigint | null; requiresApprovalReset: boolean };
@@ -70,6 +72,8 @@ type Context = {
 
 type TabSpec<A extends PanelAsset> = {
   main: MainStep;
+  /** Aset `native` (ETH) di tab ini lewat WrappedTokenGateway: dibayar dengan ETH, tanpa approve. */
+  gateway: boolean;
   /** Aset yang bisa dipilih di tab ini, urut seperti tabelnya. */
   assets: (view: ChainView) => A[];
   prepare: (row: A, ctx: Context) => Prepared;
@@ -91,17 +95,19 @@ const risk = (sim: Simulation | null, ctx: Context) => ({
   riskTyped: ctx.riskTyped,
 });
 
-// Semua yang beda per tab ada di sini. ETH lewat gateway menyusul di tiket 06/07 (toggle jaminan ETH tetap langsung ke
-// Pool); aset luar read-only. Pasar supply/pinjam sudah tanpa reserve Dibekukan/Dijeda; posisi di reserve itu tetap
+// Semua yang beda per tab ada di sini. ETH: supply & repay lewat gateway; withdraw & borrow ETH menyusul di tiket 07
+// (toggle jaminan ETH langsung ke Pool); aset luar read-only. Pasar supply/pinjam sudah tanpa reserve Dibekukan/Dijeda; posisi di reserve itu tetap
 // bisa dibuka (Dibekukan masih boleh withdraw, repay, dan toggle jaminan; Dijeda ditolak `nextStep` dengan penjelasan).
 export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
   supply: {
     main: 'supply',
-    assets: (view) => view.supplyMarket.filter((r) => !r.native).map((r) => ({ ...r, tab: 'supply', paused: false })),
+    gateway: true,
+    assets: (view) => view.supplyMarket.map((r) => ({ ...r, tab: 'supply', paused: false })),
     prepare: (row) => ({ ...noSim, action: { action: 'supply' }, ...fromWallet(row) }),
   },
   borrow: {
     main: 'borrow',
+    gateway: false,
     assets: (view) => view.borrowMarket.filter((r) => !r.native).map((r) => ({ ...r, tab: 'borrow', paused: false })),
     prepare: (row, ctx) => {
       const { amount } = ctx;
@@ -113,9 +119,10 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
   },
   repay: {
     main: 'repay',
+    gateway: true,
     assets: (view) =>
       view.borrows
-        .filter((r) => !r.native && !r.outside)
+        .filter((r) => !r.outside)
         .map((r) => ({ ...r, tab: 'repay', debt: r.amount, paused: r.status === 'dijeda' })),
     prepare: (row, ctx) => {
       const { amount } = ctx;
@@ -129,6 +136,7 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
   },
   withdraw: {
     main: 'withdraw',
+    gateway: false,
     assets: (view) =>
       view.supplies
         .filter((r) => !r.native && !r.outside)
@@ -147,6 +155,7 @@ export const PANEL_TABS: { [T in PanelTab]: TabSpec<AssetOf<T>> } = {
   },
   collateral: {
     main: 'setCollateral',
+    gateway: false,
     assets: (view) =>
       view.supplies
         .filter((r) => !r.outside)
@@ -180,11 +189,12 @@ export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: White
   // Aset hilang dari tab (mis. utang sudah lunas): panel cuma menampilkan pesan kosong tanpa tombol utama, jadi yang
   // tersisa urutan umumnya saja.
   if (!source) {
-    const step = nextStep({ ...common, amount: null, paused: false, ...noWallet, action: { action: 'supply' } });
+    const step = nextStep({ ...common, amount: null, paused: false, native: false, ...noWallet, action: { action: 'supply' } });
     return { step, ...noSim };
   }
   const { sim, repay, withdraw, ...rest } = spec.prepare(source, { read, view, whitelist, ...input });
-  return { step: nextStep({ ...common, paused: source.paused, ...rest }), sim, repay, withdraw };
+  const native = spec.gateway && source.native;
+  return { step: nextStep({ ...common, paused: source.paused, native, ...rest }), sim, repay, withdraw };
 }
 
 export type PanelTx = {
@@ -197,18 +207,24 @@ export type PanelTx = {
   full: boolean;
   /** Toggle jaminan: nyalakan (`true`) atau matikan; tab lain nggak memakainya. */
   useAsCollateral: boolean;
+  /** ETH lewat gateway: transaksi utama dikirim ke WrappedTokenGateway dengan `value` ETH ini; `null` = langsung ke Pool. */
+  gateway: { value: bigint } | null;
   historyKind: LocalTxEntry['kind'];
 };
 
 /** Apa yang dikirim ke kontrak, ditampilkan, dan dicatat di riwayat untuk isi panel saat ini. */
 export function panelTx(row: PanelAsset, state: PanelState, amount: bigint | null): PanelTx {
-  const main = PANEL_TABS[row.tab].main;
+  const { main, gateway } = PANEL_TABS[row.tab];
   const typed = amount ?? 0n;
-  const base = { main, send: typed, shown: typed, full: false, useAsCollateral: false };
+  const native = gateway && row.native;
+  const base = { ...idleTx(row.tab), send: typed, shown: typed, gateway: native ? { value: typed } : null };
   switch (row.tab) {
     case 'repay': {
       const full = state.repay?.full ?? false;
-      return { ...base, send: state.repay?.send ?? typed, shown: full ? row.debt : typed, full, historyKind: 'repay' };
+      // Repay ETH penuh: kirim utang + bantalan bunga; gateway mengembalikan kelebihannya.
+      const value = full ? (state.repay?.spend ?? typed) : typed;
+      const send = state.repay?.send ?? typed;
+      return { ...base, send, shown: full ? row.debt : typed, full, gateway: native ? { value } : null, historyKind: 'repay' };
     }
     case 'withdraw': {
       const full = state.withdraw?.all ?? false;
@@ -221,4 +237,10 @@ export function panelTx(row: PanelAsset, state: PanelState, amount: bigint | nul
     default:
       return { ...base, historyKind: row.tab };
   }
+}
+
+/** Rencana kosong: belum ada aset/jumlah (tombol utama nggak tampil, jadi ini nggak pernah dikirim). */
+export function idleTx(tab: PanelTab): PanelTx {
+  const main = PANEL_TABS[tab].main;
+  return { main, send: 0n, shown: 0n, full: false, useAsCollateral: false, gateway: null, historyKind: 'supply' };
 }
