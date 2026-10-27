@@ -136,8 +136,8 @@ Persona utama **user pro** (posisi di beberapa chain, mau cepat dan angka lengka
 75. Sebagai user, gua mau wajib mencentang pernyataan risiko kalau HF sesudahnya 1,1–1,5.
 76. Sebagai user, gua mau wajib mengetik "confirm" kalau HF sesudahnya < 1,1.
 77. Sebagai user, gua mau tombol utama terkunci dengan teks "Melebihi batas pinjam" kalau aksi melewati batas LTV.
-78. Sebagai user, gua mau tombol supply terkunci dengan pesan "Kuota supply aset ini penuh" kalau supply cap akan terlampaui, supaya gua nggak membayar gas untuk transaksi yang pasti ditolak.
-79. Sebagai user, gua mau tombol borrow terkunci dengan pesan "Kuota pinjaman aset ini penuh" kalau borrow cap akan terlampaui.
+78. Sebagai user, gua mau tombol supply terkunci kalau supply cap akan terlampaui, dengan pesan "Kuota supply aset ini penuh" kalau kuotanya habis atau "Melebihi sisa kuota supply, tersisa X" kalau masih ada sisa, supaya gua nggak membayar gas untuk transaksi yang pasti ditolak.
+79. Sebagai user, gua mau tombol borrow terkunci kalau borrow cap akan terlampaui, dengan pesan "Kuota pinjaman aset ini penuh" kalau kuotanya habis atau "Melebihi sisa kuota pinjaman, tersisa X" kalau masih ada sisa.
 80. Sebagai user, gua mau tombol withdraw/borrow terkunci dengan pesan "Likuiditas pool tidak cukup, tersedia X" kalau jumlahnya melebihi isi pool.
 81. Sebagai user, gua mau harga likuidasi ditulis "Dilikuidasi kalau ETH turun ke $x (−y%)" atau "…naik ke $x (+y%)" sesuai arah risikonya.
 82. Sebagai user yang posisinya nggak bergantung pada harga ETH, gua mau tulisan "Tidak dipengaruhi harga ETH".
@@ -214,8 +214,9 @@ Modul tanpa I/O yang menerima data per chain berbentuk data UiPoolDataProvider (
   - Supply: ERC20 = saldo wallet; ETH = saldo − cadangan gas (pola `maxSpendable` swap-web). Dibatasi sisa supply cap.
   - Withdraw: min(saldo supply, jumlah yang menjaga posisi di bawah batas LTV, likuiditas pool). Kalau hasilnya seluruh saldo dan tanpa utang yang bergantung padanya, tandai "withdraw semua" (dikirim sebagai `type(uint256).max`).
   - Borrow: sampai batas LTV, dibatasi sisa borrow cap dan likuiditas pool. Tingkat konfirmasi #9 tetap dihitung untuk jumlah hasil MAX; MAX tidak pernah melewati konfirmasi.
+  - Borrow dan withdraw yang dibatasi batas LTV berhenti 0,1% di bawahnya: bunga dan harga oracle bergeser antara baca dan eksekusi (keputusan tiket 08).
   - Repay: min(utang, saldo wallet), ETH menyisakan cadangan gas. Tandai "lunas penuh" (`type(uint256).max`) hanya kalau saldo ≥ utang + bantalan bunga.
-- **Kapasitas pool (Q27, aturan kontrak V8)**: supply cap `(scaledTotalSupply + amount + accruedToTreasury) × liquidityIndex ≤ supplyCap × 10^decimals`; borrow cap `(total utang variabel + amount) ≤ borrowCap × 10^decimals`; cap 0 = tanpa batas; likuiditas = `virtualUnderlyingBalance`. Hasilnya alasan penolakan yang bisa ditampilkan: kuota supply penuh, kuota pinjaman penuh, atau likuiditas tidak cukup (dengan jumlah tersedia).
+- **Kapasitas pool (Q27, aturan kontrak V8)**: supply cap `(scaledTotalSupply + amount + accruedToTreasury) × liquidityIndex ≤ supplyCap × 10^decimals`; borrow cap `(total utang variabel + amount) ≤ borrowCap × 10^decimals`; cap 0 = tanpa batas; likuiditas = `virtualUnderlyingBalance`. Hasilnya alasan penolakan yang bisa ditampilkan: melewati kuota supply, melewati kuota pinjaman, atau likuiditas tidak cukup, masing-masing dengan jumlah yang masih tersedia ("penuh" hanya kalau sisanya 0). Tombol mengunci jumlah yang ditolak kontrak **saat ini**; MAX memakai sisa kuota **10 menit ke depan** (bunga ikut menambah supply/utang pool), supaya MAX masih lolos sesudah approve (keputusan tiket 08).
 - **Tingkat konfirmasi (#9)**: `none` (≥ 2,0) · `warn` (1,5–2,0) · `check` (1,1–1,5, wajib centang) · `type` (< 1,1, wajib ketik "confirm") · `locked` (melewati batas LTV). Berlaku untuk borrow, withdraw, dan mematikan jaminan. Untuk withdraw dan mematikan jaminan, aturan `locked` di batas LTV **lebih ketat dari kontrak** (kontrak hanya mensyaratkan HF ≥ 1); ini disengaja (V8).
 - **Isolation mode level reserve tidak dimodelkan (Q28)**: fiturnya dihapus di v3.7. Field `debtCeiling`, `borrowableInIsolation`, `isolationModeTotalDebt`, dan `isSiloedBorrowing` dari UiPoolDataProvider diabaikan.
 - **Filter daftar**: "Pasar supply" (sembunyikan saldo 0 kecuali "Tampilkan semua"), "Pasar pinjam" (`borrowingEnabled` di luar E-Mode, `borrowableBitmap` di dalam E-Mode), keduanya tanpa reserve frozen/paused/nonaktif. Posisi di reserve itu tetap ada di tampilan posisi dengan label Dibekukan (withdraw/repay masih bisa) atau Dijeda (semua aksi nonaktif).
@@ -254,7 +255,7 @@ Fungsi murni yang menentukan isi tombol utama dan langkah wallet berikutnya, men
 6. Borrow tanpa jaminan → "Supply jaminan dulu".
 7. Jumlah kosong → "Masukkan jumlah".
 8. Melewati batas LTV → "Melebihi batas pinjam" / "Jaminan ini masih dibutuhkan" (nonaktif).
-9. Melewati kapasitas pool (Q27) → "Kuota supply aset ini penuh" / "Kuota pinjaman aset ini penuh" / "Likuiditas pool tidak cukup, tersedia X" (nonaktif).
+9. Melewati kapasitas pool (Q27) → "Kuota supply aset ini penuh" / "Kuota pinjaman aset ini penuh" (sisa kuota 0), "Melebihi sisa kuota supply, tersisa X" / "Melebihi sisa kuota pinjaman, tersisa X" (masih ada sisa), atau "Likuiditas pool tidak cukup, tersedia X" (nonaktif).
 10. Saldo kurang → "Saldo <aset> tidak cukup".
 11. Konfirmasi risiko belum dipenuhi → "Centang pernyataan risiko dulu" / "Ketik "confirm" dulu".
 12. Wallet di network lain → "Ganti ke <chain>" (`switchChain`, bisa ditolak).

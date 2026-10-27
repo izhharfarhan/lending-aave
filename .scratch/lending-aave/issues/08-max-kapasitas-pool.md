@@ -26,7 +26,7 @@
   - MAX per tab di `PANEL_TABS.max` (`panelMax`), helper di `core/maxAmount.ts`; batas LTV dicari lewat `simulate` yang sama dengan tombol (binary search), jadi MAX nggak pernah dikunci #9. Cadangan gas ETH pakai `SupportedChain.minGasReserve` (Ethereum 0,0005 ETH) atau 2 × biaya jaringan terakhir yang diketahui.
   - Field isolation mode lama diabaikan (test: nilai bukan nol nggak mengubah hasil panel).
   - Test fork `maxCapacity.fork.spec.ts`: MAX borrow/withdraw/supply ETH/repay penuh berjalan; supply cap & borrow cap diturunkan lewat PoolConfigurator (impersonate executor governance) → MAX mengisi kuota dan lolos, jumlah di atas sisa kuota dikunci tombol **dan** ditolak Pool (`SupplyCapExceeded` / `BorrowCapExceeded`).
-- Keputusan implementasi (perlu dikonfirmasi user):
+- Keputusan implementasi (disetujui user 2026-10-28; teks kuota dan aturan horizon/0,1% sudah masuk spec.md):
   - **Dua horizon kuota.** Tombol mengunci jumlah yang ditolak kontrak saat ini (Q27 "pasti ditolak"); MAX memakai kuota 10 menit ke depan supaya masih lolos sesudah approve. 1 jam terlalu konservatif: pool USDC Ethereum bertambah ±2,5 USDC/detik oleh bunga, jadi 1 jam menyembunyikan ±9.000 USDC sisa kuota.
   - **MAX di batas LTV disisakan 0,1%** (borrow dan withdraw). Tanpa itu MAX withdraw dikunci "Jaminan ini masih dibutuhkan" begitu posisi dibaca ulang (terbukti di fork), dan MAX borrow bisa ditolak kontrak (`CollateralCannotCoverNewBorrow`).
   - **Teks kuota sebagian.** "Kuota supply/pinjaman aset ini penuh" hanya kalau sisanya 0; kalau masih ada sisa: "Melebihi sisa kuota supply/pinjaman, tersisa X". Beda dari teks spec, karena "penuh" menyesatkan saat masih ada sisa.

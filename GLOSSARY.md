@@ -58,6 +58,28 @@ Satu permintaan ke wallet (ganti network, approve, delegasi kredit, atau transak
 **Alamat resmi**:
 Alamat kontrak Aave yang tercantum di Aave address book untuk chain tersebut.
 
+**MAX**:
+Jumlah terbesar untuk satu aksi yang tidak akan ditolak kontrak maupun dikunci app, dibatasi saldo, batas LTV, kapasitas pool, dan cadangan gas ETH. Kalau hasilnya seluruh saldo supply atau seluruh utang, MAX menjadi withdraw semua atau lunas penuh.
+_Avoid_: maksimum, semua saldo
+
+## Kapasitas pool
+
+**Kapasitas pool**:
+Seberapa banyak lagi sebuah reserve bisa menerima supply, pinjaman, atau penarikan, untuk semua user sekaligus: sisa kuota supply, sisa kuota pinjaman, dan likuiditas pool. Beda dengan sisa batas pinjam, yang milik satu posisi.
+_Avoid_: limit pool, capacity
+
+**Kuota supply**:
+Batas total supply sebuah reserve yang ditetapkan Aave; kuota penuh berarti tidak ada supply baru yang diterima.
+_Avoid_: supply cap, plafon supply
+
+**Kuota pinjaman**:
+Batas total utang sebuah reserve yang ditetapkan Aave, untuk semua peminjam sekaligus. Bukan batas pinjam milik satu posisi.
+_Avoid_: borrow cap, plafon pinjaman, limit pinjam
+
+**Likuiditas pool**:
+Aset sebuah reserve yang belum dipinjam, yang bisa dipinjam atau ditarik saat ini.
+_Avoid_: available liquidity, dana pool
+
 ## Risiko
 
 **Harga likuidasi**:
