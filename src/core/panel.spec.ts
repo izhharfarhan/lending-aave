@@ -83,13 +83,13 @@ describe('evaluatePanel()', () => {
   it('plans a partial repay with an exact approve, and blocks a repay the wallet cannot pay', () => {
     // Utang USDC 3.775 lebih, wallet cuma 200 USDC: repay 150 USDC sebagian, approve exact 150.
     const partial = evaluate('bahayaWithOutsideAssets', { tab: 'repay', amount: 150_000_000n });
-    expect(partial.plan).toEqual({ full: false, send: 150_000_000n, spend: 150_000_000n, required: 150_000_000n });
+    expect(partial.repay).toEqual({ full: false, send: 150_000_000n, spend: 150_000_000n, required: 150_000_000n });
     expect(partial.step).toEqual({ step: 'approve', amount: 150_000_000n });
     expect(partial.sim?.account.healthFactor).toBeGreaterThan(1.30134);
     // Jumlah = seluruh utang, tapi wallet kurang: bukan lunas penuh, dan saldo nggak cukup.
     const tooMuch = evaluate('bahayaWithOutsideAssets', { tab: 'repay', amount: 4_000_000_000n });
-    expect(tooMuch.plan?.full).toBe(false);
-    expect(tooMuch.plan?.send).not.toBe(maxUint256);
+    expect(tooMuch.repay?.full).toBe(false);
+    expect(tooMuch.repay?.send).not.toBe(maxUint256);
     expect(tooMuch.step).toEqual({ step: 'insufficientBalance' });
   });
 

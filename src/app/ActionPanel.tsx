@@ -13,7 +13,7 @@ import { AAVE } from '@/config/contracts';
 import { explorerAddressUrl, explorerTxUrl, revokeCashUrl } from '@/config/explorer';
 import type { ChainRead, ChainView, SupplyRow } from '@/core/chainPosition';
 import type { NextStep, NextStepInput, WalletStepName } from '@/core/nextStep';
-import { evaluatePanel, MAIN_STEP, panelAssets, type PanelAsset, type PanelTab } from '@/core/panel';
+import { evaluatePanel, PANEL_TABS, panelAssets, panelTx, type PanelAsset, type PanelTab } from '@/core/panel';
 import { parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
 import { APPROVAL, CTA, PANEL, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
@@ -27,6 +27,32 @@ const SMART_ACCOUNT_NOTE_KEY = 'lending-web:smartAccountNoteDismissed';
 const TABS = ['supply', 'withdraw', 'borrow', 'repay'] as const;
 
 export type ChainData = { read: ChainRead; view: ChainView };
+
+/** Teks panel yang beda per tab (logika per tab ada di `PANEL_TABS`, core/panel.ts). */
+const TAB_UI: Record<
+  PanelTab,
+  {
+    empty: string;
+    /** Bunga yang ditampilkan di bawah jumlah: bunga supply atau bunga pinjaman. */
+    interest: typeof PANEL.interest;
+    /** Tombol utama saat melewati batas LTV. */
+    overLtv: string;
+    /** Penjelasan saat dikunci di batas LTV. */
+    locked: (symbol: string, chain: string) => string;
+  }
+> = {
+  supply: { empty: PANEL.noSupplyAssets, interest: PANEL.interest, overLtv: CTA.overLtv, locked: () => RISK_CONFIRM.locked },
+  // Menarik / mematikan jaminan = "Jaminan ini masih dibutuhkan"; "Melebihi batas pinjam" cuma untuk borrow.
+  withdraw: { empty: PANEL.noSupplies, interest: PANEL.interest, overLtv: CTA.collateralNeeded, locked: () => RISK_CONFIRM.lockedWithdraw },
+  borrow: { empty: PANEL.noBorrowAssets, interest: PANEL.borrowInterest, overLtv: CTA.overLtv, locked: () => RISK_CONFIRM.locked },
+  repay: { empty: PANEL.noDebts, interest: PANEL.borrowInterest, overLtv: CTA.overLtv, locked: () => RISK_CONFIRM.locked },
+  collateral: {
+    empty: PANEL.noSupplies,
+    interest: PANEL.interest,
+    overLtv: CTA.collateralNeeded,
+    locked: (symbol, chain) => RISK_CONFIRM.lockedCollateral(symbol, chain),
+  },
+};
 
 type Props = {
   chainId: number;
@@ -47,6 +73,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   const { openConnectModal } = useConnectModal();
   const guard = useForkGuard(chainId);
   const whitelist = WHITELIST[chainId];
+  const ui = TAB_UI[tab];
   const [amountText, setAmountText] = useState('');
   const [approvalMode, setApprovalMode] = useState<NextStepInput['approvalMode']>('exact');
   const [riskChecked, setRiskChecked] = useState(false);
@@ -75,21 +102,18 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       riskTyped: riskTyped.trim().toLowerCase() === RISK_CONFIRM.word,
     });
 
-  const { sim, plan, withdraw } = evaluate(data, false);
-  // Repay lunas penuh / withdraw semua: yang dikirim `type(uint256).max`, yang ditampilkan & dicatat utang/saldo saat
-  // ini. Toggle jaminan mencatat saldo supply-nya.
-  const shownAmount = plan?.full ? (row?.debt ?? 0n) : withdraw?.all || tab === 'collateral' ? (row?.supplied ?? 0n) : (amount ?? 0n);
-  const enable = !row?.collateral;
-  const historyKind = tab === 'collateral' ? (enable ? 'collateralOn' : 'collateralOff') : tab;
+  const state = evaluate(data, false);
+  const { sim, repay, withdraw } = state;
+  const ptx = row ? panelTx(row, state, amount) : null;
   const poolTx = usePoolTx({
     chainId,
     user: address,
-    main: MAIN_STEP[tab],
-    historyKind,
-    useAsCollateral: enable,
+    main: PANEL_TABS[tab].main,
+    historyKind: ptx?.historyKind ?? 'supply',
+    useAsCollateral: ptx?.useAsCollateral ?? false,
     asset: { address: row?.asset ?? '0x', symbol: row?.symbol ?? '', decimals: row?.decimals ?? 0 },
-    send: plan?.send ?? withdraw?.send ?? amount ?? 0n,
-    amount: shownAmount,
+    send: ptx?.send ?? 0n,
+    amount: ptx?.shown ?? 0n,
     refreshStep: async () => evaluate(await refetch(), false).step,
   });
   const { tx } = poolTx;
@@ -123,14 +147,12 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
     if (tx.status === 'success' || tx.status === 'error') poolTx.reset();
   }
 
-  const amountShown = tokenAmount(shownAmount, row?.decimals ?? 0);
-  const approveShown = tokenAmount(plan?.spend ?? amount ?? 0n, row?.decimals ?? 0);
   const copy: StepCopy = {
     symbol: row?.symbol ?? '',
-    amount: amountShown,
-    approveAmount: approveShown,
-    full: plan?.full ?? withdraw?.all ?? false,
-    enable,
+    amount: tokenAmount(ptx?.shown ?? 0n, row?.decimals ?? 0),
+    approveAmount: tokenAmount(repay?.spend ?? amount ?? 0n, row?.decimals ?? 0),
+    full: ptx?.full ?? false,
+    enable: ptx?.useAsCollateral ?? false,
     unlimited: approvalMode === 'unlimited',
   };
   const cta = row ? ctaFor(step, tab, copy) : null;
@@ -158,10 +180,10 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       </div>
 
       {!row ? (
-        <p className="text-sm text-muted">{EMPTY[tab]}</p>
+        <p className="text-sm text-muted">{ui.empty}</p>
       ) : (
         <>
-          {tab === 'collateral' ? (
+          {row.tab === 'collateral' ? (
             <div>
               <p className="flex items-center gap-2.5 text-base font-medium">
                 <TokenIcon symbol={row.symbol} /> {PANEL.collateralTitle(row.symbol)}
@@ -171,115 +193,83 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
               </p>
             </div>
           ) : (
-          <div>
-            <div className="flex items-center justify-between gap-3 text-xs text-muted">
-              <span>{PANEL.amount}</span>
-              <span className="flex gap-3">
-                {tab === 'withdraw' && row.supplied !== undefined && (
-                  <span>
-                    {PANEL.supplied} <span className="num text-ink">{tokenAmount(row.supplied, row.decimals)}</span>
-                  </span>
-                )}
-                {row.debt !== undefined && (
-                  <span>
-                    {PANEL.debt} <span className="num text-ink">{tokenAmount(row.debt, row.decimals)}</span>
-                  </span>
-                )}
-                {row.walletBalance !== null && (
-                  <span>
-                    {PANEL.wallet} <span className="num text-ink">{tokenAmount(row.walletBalance, row.decimals)}</span>
-                  </span>
-                )}
-                {row.borrowable !== undefined && row.borrowable !== null && (
-                  <span>
-                    {TABLE.canBorrow} <span className="num text-ink">{tokenAmount(row.borrowable, row.decimals)}</span>
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="mt-2 flex items-center gap-3 border-b border-line-strong pb-3 focus-within:border-accent">
-              <input
-                inputMode="decimal"
-                placeholder="0"
-                aria-label={PANEL.amount}
-                value={amountText}
-                disabled={tx.status === 'running'}
-                onChange={(e) => {
-                  startOver();
-                  resetRisk();
-                  setAmountText(e.target.value.replace(/[^0-9.,]/g, ''));
-                }}
-                className="num w-full min-w-0 bg-transparent text-[32px] outline-none placeholder:text-faint focus-visible:outline-none"
-              />
-              <label className="btn-ghost flex shrink-0 items-center gap-2 py-1.5 pl-2 pr-1">
-                <TokenIcon symbol={row.symbol} size={20} />
-                <select
-                  value={row.asset}
+            <div>
+              <div className="flex items-center justify-between gap-3 text-xs text-muted">
+                <span>{PANEL.amount}</span>
+                <Balances row={row} />
+              </div>
+              <div className="mt-2 flex items-center gap-3 border-b border-line-strong pb-3 focus-within:border-accent">
+                <input
+                  inputMode="decimal"
+                  placeholder="0"
+                  aria-label={PANEL.amount}
+                  value={amountText}
                   disabled={tx.status === 'running'}
-                  onChange={(e) => onSelect(tab, e.target.value as Address)}
-                  className="bg-transparent pr-1 text-sm font-medium outline-none"
-                  aria-label={PANEL.asset}
-                >
-                  {assets.map((a) => (
-                    <option key={a.asset} value={a.asset} className="bg-panel">
-                      {a.symbol}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(e) => {
+                    startOver();
+                    resetRisk();
+                    setAmountText(e.target.value.replace(/[^0-9.,]/g, ''));
+                  }}
+                  className="num w-full min-w-0 bg-transparent text-[32px] outline-none placeholder:text-faint focus-visible:outline-none"
+                />
+                <label className="btn-ghost flex shrink-0 items-center gap-2 py-1.5 pl-2 pr-1">
+                  <TokenIcon symbol={row.symbol} size={20} />
+                  <select
+                    value={row.asset}
+                    disabled={tx.status === 'running'}
+                    onChange={(e) => onSelect(tab, e.target.value as Address)}
+                    className="bg-transparent pr-1 text-sm font-medium outline-none"
+                    aria-label={PANEL.asset}
+                  >
+                    {assets.map((a) => (
+                      <option key={a.asset} value={a.asset} className="bg-panel">
+                        {a.symbol}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {parsed && !parsed.ok && parsed.reason !== 'empty' && parsed.reason !== 'zero' && (
+                <p className="mt-2 text-xs text-danger">
+                  {parsed.reason === 'too_many_decimals' ? PANEL.invalid.too_many_decimals(row.decimals) : PANEL.invalid[parsed.reason]}
+                </p>
+              )}
+              <p className="num mt-2 text-xs text-muted">
+                ≈ {usd(amountUsd)} · {ui.interest(usd(amountUsd * row.apy), pct(row.apy))}
+              </p>
+              {isConnected && row.tab === 'borrow' && (
+                <p className="mt-3 text-xs text-muted">
+                  {PANEL.collateralOf(chainName(chainId))}{' '}
+                  <span className="text-ink">
+                    {collateral.length
+                      ? collateral.map((s) => `${tokenAmount(s.amount, s.decimals)} ${s.symbol}`).join(' + ')
+                      : PANEL.noCollateral}
+                  </span>{' '}
+                  ·{' '}
+                  <button type="button" className="link" onClick={() => onSelect('supply')}>
+                    {PANEL.changeCollateral}
+                  </button>
+                </p>
+              )}
+              {row.tab === 'repay' && repay?.full && (
+                <p className="mt-3 text-xs text-muted">
+                  {PANEL.repayFull(tokenAmount(row.debt, row.decimals), row.symbol, tokenAmount(repay.spend, row.decimals))}
+                </p>
+              )}
+              {row.tab === 'withdraw' && withdraw?.all && (
+                <p className="mt-3 text-xs text-muted">{PANEL.withdrawAll(tokenAmount(row.supplied, row.decimals), row.symbol)}</p>
+              )}
             </div>
-            {parsed && !parsed.ok && parsed.reason !== 'empty' && parsed.reason !== 'zero' && (
-              <p className="mt-2 text-xs text-danger">
-                {parsed.reason === 'too_many_decimals' ? PANEL.invalid.too_many_decimals(row.decimals) : PANEL.invalid[parsed.reason]}
-              </p>
-            )}
-            <p className="num mt-2 text-xs text-muted">
-              ≈ {usd(amountUsd)} ·{' '}
-              {tab === 'supply' || tab === 'withdraw'
-                ? PANEL.interest(usd(amountUsd * row.apy), pct(row.apy))
-                : PANEL.borrowInterest(usd(amountUsd * row.apy), pct(row.apy))}
-            </p>
-            {isConnected && tab === 'borrow' && (
-              <p className="mt-3 text-xs text-muted">
-                {PANEL.collateralOf(chainName(chainId))}{' '}
-                <span className="text-ink">
-                  {collateral.length
-                    ? collateral.map((s) => `${tokenAmount(s.amount, s.decimals)} ${s.symbol}`).join(' + ')
-                    : PANEL.noCollateral}
-                </span>{' '}
-                ·{' '}
-                <button type="button" className="link" onClick={() => onSelect('supply')}>
-                  {PANEL.changeCollateral}
-                </button>
-              </p>
-            )}
-            {plan?.full && row.debt !== undefined && (
-              <p className="mt-3 text-xs text-muted">
-                {PANEL.repayFull(tokenAmount(row.debt, row.decimals), row.symbol, tokenAmount(plan.spend, row.decimals))}
-              </p>
-            )}
-            {withdraw?.all && row.supplied !== undefined && (
-              <p className="mt-3 text-xs text-muted">{PANEL.withdrawAll(tokenAmount(row.supplied, row.decimals), row.symbol)}</p>
-            )}
-          </div>
           )}
 
-          {isConnected && tab !== 'supply' && data.view.account && (
-            <Outlook data={data} chainId={chainId} sim={sim} />
-          )}
+          {isConnected && tab !== 'supply' && data.view.account && <Outlook data={data} chainId={chainId} sim={sim} />}
           {sim && tx.status === 'idle' && (
             <RiskConfirm
               sim={sim}
               step={step}
               supplies={data.view.supplies}
               symbol={row.symbol}
-              lockedText={
-                tab === 'collateral'
-                  ? RISK_CONFIRM.lockedCollateral(row.symbol, chainName(chainId))
-                  : tab === 'withdraw'
-                    ? RISK_CONFIRM.lockedWithdraw
-                    : RISK_CONFIRM.locked
-              }
+              lockedText={ui.locked(row.symbol, chainName(chainId))}
               checked={riskChecked}
               onCheck={setRiskChecked}
               typed={riskTyped}
@@ -293,12 +283,12 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
               mode={approvalMode}
               onChange={setApprovalMode}
               symbol={row.symbol}
-              amount={approveShown}
+              amount={copy.approveAmount}
               owner={address}
               chainId={chainId}
             />
           )}
-          {showSteps && <WalletSteps {...copy} chainId={chainId} steps={plannedSteps(step, MAIN_STEP[tab])} token={row.asset} />}
+          {showSteps && <WalletSteps {...copy} chainId={chainId} steps={plannedSteps(step, PANEL_TABS[tab].main)} token={row.asset} />}
         </>
       )}
       {progressRow && tx.status !== 'idle' && (
@@ -330,13 +320,29 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   );
 }
 
-const EMPTY: Record<PanelTab, string> = {
-  supply: PANEL.noSupplyAssets,
-  withdraw: PANEL.noSupplies,
-  borrow: PANEL.noBorrowAssets,
-  repay: PANEL.noDebts,
-  collateral: PANEL.noSupplies,
-};
+/** Saldo di atas input jumlah: yang relevan untuk tab itu. */
+function Balances({ row }: { row: PanelAsset }) {
+  const fact = (label: string, amount: bigint) => (
+    <span key={label}>
+      {label} <span className="num text-ink">{tokenAmount(amount, row.decimals)}</span>
+    </span>
+  );
+  const facts = (() => {
+    switch (row.tab) {
+      case 'supply':
+        return row.walletBalance === null ? [] : [fact(PANEL.wallet, row.walletBalance)];
+      case 'withdraw':
+        return [fact(PANEL.supplied, row.supplied)];
+      case 'borrow':
+        return row.borrowable === null ? [] : [fact(TABLE.canBorrow, row.borrowable)];
+      case 'repay':
+        return [fact(PANEL.debt, row.debt), ...(row.walletBalance === null ? [] : [fact(PANEL.wallet, row.walletBalance)])];
+      case 'collateral':
+        return [];
+    }
+  })();
+  return <span className="flex gap-3">{facts}</span>;
+}
 
 function ctaFor(step: NextStep, tab: PanelTab, c: StepCopy): { label: string; enabled: boolean } {
   switch (step.step) {
@@ -347,8 +353,7 @@ function ctaFor(step: NextStep, tab: PanelTab, c: StepCopy): { label: string; en
     case 'insufficientBalance':
       return { label: CTA.insufficientBalance(c.symbol), enabled: false };
     case 'overLtv':
-      // Menarik / mematikan jaminan = "Jaminan ini masih dibutuhkan"; "Melebihi batas pinjam" cuma untuk borrow.
-      return { label: tab === 'borrow' ? CTA.overLtv : CTA.collateralNeeded, enabled: false };
+      return { label: TAB_UI[tab].overLtv, enabled: false };
     case 'confirmRisk':
       return { label: CTA.confirmRisk[step.gate], enabled: false };
     case 'resetApproval':

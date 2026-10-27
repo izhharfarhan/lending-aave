@@ -5,7 +5,7 @@ import { usePublicClient, useWriteContract } from 'wagmi';
 import { AAVE } from '@/config/contracts';
 import type { NextStep, WalletStepName } from '@/core/nextStep';
 import type { LocalTxEntry } from '@/core/localHistory';
-import type { MAIN_STEP } from '@/core/panel';
+import type { MainStep } from '@/core/panel';
 import { aaveErrorName, walletErrorKind, type WalletErrorKind } from '@/core/walletError';
 import { gasLimitFor } from './gasLimit';
 import { poolRequest } from './poolTx';
@@ -29,9 +29,6 @@ export type TxState =
    * `failed` juga dipakai kalau RPC putus waktu menunggu receipt / membaca ulang posisi.
    */
   | { status: 'error'; steps: WalletStepName[]; index: number; kind: WalletErrorKind | 'reverted'; aaveError?: string; sent: Sent };
-
-/** Transaksi utama tab aksi. */
-export type MainStep = (typeof MAIN_STEP)[keyof typeof MAIN_STEP];
 
 const WALLET_STEPS: ReadonlySet<string> = new Set<WalletStepName>([
   'resetApproval',

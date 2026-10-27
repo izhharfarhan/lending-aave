@@ -38,7 +38,7 @@ describe('borrow & repay ERC20 (fork Ethereum)', () => {
       // Bunga 30 hari bikin utang lebih besar dari angka yang terakhir dilihat user.
       await advanceDays(30);
       const debt = buildChainView(await read(), whitelist).borrows.find((r) => r.asset === USDC)!.amount;
-      const { plan } = await panelState('repay', USDC, debt);
+      const { repay: plan } = await panelState('repay', USDC, debt);
       expect(plan?.full).toBe(true);
 
       const sent = await runLikeTheApp('repay', USDC, debt);
