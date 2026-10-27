@@ -3,20 +3,32 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "prototype": "next dev -p 3200",
-    "build": "next build"
+    "dev:fork": "node scripts/with-env.mjs .env.fork next dev -p 3200",
+    "dev:mainnet": "node scripts/with-env.mjs .env.mainnet next dev -p 3200",
+    "anvil:up": "node --env-file=.env.fork scripts/anvil-up.mjs",
+    "build": "node scripts/with-env.mjs .env.fork next build",
+    "typecheck": "tsc --noEmit",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "dependencies": {
+    "@bgd-labs/aave-address-book": "4.44.22",
+    "@rainbow-me/rainbowkit": "2.2.11",
+    "@tanstack/react-query": "^5.104.5",
     "next": "16.4.2",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "viem": "~2.57.11",
+    "wagmi": "^2.19.5"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "jest": "30.5.2",
     "tailwindcss": "^4",
+    "ts-jest": "29.4.15",
     "typescript": "^5"
   },
   "packageManager": "pnpm@12.11.2"
