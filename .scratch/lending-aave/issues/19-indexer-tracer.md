@@ -19,7 +19,11 @@
 ## Comments
 
 - 2026-10-27 (dari tiket 02): RPC fork membatasi `eth_getLogs` **10 blok per request**. Error-nya menyesatkan ("ranges over 10000 blocks are not supported on free plan"), padahal range 3.000 blok pun ditolak. Lewat Anvil fork, log sebelum blok pin diteruskan ke RPC upstream, jadi batas yang sama berlaku.
-  - **Koreksi 2026-10-27 (tiket 03)**: RPC-nya **bukan Alchemy**. `.env.fork` (disalin dari swap-web) memakai `ANVIL_FORK_URL_1=https://eth.drpc.org`, jadi batas dan pesan error di atas dari **drpc free plan**. Kalau nanti pindah ke Alchemy, batas `getLogs`-nya perlu dicek ulang.
+  - **Koreksi 2026-10-27 (tiket 03)**: RPC-nya **bukan Alchemy**. `.env.fork` (disalin dari swap-web) memakai `ANVIL_FORK_URL_1=https://eth.drpc.org`, jadi batas dan pesan error di atas dari **drpc free plan**. Batas Alchemy sudah dicek ulang, lihat poin berikut.
+  - **Dicek ulang 2026-10-27 (sebelum tiket 04)**: `ANVIL_FORK_URL_1` sekarang Alchemy (free tier). `anvil:up` lolos pengecekan archive di blok 26.282.000. Tes `eth_getLogs` langsung ke Alchemy, alamat Pool Ethereum, range berakhir di blok pin:
+    - 10 blok: OK (10 log)
+    - 11, 500, 2.000 blok: ditolak, `-32600` "Under the Free tier plan, you can make eth_getLogs requests with up to a 10 block range … Upgrade to PAYG for expanded block range."
+    - Jadi batasnya **sama, 10 blok**, hanya pesan error Alchemy lebih jujur. Ganti ke Alchemy free nggak menghapus kebutuhan memilih strategi di bawah.
   - Pilihan yang perlu diputuskan sebelum implementasi (ajukan ke user, jangan langsung pilih):
     1. `START_BLOCK` dekat blok pin. Backfill pendek, sisanya event dari fork lokal.
     2. RPC lain khusus `getLogs` yang range-nya besar, terpisah dari RPC archive untuk `eth_call` (atau ganti RPC fork ke yang batas `getLogs`-nya lebih longgar).
