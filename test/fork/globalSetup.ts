@@ -22,7 +22,7 @@ export function forkGlobalSetup(chainId: ForkTestChainId) {
   };
 }
 
-async function startAnvil(chainId: ForkTestChainId, clients: ForkClients): Promise<ChildProcess> {
+export async function startAnvil(chainId: ForkTestChainId, clients: ForkClients): Promise<ChildProcess> {
   const { port, rpcUrl, pinnedBlock, testClient } = clients;
   if (await metadata(clients).catch(() => null)) {
     throw new Error(`Port ${port} sudah dipakai (sisa run yang di-kill?). Matikan dulu prosesnya.`);

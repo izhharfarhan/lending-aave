@@ -12,8 +12,8 @@ const FORK_TEST_CHAIN_IDS = Object.keys(FORK_TEST_PORTS).map(Number) as ForkTest
 // Akun user tes (Anvil yang sign), sama dengan connector fork di app.
 export const TEST_ACCOUNT = TEST_ACCOUNTS.user;
 
-function createForkClients(chainId: ForkTestChainId) {
-  const port = FORK_TEST_PORTS[chainId];
+/** Client satu Anvil fork; `port` default = Anvil suite fork. E2E (tiket 24) memakai port-nya sendiri. */
+export function createForkClients(chainId: ForkTestChainId, port: number = FORK_TEST_PORTS[chainId]) {
   const rpcUrl = `http://127.0.0.1:${port}`;
   const chain = supportedChain(chainId).viemChain;
   // Timeout 120 detik (default viem 10): fork dingin narik tiap slot storage dari RPC archive dulu, dan request yang

@@ -12,3 +12,8 @@ next-env.d.ts
 
 # font berlisensi personal, dipasang lokal saja (DECISIONS.md Q20)
 public/fonts/local/
+
+# E2E Playwright (tiket 24)
+.next-e2e
+playwright-report
+test-results

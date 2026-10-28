@@ -10,7 +10,9 @@
     "fixture:position": "tsx scripts/position-fixture.mts",
     "typecheck": "tsc --noEmit",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "test:fork": "NODE_OPTIONS=--experimental-vm-modules jest -c jest.fork.config.ts --runInBand"
+    "test:fork": "NODE_OPTIONS=--experimental-vm-modules jest -c jest.fork.config.ts --runInBand",
+    "test:e2e": "playwright test",
+    "e2e:serve": "NEXT_PUBLIC_FORK_PORT_OFFSET=20000 NEXT_PUBLIC_INDEXER_URL= NEXT_DIST_DIR=.next-e2e node scripts/with-env.mjs .env.fork sh -c 'rm -rf .next-e2e && next build && next start -p 3300'"
   },
   "dependencies": {
     "@bgd-labs/aave-address-book": "4.44.22",
@@ -23,6 +25,7 @@
     "wagmi": "^2.19.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/jest": "^30.0.0",
     "@types/node": "^20",
