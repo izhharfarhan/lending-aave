@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { createPublicClient, createTestClient, createWalletClient, http, type Address, type Hex } from 'viem';
-import { mainnet } from 'viem/chains';
+import { arbitrum, base, mainnet } from 'viem/chains';
 
 import { INDEXED_CHAINS } from '../../src/chains';
 
@@ -8,6 +8,8 @@ import { INDEXED_CHAINS } from '../../src/chains';
 // beda dari `anvil:up` lending-web (855x), fork test lending-web (1855x), swap-indexer (3854x), dan `dev:fork` (42070).
 export const TEST_CHAINS = {
   1: { chain: mainnet, anvilPort: 48555 },
+  8453: { chain: base, anvilPort: 48556 },
+  42161: { chain: arbitrum, anvilPort: 48557 },
 } as const;
 export type TestChainId = keyof typeof TEST_CHAINS & keyof typeof INDEXED_CHAINS;
 
@@ -15,7 +17,7 @@ export const PONDER_PORT = 42170;
 export const PONDER_URL = `http://127.0.0.1:${PONDER_PORT}`;
 export const SCHEMA = 'lending_test';
 // Sama dengan lending-web `src/config/testAccounts.json`: user tes (#0) dan akun kedua (#1). Delegasi EIP-7702 di
-// mainnet dihapus di globalSetup (spec "Mode fork"). File test jalan berurutan, jadi satu akun aman dari tabrakan nonce.
+// chain asli dihapus di globalSetup (spec "Mode fork"). File test jalan berurutan, jadi satu akun aman dari tabrakan nonce.
 export const TEST_ACCOUNT: Address = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
 export const OTHER_ACCOUNT: Address = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 const ROW_TIMEOUT_MS = 60_000;

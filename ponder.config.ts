@@ -1,7 +1,8 @@
 import { createConfig } from 'ponder';
 
+import { ATokenAbi } from './abis/ATokenAbi';
 import { PoolAbi } from './abis/PoolAbi';
-import { forkStartBlock, INDEXED_CHAINS } from './src/chains';
+import { forkStartBlock, INDEXED_CHAINS, type IndexedChainId } from './src/chains';
 
 // Mode dari env (pola swap-indexer): satu config untuk fork & mainnet, database-nya beda lewat DATABASE_URL.
 const mode = process.env.PONDER_MODE;
@@ -16,9 +17,9 @@ function requiredEnv(name: string): string {
 }
 
 // DECISIONS Q31: fork = blok pin + 1 (tanpa backfill); mainnet = blok terbaru saat indexer mulai (env).
-const startBlock = (chainId: keyof typeof INDEXED_CHAINS) => (mode === 'fork' ? forkStartBlock(chainId) : Number(requiredEnv(`START_BLOCK_${chainId}`)));
+const startBlock = (chainId: IndexedChainId) => (mode === 'fork' ? forkStartBlock(chainId) : Number(requiredEnv(`START_BLOCK_${chainId}`)));
 
-const chain = (chainId: keyof typeof INDEXED_CHAINS) => ({
+const chain = (chainId: IndexedChainId) => ({
   id: chainId,
   rpc: requiredEnv(`PONDER_RPC_URL_${chainId}`),
   // Q31: batas Alchemy free (10 blok per `eth_getLogs`), terutama untuk mainnet. Di fork semua blok yang diminta sesudah
@@ -32,13 +33,29 @@ const chain = (chainId: keyof typeof INDEXED_CHAINS) => ({
   reorgWindow: mode === 'fork' ? 0 : undefined,
 });
 
+// Satu entri per chain di INDEXED_CHAINS, dikunci dengan nama chain-nya.
+const perChain = <T>(build: (chainId: IndexedChainId) => T) =>
+  Object.fromEntries(Object.entries(INDEXED_CHAINS).map(([id, { name }]) => [name, build(Number(id) as IndexedChainId)])) as Record<
+    (typeof INDEXED_CHAINS)[IndexedChainId]['name'],
+    T
+  >;
+
 export default createConfig({
   database: { kind: 'postgres', connectionString: requiredEnv('DATABASE_URL') },
-  chains: { mainnet: chain(1) },
+  chains: perChain(chain),
   contracts: {
     Pool: {
       abi: PoolAbi,
-      chain: { mainnet: { address: INDEXED_CHAINS[1].pool, startBlock: startBlock(1) } },
+      chain: perChain((chainId) => ({ address: INDEXED_CHAINS[chainId].pool, startBlock: startBlock(chainId) })),
+    },
+    // Cuma `Transfer` yang tujuannya gateway (V2).
+    AWeth: {
+      abi: ATokenAbi,
+      chain: perChain((chainId) => ({
+        address: INDEXED_CHAINS[chainId].aWeth,
+        startBlock: startBlock(chainId),
+        filter: { event: 'Transfer' as const, args: { to: INDEXED_CHAINS[chainId].wethGateway } },
+      })),
     },
   },
 });
