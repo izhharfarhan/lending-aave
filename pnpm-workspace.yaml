@@ -1,0 +1,3 @@
+# Build script opsional yang ditolak (pola swap-indexer): esbuild sudah punya binary per platform.
+allowBuilds:
+  esbuild: false
