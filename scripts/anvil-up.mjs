@@ -130,6 +130,9 @@ parentWatch.unref();
 // Anvil dan keluar dengan kode 1, jangan dibiarkan jalan dengan akun yang masih terdelegasi.
 const cleared = await Promise.all(entries.map(([chainId, { port }]) => clearTestAccountCode(chainId, port)));
 if (cleared.every(Boolean)) {
+  // lending-indexer mulai index di blok pin + 1 (DECISIONS Q31); di fork yang baru nyala blok itu belum ada, dan Ponder
+  // berhenti dengan error kalau start block-nya nggak ketemu. Satu blok kosong ditambang supaya indexer bisa langsung jalan.
+  await Promise.all(entries.map(([, { port }]) => rpc(`http://127.0.0.1:${port}`, 'evm_mine', [])));
   console.log('[anvil-up] siap: semua fork jalan dan akun tes bersih');
 } else {
   process.exitCode = 1;
