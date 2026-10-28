@@ -14,3 +14,7 @@
 - [ ] Istilah asli Aave tetap dipakai dengan ⓘ dan penjelasan sederhana (mis. "Health factor 1,82 · Aman ⓘ")
 - [ ] APY ditulis sebagai "bunga per tahun" di tampilan awal
 - [ ] Copy UI bahasa Indonesia baku dengan "Anda", terkumpul di satu modul copy
+
+## Comments
+
+- 2026-10-28 (dari tiket 14): label on-chain kategori E-Mode user (`ChainView.eMode.label`) tampil di "Detail parameter <chain>" (spec story 56, V4). Baris "E-Mode aktif · jaminan · pinjaman" di kepala detail chain sengaja tanpa label.

@@ -84,6 +84,18 @@ describe('simulate()', () => {
     });
   });
 
+  describe('edge case: pembulatan scaled kontrak', () => {
+    // Index pinjaman USDC 1,5 ray tanpa bunga berjalan; user belum berutang USDC (posisi noDebt, jaminan USDC).
+    const atIndex = (index: bigint) =>
+      withReserve(read('noDebt'), USDC, { variableBorrowIndex: index, lastUpdateTimestamp: Number(chain.blockTimestamp) });
+
+    it('rounds a new debt up like the Pool: scaled = ceil(amount / index), debt = ceil(scaled × index)', () => {
+      // 1 wei → scaled ceil(1 / 1,5) = 1 → utang ceil(1 × 1,5) = 2 wei = ceil(2 × 99.979.651 / 10^6) = 200 unit base.
+      const sim = simulate(atIndex(15n * 10n ** 26n), WHITELIST, { action: 'borrow', asset: USDC, amount: 1n });
+      expect(sim.account.totalDebtUsd).toBeCloseTo(200e-8, 10);
+    });
+  });
+
   describe('negative: tier #9', () => {
     // Batas pinjam $8.585,02567677 ÷ $0,99979651 = 8.586,77 USDC.
     it('locks a borrow just past the LTV limit and asks to type "confirm" just below it', () => {

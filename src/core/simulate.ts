@@ -3,14 +3,16 @@ import { maxUint256, type Address } from 'viem';
 import {
   accountView,
   baseToUsd,
-  debtBalance,
-  suppliedBalance,
+  ceilDiv,
+  normalizedDebt,
+  normalizedIncome,
   type AccountRead,
   type AccountView,
   type ChainRead,
   type ReserveRead,
   type WhitelistAsset,
 } from './chainPosition';
+import { collateralParams } from './eMode';
 
 const WAD = 10n ** 18n;
 const RAY = 10n ** 27n;
@@ -51,22 +53,48 @@ export type Simulation = {
   liquidation: LiqPrice;
 };
 
-/** Posisi user di satu reserve, dalam satuan terkecil token, termasuk bunga sampai `blockTimestamp`. */
-type Holding = { reserve: ReserveRead; supplied: bigint; collateral: boolean; debt: bigint };
+/**
+ * Posisi user di satu reserve. `supplied`/`debt` dalam satuan terkecil token termasuk bunga sampai `blockTimestamp`,
+ * diturunkan dari saldo scaled dengan pembulatan kontrak (aToken ke bawah, utang ke atas). `ltv`/`lt` = nilai efektif
+ * untuk user ini (E-Mode, V4), bps.
+ */
+type Holding = {
+  reserve: ReserveRead;
+  scaledSupply: bigint;
+  scaledDebt: bigint;
+  /** Index supply / pinjaman sampai `blockTimestamp` (ray). */
+  income: bigint;
+  debtIndex: bigint;
+  supplied: bigint;
+  debt: bigint;
+  collateral: boolean;
+  ltv: bigint;
+  lt: bigint;
+};
+
+// TokenMath v3.7: saldo aToken = floor(scaled × index), utang = ceil(scaled × index).
+const withScaled = (h: Holding, scaledSupply: bigint, scaledDebt: bigint): Holding => ({
+  ...h,
+  scaledSupply,
+  scaledDebt,
+  supplied: (scaledSupply * h.income) / RAY,
+  debt: ceilDiv(scaledDebt * h.debtIndex, RAY),
+});
+
+const emptyHolding = (read: ChainRead, reserve: ReserveRead): Holding => {
+  const { ltv, liquidationThreshold } = collateralParams(reserve, read.user?.eMode ?? null);
+  const income = normalizedIncome(reserve, read.blockTimestamp);
+  const debtIndex = normalizedDebt(reserve, read.blockTimestamp);
+  return { reserve, income, debtIndex, scaledSupply: 0n, scaledDebt: 0n, supplied: 0n, debt: 0n, collateral: false, ltv, lt: liquidationThreshold };
+};
 
 function holdings(read: ChainRead): Holding[] {
   const reserveOf = new Map(read.reserves.map((r) => [r.underlyingAsset.toLowerCase(), r]));
   return (read.user?.reserves ?? []).flatMap((position) => {
     const reserve = reserveOf.get(position.underlyingAsset.toLowerCase());
     if (!reserve) return [];
-    return [
-      {
-        reserve,
-        supplied: suppliedBalance(position.scaledATokenBalance, reserve, read.blockTimestamp),
-        collateral: position.usageAsCollateralEnabledOnUser,
-        debt: debtBalance(position.scaledVariableDebt, reserve, read.blockTimestamp),
-      },
-    ];
+    const empty = emptyHolding(read, reserve);
+    return [{ ...withScaled(empty, position.scaledATokenBalance, position.scaledVariableDebt), collateral: position.usageAsCollateralEnabledOnUser }];
   });
 }
 
@@ -182,20 +210,20 @@ export function accountFromReserves(read: ChainRead): AccountRead {
 
 // GenericLogic.calculateUserAccountData + calculateAvailableBorrows v3.7, pembulatan persis kontrak:
 // jaminan = floor(saldo × harga / unit), utang = ceil(utang × harga / unit), HF = wadDiv(Σ jaminan × LT, utang) / 1e4.
-// E-Mode (LT/LTV kategori) menyusul di tiket 14; di sini LT/LTV reserve.
+// LT/LTV per aset sudah efektif (E-Mode, V4); jaminan ber-LTV 0 nggak ikut rata-rata LTV.
 function accountOf(list: Holding[]): AccountRead {
   let collateral = 0n;
   let debt = 0n;
   let ltvWeighted = 0n;
   let ltWeighted = 0n;
-  for (const { reserve, supplied, collateral: isCollateral, debt: owed } of list) {
+  for (const { reserve, supplied, collateral: isCollateral, debt: owed, ltv, lt } of list) {
     const unit = 10n ** reserve.decimals;
     const price = reserve.priceInMarketReferenceCurrency;
     if (isCollateral) {
       const value = (supplied * price) / unit;
       collateral += value;
-      ltvWeighted += value * reserve.baseLTVasCollateral;
-      ltWeighted += value * reserve.reserveLiquidationThreshold;
+      ltvWeighted += value * ltv;
+      ltWeighted += value * lt;
     }
     if (owed > 0n) debt += ceilDiv(owed * price, unit);
   }
@@ -211,33 +239,36 @@ function accountOf(list: Holding[]): AccountRead {
   };
 }
 
-const ceilDiv = (a: bigint, b: bigint) => (a + b - 1n) / b;
 
 const findHolding = (list: Holding[], asset: Address) =>
   list.find((h) => h.reserve.underlyingAsset.toLowerCase() === asset.toLowerCase());
-const min = (a: bigint, b: bigint) => (a < b ? a : b);
 
 function applyChange(read: ChainRead, list: Holding[], change: PositionChange): Holding[] {
   const existing = findHolding(list, change.asset);
   const reserve = existing?.reserve ?? read.reserves.find((r) => r.underlyingAsset.toLowerCase() === change.asset.toLowerCase());
   if (!reserve) throw new Error(`Reserve ${change.asset} tidak ada di chain ini`);
-  const before = existing ?? { reserve, supplied: 0n, collateral: false, debt: 0n };
+  const before = existing ?? emptyHolding(read, reserve);
+  // Dalam satuan scaled seperti kontrak (TokenMath v3.7), supaya simulasi di tepi batas LTV sama persis dengan Pool.
   const changed = ((): Holding => {
     switch (change.action) {
       case 'supply': {
-        // Supply pertama aset ber-LTV ≠ 0 otomatis jadi jaminan (validateAutomaticUseAsCollateral); sesudahnya flag tetap.
-        const collateral = before.supplied === 0n ? reserve.baseLTVasCollateral !== 0n : before.collateral;
-        return { ...before, supplied: before.supplied + change.amount, collateral };
+        // Supply pertama aset ber-LTV efektif ≠ 0 otomatis jadi jaminan (validateUseAsCollateral); sesudahnya flag tetap.
+        const collateral = before.supplied === 0n ? before.ltv !== 0n : before.collateral;
+        const minted = (change.amount * RAY) / before.income;
+        return { ...withScaled(before, before.scaledSupply + minted, before.scaledDebt), collateral };
       }
       case 'borrow':
-        return { ...before, debt: before.debt + change.amount };
-      case 'repay':
-        // Pool menarik paling banyak sebesar utang; kelebihan jumlah repay nggak dipakai.
-        return { ...before, debt: before.debt - min(change.amount, before.debt) };
+        // Utang baru dibulatkan ke atas dua kali: scaled = ceil(amount / index), utang = ceil(scaled × index).
+        return withScaled(before, before.scaledSupply, before.scaledDebt + ceilDiv(change.amount * RAY, before.debtIndex));
+      case 'repay': {
+        // Pool menarik paling banyak sebesar utang (lunas = seluruh scaled terbakar); kelebihan jumlah repay nggak dipakai.
+        if (change.amount >= before.debt) return withScaled(before, before.scaledSupply, 0n);
+        return withScaled(before, before.scaledSupply, before.scaledDebt - (change.amount * RAY) / before.debtIndex);
+      }
       case 'withdraw': {
-        const supplied = before.supplied - min(change.amount, before.supplied);
         // Saldo habis = kontrak mematikan flag jaminannya.
-        return { ...before, supplied, collateral: supplied > 0n && before.collateral };
+        if (change.amount >= before.supplied) return { ...withScaled(before, 0n, before.scaledDebt), collateral: false };
+        return withScaled(before, before.scaledSupply - ceilDiv(change.amount * RAY, before.income), before.scaledDebt);
       }
       case 'collateral':
         return { ...before, collateral: change.enable };
@@ -249,9 +280,9 @@ function applyChange(read: ChainRead, list: Holding[], change: PositionChange): 
 // Withdraw jaminan cuma dicek kontrak kalau user punya utang; mematikan jaminan selalu dicek.
 function breaksLtvZeroRule(after: Holding[], change: PositionChange, account: AccountRead): boolean {
   if (change.action === 'withdraw' && account.totalDebtBase === 0n) return false;
-  const hasZeroLtvCollateral = after.some((h) => h.collateral && h.supplied > 0n && h.reserve.baseLTVasCollateral === 0n);
+  const hasZeroLtvCollateral = after.some((h) => h.collateral && h.supplied > 0n && h.ltv === 0n);
   const asset = findHolding(after, change.asset);
-  return hasZeroLtvCollateral && (asset?.reserve.baseLTVasCollateral ?? 0n) !== 0n;
+  return hasZeroLtvCollateral && (asset?.ltv ?? 0n) !== 0n;
 }
 
 // ValidationLogic.validateHFAndLtv: LTV rata-rata ≠ 0, HF ≥ 1, dan jaminan ≥ percentDivCeil(utang, LTV).
@@ -277,8 +308,8 @@ function liquidationOf(read: ChainRead, list: Holding[], whitelist: WhitelistAss
   let c = 0; // utang ETH, dalam ETH
   let d = 0; // utang stable, dalam USD
   let ethPrice = 0;
-  for (const { reserve, supplied, collateral, debt } of list) {
-    const lt = Number(reserve.reserveLiquidationThreshold) / Number(BPS);
+  for (const { reserve, supplied, collateral, debt, lt: ltBps } of list) {
+    const lt = Number(ltBps) / Number(BPS);
     const countsAsCollateral = collateral && supplied > 0n && lt > 0;
     if (!countsAsCollateral && debt === 0n) continue;
     const asset = reserve.underlyingAsset.toLowerCase();

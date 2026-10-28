@@ -201,7 +201,7 @@ Persona utama **user pro** (posisi di beberapa chain, mau cepat dan angka lengka
 - Dua repo di `~/projects/lending-aave/`: **lending-web** (Next.js + RainbowKit + wagmi/viem + TanStack Query + Tailwind v4, tanpa backend sendiri) dan **lending-indexer** (Ponder + Postgres Docker + Hono GraphQL), mengikuti pola swap-web/swap-indexer.
 - Kontrak: Aave V3 yang sudah ada (v3.7). Tidak ada kontrak buatan sendiri, kecuali mock aggregator harga untuk Dev Tools di mode fork.
 - Semua alamat kontrak dan aset dari `@bgd-labs/aave-address-book` per chain; mode fork memakai alamat mainnet. Whitelist aset per chain berbasis **alamat** (Ethereum WETH/USDC/USDT, Base WETH/USDC, Arbitrum WETH/USDCn/USDT). Menambah chain = menambah satu entri config.
-- Data reserve dan posisi dibaca dari `UiPoolDataProviderV3` (`getReservesData`, `getUserReservesData` termasuk `userEmodeCategoryId`, `getEModes`) dan `Pool.getUserAccountData`, satu multicall per chain, tiga chain paralel.
+- Data reserve dan posisi dibaca dari `UiPoolDataProviderV3` (`getReservesData`, `getUserReservesData` termasuk `userEmodeCategoryId`) dan `Pool` (`getUserAccountData`, id reserve, getter kategori E-Mode v3.7, lihat DECISIONS.md V4 "Keputusan tiket 14"), di blok yang sama per chain, tiga chain paralel.
 
 ### Modul domain murni (lending-web, seam utama)
 

@@ -155,6 +155,15 @@ export const LIQUIDATION = {
   current: 'saat ini',
 };
 
+// E-Mode read-only (Q13, V4): diatur di app.aave.com; nama dari isi kategori, label on-chain cuma di "Detail parameter".
+export const E_MODE = {
+  active: 'E-Mode aktif',
+  collateral: (assets: string) => `jaminan: ${assets}`,
+  borrowable: (assets: string) => `pinjaman: ${assets}`,
+  none: 'tidak ada',
+  managed: 'diatur di',
+};
+
 export const TABLE = {
   asset: 'Aset',
   apy: 'APY',

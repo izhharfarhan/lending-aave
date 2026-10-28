@@ -478,6 +478,19 @@ Aturan dari `GenericLogic`/`ValidationLogic`, untuk user di kategori E-Mode `k`:
   "E-Mode aktif: <nama kategori>". **Keputusan**: tampilkan nama dari isi kategori, mis.
   "E-Mode aktif · jaminan: ETH, wstETH · pinjaman: ETH"; label on-chain hanya di Detail.
 - Batas pinjam (`ltvRoom`) harus pakai LTV efektif di atas, termasuk aturan `ltvzero` dan `isolated`.
+- **Keputusan tiket 14 (2026-10-28): data E-Mode dibaca dari getter Pool v3.7, bukan `getEModes()`.**
+  - `UiPoolDataProviderV3.getEModes()` yang ter-deploy di Ethereum, Base, dan Arbitrum masih struct bentuk v3.6:
+    `ltv, liquidationThreshold, liquidationBonus, collateralBitmap, label, borrowableBitmap, ltvzeroBitmap`.
+    Tanpa `isolated`, jadi decode dengan struct v3.7 gagal (catatan tiket 02).
+  - Pool (`POOL_REVISION` 11) punya getter lengkap: `getEModeCategoryCollateralConfig`, `getEModeCategoryLabel`,
+    `getEModeCategoryCollateralBitmap/BorrowableBitmap/LtvzeroBitmap`, dan `getIsEModeCategoryIsolated`. Hanya
+    kategori user yang dibaca (`userEmodeCategoryId` ≠ 0), di blok yang sama dengan data lain.
+  - Bit bitmap = id reserve dari `getReserveAddressById` (bukan urutan `getReservesData`; keduanya sama di blok
+    pin karena belum ada reserve yang di-drop).
+  - Aturan yang dipakai = `ValidationLogic.getUserReserveLtv` untuk semua pemakaian LTV: batas pinjam, jaminan
+    otomatis saat supply pertama, boleh menyalakan jaminan, dan aturan ltv0. Plus LT kategori untuk aset di
+    `collateralBitmap` (`GenericLogic`).
+  - Saat dicek, semua kategori di ketiga chain `isolated = false`.
 
 ### V5 — Likuidasi & penalti **[DISETUJUI: Q16]**
 - `liquidatedCollateralAmount` = jaminan yang diterima **likuidator saja**, belum termasuk

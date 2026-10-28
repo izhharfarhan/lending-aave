@@ -1,5 +1,7 @@
 import type { Address } from 'viem';
 
+import { borrowableIn, collateralParams, eModeView, type EModeView } from './eMode';
+
 export type WhitelistAsset = {
   /** Alamat underlying reserve (dari address-book). */
   address: Address;
@@ -14,6 +16,8 @@ export type WhitelistAsset = {
 /** Field `AggregatedReserveData` UiPoolDataProviderV3 yang dipakai modul ini (struct lengkapnya juga lolos). */
 export type ReserveRead = {
   underlyingAsset: Address;
+  /** Id reserve di Pool (`getReserveAddressById`): posisi bit aset ini di bitmap E-Mode. */
+  id: number;
   symbol: string;
   decimals: bigint;
   baseLTVasCollateral: bigint;
@@ -62,6 +66,23 @@ export type AccountRead = {
   healthFactor: bigint;
 };
 
+/**
+ * Kategori E-Mode dari getter Pool v3.7 (UiPoolDataProvider yang ter-deploy masih bentuk v3.6, tanpa `isolated`).
+ * Bitmap di-index pakai `ReserveRead.id`. LTV/LT dalam bps.
+ */
+export type EModeRead = {
+  id: number;
+  /** Label on-chain; di-soft-deprecate sejak v3.6, cuma ditampilkan di detail (V4). */
+  label: string;
+  ltv: bigint;
+  liquidationThreshold: bigint;
+  collateralBitmap: bigint;
+  borrowableBitmap: bigint;
+  ltvzeroBitmap: bigint;
+  /** Aset di luar `collateralBitmap` ber-LTV 0 (v3.7). */
+  isolated: boolean;
+};
+
 /** Semua yang dibaca adapter dari satu chain dalam satu multicall, di blok yang sama. */
 export type ChainRead = {
   blockTimestamp: bigint;
@@ -72,7 +93,8 @@ export type ChainRead = {
   /** `null` = wallet belum terhubung. */
   user: {
     reserves: UserReserveRead[];
-    eModeCategoryId: number;
+    /** Kategori E-Mode user (diaktifkan di app.aave.com); `null` = di luar E-Mode. */
+    eMode: EModeRead | null;
     account: AccountRead;
     /** Saldo wallet per alamat whitelist; aset `native` berisi saldo ETH. */
     walletBalances: Record<Address, bigint>;
@@ -163,6 +185,8 @@ export type BorrowMarketRow = MarketRowBase & {
 export type ChainView = {
   /** `null` = wallet belum terhubung. */
   account: AccountView | null;
+  /** Keterangan read-only E-Mode user (diatur di app.aave.com); `null` = di luar E-Mode atau belum terhubung. */
+  eMode: EModeView | null;
   /** Semua supply termasuk yang bukan jaminan dan aset luar, USD (`account.totalCollateralUsd` cuma jaminan). */
   totalSupplyUsd: number;
   supplies: SupplyRow[];
@@ -191,6 +215,9 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
   const reserveOf = new Map(read.reserves.map((r) => [key(r.underlyingAsset), r]));
   const listed = new Map(whitelist.map((asset, order) => [key(asset.address), { asset, order }]));
 
+  const eMode = read.user?.eMode ?? null;
+  // Kontrak menolak menyalakan jaminan ber-LTV efektif 0 (E-Mode ikut, V4).
+  const canBeCollateral = (reserve: ReserveRead) => collateralParams(reserve, eMode).ltv > 0n;
   const rows = (read.user?.reserves ?? []).flatMap((position) => {
     const reserve = reserveOf.get(key(position.underlyingAsset));
     return reserve ? [{ position, reserve }] : [];
@@ -217,7 +244,7 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
     .map(({ position, reserve }) => ({
       ...row(reserve, suppliedBalance(position.scaledATokenBalance, reserve, read.blockTimestamp), reserve.liquidityRate),
       collateral: position.usageAsCollateralEnabledOnUser,
-      canBeCollateral: reserve.baseLTVasCollateral > 0n,
+      canBeCollateral: canBeCollateral(reserve),
       priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
       supplyRate: reserve.liquidityRate,
       ...nativeOf(listed.get(key(reserve.underlyingAsset))?.asset, read.user?.gatewayAllowances?.withdraw),
@@ -258,14 +285,14 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
     ...market(asset, reserve, reserve.liquidityRate),
     walletBalance: user ? (user.walletBalances[asset.address] ?? 0n) : null,
     allowance: user && !asset.native ? (user.allowances[asset.address] ?? 0n) : null,
-    canBeCollateral: reserve.usageAsCollateralEnabled && reserve.baseLTVasCollateral > 0n,
+    canBeCollateral: canBeCollateral(reserve),
     priceUsd: toUsd(reserve.priceInMarketReferenceCurrency),
     native: asset.native,
     requiresApprovalReset: asset.requiresApprovalReset ?? false,
   }));
-  // E-Mode (borrowableBitmap) menyusul di tiket 14; di luar E-Mode ikut `borrowingEnabled`.
+  // Di E-Mode cuma `borrowableBitmap`, di luar E-Mode `borrowingEnabled` (V4).
   const borrowMarket = offered
-    .filter(({ reserve }) => reserve.borrowingEnabled)
+    .filter(({ reserve }) => borrowableIn(reserve, eMode))
     .map(({ asset, reserve }) => ({
       ...market(asset, reserve, reserve.variableBorrowRate),
       borrowable: user
@@ -277,6 +304,7 @@ export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): Ch
 
   return {
     account: user ? accountView(user.account, toUsd) : null,
+    eMode: eMode && eModeView(eMode, read.reserves, whitelist),
     totalSupplyUsd: supplies.reduce((total, r) => total + r.amountUsd, 0),
     supplies,
     borrows,
@@ -306,22 +334,28 @@ function reserveStatus(reserve: ReserveRead): ReserveStatus {
 // Saldo aToken & utang persis seperti kontrak v3.7 (ReserveLogic.getNormalizedIncome/Debt, MathUtils, TokenMath):
 // bunga supply linear, bunga pinjaman majemuk (pendekatan binomial 3 suku), aToken dibulatkan ke bawah, utang ke atas.
 export function suppliedBalance(scaled: bigint, reserve: ReserveRead, now: bigint): bigint {
-  const elapsed = now - BigInt(reserve.lastUpdateTimestamp);
-  const income = elapsed <= 0n ? reserve.liquidityIndex : rayMul(RAY + (reserve.liquidityRate * elapsed) / SECONDS_PER_YEAR, reserve.liquidityIndex);
-  return (scaled * income) / RAY;
+  return (scaled * normalizedIncome(reserve, now)) / RAY;
 }
 
 export function debtBalance(scaled: bigint, reserve: ReserveRead, now: bigint): bigint {
-  const elapsed = now - BigInt(reserve.lastUpdateTimestamp);
-  let index = reserve.variableBorrowIndex;
-  if (elapsed > 0n) {
-    const x = (reserve.variableBorrowRate * elapsed) / SECONDS_PER_YEAR;
-    index = rayMul(RAY + x + rayMul(x, x / 2n + rayMul(x, x / 6n)), index);
-  }
-  const product = scaled * index;
-  return product / RAY + (product % RAY === 0n ? 0n : 1n);
+  return ceilDiv(scaled * normalizedDebt(reserve, now), RAY);
 }
 
+/** `liquidityIndex` sampai `now` (ray): saldo aToken = floor(scaled × index). */
+export function normalizedIncome(reserve: ReserveRead, now: bigint): bigint {
+  const elapsed = now - BigInt(reserve.lastUpdateTimestamp);
+  return elapsed <= 0n ? reserve.liquidityIndex : rayMul(RAY + (reserve.liquidityRate * elapsed) / SECONDS_PER_YEAR, reserve.liquidityIndex);
+}
+
+/** `variableBorrowIndex` sampai `now` (ray): utang = ceil(scaled × index). */
+export function normalizedDebt(reserve: ReserveRead, now: bigint): bigint {
+  const elapsed = now - BigInt(reserve.lastUpdateTimestamp);
+  if (elapsed <= 0n) return reserve.variableBorrowIndex;
+  const x = (reserve.variableBorrowRate * elapsed) / SECONDS_PER_YEAR;
+  return rayMul(RAY + x + rayMul(x, x / 2n + rayMul(x, x / 6n)), reserve.variableBorrowIndex);
+}
+
+export const ceilDiv = (a: bigint, b: bigint) => (a + b - 1n) / b;
 const rayMul = (a: bigint, b: bigint) => (a * b + RAY / 2n) / RAY;
 
 // Rate on-chain = APR (ray), bunga majemuk per detik → APY (cara app.aave.com).

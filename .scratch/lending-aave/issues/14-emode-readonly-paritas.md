@@ -8,15 +8,15 @@
 
 **Blocked by:** 10 (Base + Arbitrum + pilih chain), 05 (Withdraw ERC20 + toggle jaminan)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] **Sebelum mulai**: cek versi UiPoolDataProvider yang ter-deploy di Ethereum, Base, dan Arbitrum (lihat Comments 2026-10-27). Kalau struct `getEModes` beda dengan v3.7, baca data E-Mode langsung dari getter E-Mode di Pool v3.7 dan catat sebagai keputusan di DECISIONS.md
-- [ ] Baca `userEmodeCategoryId` dan data kategori E-Mode (`getEModes()` atau getter Pool, sesuai hasil cek di atas)
-- [ ] Aturan per aset (V4): LT kategori untuk aset di `collateralBitmap`, selain itu LT reserve; LTV kategori untuk aset di `collateralBitmap` atau 0 kalau di `ltvzeroBitmap`; aset di luar bitmap LTV 0 kalau kategori `isolated`, selain itu LTV reserve
-- [ ] Pasar pinjam di E-Mode = `borrowableBitmap` (flag `borrowingEnabled` diabaikan), tanpa reserve frozen/paused
-- [ ] Keterangan read-only dari isi kategori: "E-Mode aktif · jaminan: … · pinjaman: … · diatur di app.aave.com ↗"; label on-chain hanya di Detail
-- [ ] Test wajib Q13 (Jest): simulasi HF, sisa batas pinjam, harga likuidasi, dan filter daftar pinjam dengan E-Mode aktif/nonaktif, termasuk aset di luar `collateralBitmap`, aset di `ltvzeroBitmap`, dan kategori `isolated`
-- [ ] **Test paritas E-Mode** di fork: posisi dengan E-Mode aktif (diaktifkan langsung lewat Pool di fork), hasil modul domain = `getUserAccountData`
+- [x] **Sebelum mulai**: cek versi UiPoolDataProvider yang ter-deploy di Ethereum, Base, dan Arbitrum (lihat Comments 2026-10-27). Kalau struct `getEModes` beda dengan v3.7, baca data E-Mode langsung dari getter E-Mode di Pool v3.7 dan catat sebagai keputusan di DECISIONS.md
+- [x] Baca `userEmodeCategoryId` dan data kategori E-Mode (`getEModes()` atau getter Pool, sesuai hasil cek di atas)
+- [x] Aturan per aset (V4): LT kategori untuk aset di `collateralBitmap`, selain itu LT reserve; LTV kategori untuk aset di `collateralBitmap` atau 0 kalau di `ltvzeroBitmap`; aset di luar bitmap LTV 0 kalau kategori `isolated`, selain itu LTV reserve
+- [x] Pasar pinjam di E-Mode = `borrowableBitmap` (flag `borrowingEnabled` diabaikan), tanpa reserve frozen/paused
+- [x] Keterangan read-only dari isi kategori: "E-Mode aktif · jaminan: … · pinjaman: … · diatur di app.aave.com ↗"; label on-chain hanya di Detail
+- [x] Test wajib Q13 (Jest): simulasi HF, sisa batas pinjam, harga likuidasi, dan filter daftar pinjam dengan E-Mode aktif/nonaktif, termasuk aset di luar `collateralBitmap`, aset di `ltvzeroBitmap`, dan kategori `isolated`
+- [x] **Test paritas E-Mode** di fork: posisi dengan E-Mode aktif (diaktifkan langsung lewat Pool di fork), hasil modul domain = `getUserAccountData`
 
 ## Comments
 

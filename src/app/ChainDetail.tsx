@@ -14,9 +14,10 @@ import {
   type ChainView,
   type ReserveStatus,
 } from '@/core/chainPosition';
+import type { EModeView } from '@/core/eMode';
 import { panelAssets, type PanelTab } from '@/core/panel';
 import { liquidationPrice, type LiqPrice } from '@/core/simulate';
-import { PANEL, POSITION, TABLE } from '@/copy';
+import { E_MODE, PANEL, POSITION, TABLE } from '@/copy';
 import { ActionPanel } from './ActionPanel';
 import { pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
@@ -84,6 +85,7 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
         <h2 className="display text-2xl font-normal">{name}</h2>
         {view.account && <AccountFacts account={view.account} liquidation={liquidationPrice(data.read, WHITELIST[chainId])} />}
       </div>
+      {view.eMode && <EModeNote eMode={view.eMode} />}
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex min-w-0 flex-col gap-4">
           {view.account && (
@@ -130,6 +132,25 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
         </div>
       </div>
     </section>
+  );
+}
+
+// Read-only: E-Mode diaktifkan dan diubah di app.aave.com; app ini cuma menghitung dengan nilainya (V4). Label on-chain
+// kategori nggak di sini, cuma di "Detail parameter" (tiket 15).
+function EModeNote({ eMode }: { eMode: EModeView }) {
+  const names = (symbols: string[]) => (symbols.length > 0 ? symbols.join(', ') : E_MODE.none);
+  return (
+    <p className="-mt-2 flex flex-wrap items-center gap-x-2 text-sm text-muted">
+      <span className="badge badge-muted">{E_MODE.active}</span>
+      <span>· {E_MODE.collateral(names(eMode.collateral))}</span>
+      <span>· {E_MODE.borrowable(names(eMode.borrowable))}</span>
+      <span>
+        · {E_MODE.managed}{' '}
+        <a className="link" href={AAVE_APP_URL} target="_blank" rel="noreferrer">
+          {TABLE.aaveApp}
+        </a>
+      </span>
+    </p>
   );
 }
 

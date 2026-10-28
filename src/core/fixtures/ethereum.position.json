@@ -5,6 +5,7 @@
   "reserves": [
     {
       "underlyingAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "id": 0,
       "name": "Wrapped Ether",
       "symbol": "WETH",
       "decimals": "18n",
@@ -47,6 +48,7 @@
     },
     {
       "underlyingAsset": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+      "id": 1,
       "name": "Wrapped liquid staked Ether 2.0",
       "symbol": "wstETH",
       "decimals": "18n",
@@ -89,6 +91,7 @@
     },
     {
       "underlyingAsset": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+      "id": 2,
       "name": "Wrapped BTC",
       "symbol": "WBTC",
       "decimals": "8n",
@@ -131,6 +134,7 @@
     },
     {
       "underlyingAsset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "id": 3,
       "name": "USD Coin",
       "symbol": "USDC",
       "decimals": "6n",
@@ -173,6 +177,7 @@
     },
     {
       "underlyingAsset": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "id": 4,
       "name": "Dai Stablecoin",
       "symbol": "DAI",
       "decimals": "18n",
@@ -215,6 +220,7 @@
     },
     {
       "underlyingAsset": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+      "id": 5,
       "name": "ChainLink Token",
       "symbol": "LINK",
       "decimals": "18n",
@@ -257,6 +263,7 @@
     },
     {
       "underlyingAsset": "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9",
+      "id": 6,
       "name": "Aave Token",
       "symbol": "AAVE",
       "decimals": "18n",
@@ -299,6 +306,7 @@
     },
     {
       "underlyingAsset": "0xBe9895146f7AF43049ca1c1AE358B0541Ea49704",
+      "id": 7,
       "name": "Coinbase Wrapped Staked ETH",
       "symbol": "cbETH",
       "decimals": "18n",
@@ -341,6 +349,7 @@
     },
     {
       "underlyingAsset": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "id": 8,
       "name": "Tether USD",
       "symbol": "USDT",
       "decimals": "6n",
@@ -383,6 +392,7 @@
     },
     {
       "underlyingAsset": "0xae78736Cd615f374D3085123A210448E74Fc6393",
+      "id": 9,
       "name": "Rocket Pool ETH",
       "symbol": "rETH",
       "decimals": "18n",
@@ -425,6 +435,7 @@
     },
     {
       "underlyingAsset": "0x5f98805A4E8be255a32880FDeC7F6728C6568bA0",
+      "id": 10,
       "name": "LUSD Stablecoin",
       "symbol": "LUSD",
       "decimals": "18n",
@@ -467,6 +478,7 @@
     },
     {
       "underlyingAsset": "0xD533a949740bb3306d119CC777fa900bA034cd52",
+      "id": 11,
       "name": "Curve DAO Token",
       "symbol": "CRV",
       "decimals": "18n",
@@ -509,6 +521,7 @@
     },
     {
       "underlyingAsset": "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2",
+      "id": 12,
       "name": "Maker",
       "symbol": "MKR",
       "decimals": "18n",
@@ -551,6 +564,7 @@
     },
     {
       "underlyingAsset": "0xC011a73ee8576Fb46F5E1c5751cA3B9Fe0af2a6F",
+      "id": 13,
       "name": "Synthetix Network Token",
       "symbol": "SNX",
       "decimals": "18n",
@@ -593,6 +607,7 @@
     },
     {
       "underlyingAsset": "0xba100000625a3754423978a60c9317c58a424e3D",
+      "id": 14,
       "name": "Balancer",
       "symbol": "BAL",
       "decimals": "18n",
@@ -635,6 +650,7 @@
     },
     {
       "underlyingAsset": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+      "id": 15,
       "name": "Uniswap",
       "symbol": "UNI",
       "decimals": "18n",
@@ -677,6 +693,7 @@
     },
     {
       "underlyingAsset": "0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32",
+      "id": 16,
       "name": "Lido DAO Token",
       "symbol": "LDO",
       "decimals": "18n",
@@ -719,6 +736,7 @@
     },
     {
       "underlyingAsset": "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+      "id": 17,
       "name": "Ethereum Name Service",
       "symbol": "ENS",
       "decimals": "18n",
@@ -761,6 +779,7 @@
     },
     {
       "underlyingAsset": "0x111111111117dC0aa78b770fA6A738034120C302",
+      "id": 18,
       "name": "1INCH Token",
       "symbol": "1INCH",
       "decimals": "18n",
@@ -803,6 +822,7 @@
     },
     {
       "underlyingAsset": "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+      "id": 19,
       "name": "Frax",
       "symbol": "FRAX",
       "decimals": "18n",
@@ -845,6 +865,7 @@
     },
     {
       "underlyingAsset": "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+      "id": 20,
       "name": "Gho Token",
       "symbol": "GHO",
       "decimals": "18n",
@@ -887,6 +908,7 @@
     },
     {
       "underlyingAsset": "0xD33526068D116cE69F19A9ee46F0bd304F21A51f",
+      "id": 21,
       "name": "Rocket Pool Protocol",
       "symbol": "RPL",
       "decimals": "18n",
@@ -929,6 +951,7 @@
     },
     {
       "underlyingAsset": "0x83F20F44975D03b1b09e64809B757c47f942BEeA",
+      "id": 22,
       "name": "Savings Dai",
       "symbol": "sDAI",
       "decimals": "18n",
@@ -971,6 +994,7 @@
     },
     {
       "underlyingAsset": "0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6",
+      "id": 23,
       "name": "StargateToken",
       "symbol": "STG",
       "decimals": "18n",
@@ -1013,6 +1037,7 @@
     },
     {
       "underlyingAsset": "0xdeFA4e8a7bcBA345F687a2f1456F5Edd9CE97202",
+      "id": 24,
       "name": "Kyber Network Crystal v2",
       "symbol": "KNC",
       "decimals": "18n",
@@ -1055,6 +1080,7 @@
     },
     {
       "underlyingAsset": "0x3432B6A60D23Ca0dFCa7761B7ab56459D9C964D0",
+      "id": 25,
       "name": "Frax Share",
       "symbol": "FXS",
       "decimals": "18n",
@@ -1097,6 +1123,7 @@
     },
     {
       "underlyingAsset": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+      "id": 26,
       "name": "Curve.Fi USD Stablecoin",
       "symbol": "crvUSD",
       "decimals": "18n",
@@ -1139,6 +1166,7 @@
     },
     {
       "underlyingAsset": "0x6c3ea9036406852006290770BEdFcAbA0e23A0e8",
+      "id": 27,
       "name": "PayPal USD",
       "symbol": "PYUSD",
       "decimals": "6n",
@@ -1181,6 +1209,7 @@
     },
     {
       "underlyingAsset": "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee",
+      "id": 28,
       "name": "Wrapped eETH",
       "symbol": "weETH",
       "decimals": "18n",
@@ -1223,6 +1252,7 @@
     },
     {
       "underlyingAsset": "0xf1C9acDc66974dFB6dEcB12aA385b9cD01190E38",
+      "id": 29,
       "name": "Staked ETH",
       "symbol": "osETH",
       "decimals": "18n",
@@ -1265,6 +1295,7 @@
     },
     {
       "underlyingAsset": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+      "id": 30,
       "name": "USDe",
       "symbol": "USDe",
       "decimals": "18n",
@@ -1307,6 +1338,7 @@
     },
     {
       "underlyingAsset": "0xA35b1B31Ce002FBF2058D22F30f95D405200A15b",
+      "id": 31,
       "name": "ETHx",
       "symbol": "ETHx",
       "decimals": "18n",
@@ -1349,6 +1381,7 @@
     },
     {
       "underlyingAsset": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "id": 32,
       "name": "Staked USDe",
       "symbol": "sUSDe",
       "decimals": "18n",
@@ -1391,6 +1424,7 @@
     },
     {
       "underlyingAsset": "0x18084fbA666a33d37592fA2633fD49a74DD93a88",
+      "id": 33,
       "name": "tBTC v2",
       "symbol": "tBTC",
       "decimals": "18n",
@@ -1433,6 +1467,7 @@
     },
     {
       "underlyingAsset": "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      "id": 34,
       "name": "Coinbase Wrapped BTC",
       "symbol": "cbBTC",
       "decimals": "8n",
@@ -1475,6 +1510,7 @@
     },
     {
       "underlyingAsset": "0xdC035D45d973E3EC169d2276DDab16f1e407384F",
+      "id": 35,
       "name": "USDS Stablecoin",
       "symbol": "USDS",
       "decimals": "18n",
@@ -1517,6 +1553,7 @@
     },
     {
       "underlyingAsset": "0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7",
+      "id": 36,
       "name": "rsETH",
       "symbol": "rsETH",
       "decimals": "18n",
@@ -1559,6 +1596,7 @@
     },
     {
       "underlyingAsset": "0x8236a87084f8B84306f72007F36F2618A5634494",
+      "id": 37,
       "name": "Lombard Staked Bitcoin",
       "symbol": "LBTC",
       "decimals": "8n",
@@ -1601,6 +1639,7 @@
     },
     {
       "underlyingAsset": "0x657e8C867D8B37dCC18fA4Caead9C45EB088C642",
+      "id": 38,
       "name": "ether.fi BTC",
       "symbol": "eBTC",
       "decimals": "8n",
@@ -1643,6 +1682,7 @@
     },
     {
       "underlyingAsset": "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+      "id": 39,
       "name": "RLUSD",
       "symbol": "RLUSD",
       "decimals": "18n",
@@ -1685,6 +1725,7 @@
     },
     {
       "underlyingAsset": "0x50D2C7992b802Eef16c04FeADAB310f31866a545",
+      "id": 40,
       "name": "PT Ethereal eUSDE 29MAY2025",
       "symbol": "PT-eUSDE-29MAY2025",
       "decimals": "18n",
@@ -1727,6 +1768,7 @@
     },
     {
       "underlyingAsset": "0x3b3fB9C57858EF816833dC91565EFcd85D96f634",
+      "id": 41,
       "name": "PT Ethena sUSDE 31JUL2025",
       "symbol": "PT-sUSDE-31JUL2025",
       "decimals": "18n",
@@ -1769,6 +1811,7 @@
     },
     {
       "underlyingAsset": "0xC139190F447e929f090Edeb554D95AbB8b18aC1C",
+      "id": 42,
       "name": "USDtb",
       "symbol": "USDtb",
       "decimals": "18n",
@@ -1811,6 +1854,7 @@
     },
     {
       "underlyingAsset": "0x917459337CaAC939D41d7493B3999f571D20D667",
+      "id": 43,
       "name": "PT Ethena USDe 31JUL2025",
       "symbol": "PT-USDe-31JUL2025",
       "decimals": "18n",
@@ -1853,6 +1897,7 @@
     },
     {
       "underlyingAsset": "0x14Bdc3A3AE09f5518b923b69489CBcAfB238e617",
+      "id": 44,
       "name": "PT Ethereal eUSDE 14AUG2025",
       "symbol": "PT-eUSDE-14AUG2025",
       "decimals": "18n",
@@ -1895,6 +1940,7 @@
     },
     {
       "underlyingAsset": "0x90D2af7d622ca3141efA4d8f1F24d86E5974Cc8F",
+      "id": 45,
       "name": "Ethereal Pre-deposit Vault",
       "symbol": "eUSDe",
       "decimals": "18n",
@@ -1937,6 +1983,7 @@
     },
     {
       "underlyingAsset": "0xC96dE26018A54D51c097160568752c4E3BD6C364",
+      "id": 46,
       "name": "Fire Bitcoin",
       "symbol": "FBTC",
       "decimals": "8n",
@@ -1979,6 +2026,7 @@
     },
     {
       "underlyingAsset": "0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c",
+      "id": 47,
       "name": "Euro Coin",
       "symbol": "EURC",
       "decimals": "6n",
@@ -2021,6 +2069,7 @@
     },
     {
       "underlyingAsset": "0x9F56094C450763769BA0EA9Fe2876070c0fD5F77",
+      "id": 48,
       "name": "PT Ethena sUSDE 25SEP2025",
       "symbol": "PT-sUSDE-25SEP2025",
       "decimals": "18n",
@@ -2063,6 +2112,7 @@
     },
     {
       "underlyingAsset": "0xBC6736d346a5eBC0dEbc997397912CD9b8FAe10a",
+      "id": 49,
       "name": "PT Ethena USDe 25SEP2025",
       "symbol": "PT-USDe-25SEP2025",
       "decimals": "18n",
@@ -2105,6 +2155,7 @@
     },
     {
       "underlyingAsset": "0xD11c452fc99cF405034ee446803b6F6c1F6d5ED8",
+      "id": 50,
       "name": "Treehouse ETH",
       "symbol": "tETH",
       "decimals": "18n",
@@ -2147,6 +2198,7 @@
     },
     {
       "underlyingAsset": "0xbf5495Efe5DB9ce00f80364C8B423567e58d2110",
+      "id": 51,
       "name": "Renzo Restaked ETH",
       "symbol": "ezETH",
       "decimals": "18n",
@@ -2189,6 +2241,7 @@
     },
     {
       "underlyingAsset": "0x68749665FF8D2d112Fa859AA293F07A622782F38",
+      "id": 52,
       "name": "Tether Gold",
       "symbol": "XAUt",
       "decimals": "6n",
@@ -2231,6 +2284,7 @@
     },
     {
       "underlyingAsset": "0xe6A934089BBEe34F832060CE98848359883749B3",
+      "id": 53,
       "name": "PT Ethena sUSDE 27NOV2025",
       "symbol": "PT-sUSDE-27NOV2025",
       "decimals": "18n",
@@ -2273,6 +2327,7 @@
     },
     {
       "underlyingAsset": "0x62C6E813b9589C3631Ba0Cdb013acdB8544038B7",
+      "id": 54,
       "name": "PT Ethena USDe 27NOV2025",
       "symbol": "PT-USDe-27NOV2025",
       "decimals": "18n",
@@ -2315,6 +2370,7 @@
     },
     {
       "underlyingAsset": "0x1F84a51296691320478c98b8d77f2Bbd17D34350",
+      "id": 55,
       "name": "PT Ethena USDe 5FEB2026",
       "symbol": "PT-USDe-5FEB2026",
       "decimals": "18n",
@@ -2357,6 +2413,7 @@
     },
     {
       "underlyingAsset": "0xE8483517077afa11A9B07f849cee2552f040d7b2",
+      "id": 56,
       "name": "PT Ethena sUSDE 5FEB2026",
       "symbol": "PT-sUSDE-5FEB2026",
       "decimals": "18n",
@@ -2399,6 +2456,7 @@
     },
     {
       "underlyingAsset": "0xacA92E438df0B2401fF60dA7E4337B687a2435DA",
+      "id": 57,
       "name": "MetaMask USD",
       "symbol": "mUSD",
       "decimals": "6n",
@@ -2441,6 +2499,7 @@
     },
     {
       "underlyingAsset": "0x356B8d89c1e1239Cbbb9dE4815c39A1474d5BA7D",
+      "id": 58,
       "name": "Syrup USDT",
       "symbol": "syrupUSDT",
       "decimals": "6n",
@@ -2483,6 +2542,7 @@
     },
     {
       "underlyingAsset": "0xe343167631d89B6Ffc58B88d6b7fB0228795491D",
+      "id": 59,
       "name": "Global Dollar",
       "symbol": "USDG",
       "decimals": "6n",
@@ -2525,6 +2585,7 @@
     },
     {
       "underlyingAsset": "0xAeBf0Bb9f57E89260d57f31AF34eB58657d96Ce0",
+      "id": 60,
       "name": "PT Ethena USDe 7MAY2026",
       "symbol": "PT-USDe-7MAY2026",
       "decimals": "18n",
@@ -2567,6 +2628,7 @@
     },
     {
       "underlyingAsset": "0x3de0ff76E8b528C092d47b9DaC775931cef80F49",
+      "id": 61,
       "name": "PT Ethena sUSDE 7MAY2026",
       "symbol": "PT-sUSDE-7MAY2026",
       "decimals": "18n",
@@ -2609,6 +2671,7 @@
     },
     {
       "underlyingAsset": "0x9Bf45ab47747F4B4dD09B3C2c73953484b4eB375",
+      "id": 62,
       "name": "PT Strata Senior USDe 2APR2026",
       "symbol": "PT-srUSDe-2APR2026",
       "decimals": "18n",
@@ -2651,6 +2714,7 @@
     },
     {
       "underlyingAsset": "0xB0F70C0bD6FD87dbEb7C10dC692a2a6106817072",
+      "id": 63,
       "name": "Bitcoin",
       "symbol": "BTC.b",
       "decimals": "8n",
@@ -2693,6 +2757,7 @@
     },
     {
       "underlyingAsset": "0x619D75E3b790eBC21c289f2805Bb7177A7D732E2",
+      "id": 64,
       "name": "PT Strata Senior USDe 25JUN2026",
       "symbol": "PT-srUSDe-25JUN2026",
       "decimals": "18n",
@@ -2735,6 +2800,7 @@
     },
     {
       "underlyingAsset": "0x9db38D74a0D29380899aD354121DfB521aDb0548",
+      "id": 65,
       "name": "PT Global Dollar 28MAY2026",
       "symbol": "PT-USDG-28MAY2026",
       "decimals": "6n",
@@ -2777,6 +2843,7 @@
     },
     {
       "underlyingAsset": "0x59bC9FaE5D62B19d4f8d07D758047aCb9EE19d34",
+      "id": 66,
       "name": "PT Strata Senior USDe 22OCT2026",
       "symbol": "PT-srUSDe-22OCT2026",
       "decimals": "18n",
@@ -3236,7 +3303,7 @@
           "scaledVariableDebt": "0n"
         }
       ],
-      "eModeCategoryId": 0,
+      "eMode": null,
       "account": {
         "totalCollateralBase": "1314860476537n",
         "totalDebtBase": "199960115935n",
@@ -3665,7 +3732,7 @@
           "scaledVariableDebt": "0n"
         }
       ],
-      "eModeCategoryId": 0,
+      "eMode": null,
       "account": {
         "totalCollateralBase": "4037351305054n",
         "totalDebtBase": "1785231981506n",
@@ -4094,7 +4161,7 @@
           "scaledVariableDebt": "0n"
         }
       ],
-      "eModeCategoryId": 0,
+      "eMode": null,
       "account": {
         "totalCollateralBase": "3421641416277n",
         "totalDebtBase": "2064607758036n",
@@ -4523,7 +4590,7 @@
           "scaledVariableDebt": "0n"
         }
       ],
-      "eModeCategoryId": 0,
+      "eMode": null,
       "account": {
         "totalCollateralBase": "1155048484004n",
         "totalDebtBase": "898027972635n",
@@ -4952,7 +5019,7 @@
           "scaledVariableDebt": "0n"
         }
       ],
-      "eModeCategoryId": 0,
+      "eMode": null,
       "account": {
         "totalCollateralBase": "26644337919858n",
         "totalDebtBase": "0n",
@@ -5381,7 +5448,7 @@
           "scaledVariableDebt": "0n"
         }
       ],
-      "eModeCategoryId": 0,
+      "eMode": null,
       "account": {
         "totalCollateralBase": "0n",
         "totalDebtBase": "0n",
