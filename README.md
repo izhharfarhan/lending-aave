@@ -52,9 +52,16 @@ kosong untuk itu; tanpa blok itu Ponder berhenti dengan `BlockNotFoundError`.
 3. `pnpm db:up && pnpm dev:mainnet` → GraphQL di http://localhost:42070/graphql (port yang sama dengan `dev:fork`, jadi
    jalankan salah satu). Di lending-web `.env.mainnet` isi `NEXT_PUBLIC_INDEXER_URL=http://localhost:42070`, lalu
    **restart** `pnpm dev:mainnet` di sana (env dibaca saat server mulai).
-- Kuota: sync live = polling blok baru tiap chain (Arbitrum ±4 blok/detik) + `eth_getLogs` per 10 blok + bacaan
-  `eth_call` per likuidasi. Ukur pemakaian di dashboard provider selama smoke test sebelum menjalankannya lama.
-- Jangan pernah mencetak `PONDER_RPC_URL_*` (berisi key); script di repo ini cuma mencetak nomor blok/nama error.
+- **Kuota: nyalakan indexer mainnet hanya saat dibutuhkan.** Sync live = polling blok baru tiap chain (Arbitrum ±4
+  blok/detik) + `eth_getLogs` per 10 blok + bacaan `eth_call` per likuidasi. Terukur saat smoke test Base
+  (2026-10-28, satu key Alchemy untuk web + indexer, ±25 menit): dari 0,1 CU/s jadi rata-rata **136,5 CU/s** (5 menit),
+  +±9,7K request, sempat throughput limited 6% waktu indexer mengejar blok awal. Kalau 24/7 ≈ 354 juta CU/bulan,
+  jauh di atas free tier (±30 juta): habis dalam ±2–3 hari. Jalan 24/7 butuh provider/kuota terpisah untuk indexer
+  atau polling Arbitrum diperlambat (keputusan terpisah). Porsi web vs indexer belum diukur terpisah.
+- URL RPC ber-key nggak pernah dicetak: `PONDER_RPC_URL_*` ada key di path, dan Ponder mencetak error RPC lengkap
+  dengan URL-nya (mis. 429). `with-env.mjs` (`dev:*`, `codegen`, `test`) menyaring output Ponder: nilai env RPC/DB
+  diganti nama variabelnya, URL lain berpola `/v2|v3/<key>` jadi `<url ber-key>`. Script lain di repo ini cuma
+  mencetak nomor blok/nama error. Jalankan Ponder lewat `pnpm dev:*`, bukan `ponder dev` langsung.
 
 ## Data
 
