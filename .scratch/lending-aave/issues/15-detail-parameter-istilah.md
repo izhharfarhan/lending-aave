@@ -18,3 +18,4 @@
 ## Comments
 
 - 2026-10-28 (dari tiket 14): label on-chain kategori E-Mode user (`ChainView.eMode.label`) tampil di "Detail parameter <chain>" (spec story 56, V4). Baris "E-Mode aktif · jaminan · pinjaman" di kepala detail chain sengaja tanpa label.
+- 2026-10-28 (keputusan review): header Detail tetap "Supply cap" / "Borrow cap" dengan ⓘ (kuota supply / kuota pinjaman); GLOSSARY.md diberi pengecualian untuk Detail parameter (Q8, supaya cocok dengan app.aave.com), di luar Detail tetap "kuota supply / kuota pinjaman". Baris bunga panel aksi "(APY y%)" dibiarkan.

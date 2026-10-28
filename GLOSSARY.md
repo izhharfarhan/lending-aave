@@ -74,11 +74,13 @@ _Avoid_: limit pool, capacity
 
 **Kuota supply**:
 Batas total supply sebuah reserve yang ditetapkan Aave; kuota penuh berarti tidak ada supply baru yang diterima.
-_Avoid_: supply cap, plafon supply
+_Avoid_: supply cap, plafon supply (kecuali header "Detail parameter", lihat di bawah)
 
 **Kuota pinjaman**:
 Batas total utang sebuah reserve yang ditetapkan Aave, untuk semua peminjam sekaligus. Bukan batas pinjam milik satu posisi.
-_Avoid_: borrow cap, plafon pinjaman, limit pinjam
+_Avoid_: borrow cap, plafon pinjaman, limit pinjam (kecuali header "Detail parameter")
+
+Pengecualian: di "Detail parameter <chain>" header kolomnya "Supply cap" / "Borrow cap" dengan ⓘ "(kuota supply)" / "(kuota pinjaman)", karena di sana istilah asli Aave dipakai (Q8) supaya angkanya bisa dicocokkan dengan app.aave.com. Di luar Detail tetap "kuota supply" / "kuota pinjaman".
 
 **Likuiditas pool**:
 Aset sebuah reserve yang belum dipinjam, yang bisa dipinjam atau ditarik saat ini.
