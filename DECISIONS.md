@@ -491,6 +491,12 @@ Aturan dari `GenericLogic`/`ValidationLogic`, untuk user di kategori E-Mode `k`:
     otomatis saat supply pertama, boleh menyalakan jaminan, dan aturan ltv0. Plus LT kategori untuk aset di
     `collateralBitmap` (`GenericLogic`).
   - Saat dicek, semua kategori di ketiga chain `isolated = false`.
+  - **"Bisa jadi jaminan"** (Pasar supply, dan switch jaminan di Supply Anda) = **LTV efektif ≠ 0**, bukan flag
+    `usageAsCollateralEnabled` reserve. Alasannya: kontrak v3.7 hanya memakai `getUserReserveLtv(...) != 0`
+    (`validateUseAsCollateral`), baik untuk jaminan otomatis saat supply pertama maupun `setUserUseReserveAsCollateral`.
+    Flag UiPoolDataProvider itu cuma turunan konfigurasi reserve (LT ≠ 0) dan buta E-Mode. Akibatnya bisa salah dua
+    arah: aset ber-LTV reserve 0 yang masuk `collateralBitmap` kategori user tetap bisa jadi jaminan, sedangkan aset
+    di `ltvzeroBitmap` atau di luar bitmap kategori `isolated` tidak bisa.
 
 ### V5 — Likuidasi & penalti **[DISETUJUI: Q16]**
 - `liquidatedCollateralAmount` = jaminan yang diterima **likuidator saja**, belum termasuk
