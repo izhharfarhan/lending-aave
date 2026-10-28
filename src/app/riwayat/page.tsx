@@ -3,6 +3,7 @@ import { HISTORY } from '@/copy';
 import { HISTORY_KINDS, type HistoryKind } from '@/core/history';
 
 import { DevTools } from '../DevTools';
+import { FORK_PAGE_BOTTOM } from '../forkPage';
 import { HistoryView } from '../HistoryView';
 import { MobileNav, Sidebar } from '../Sidebar';
 import { WalletButton } from '../WalletStatus';
@@ -24,7 +25,7 @@ export default async function HistoryPage({ searchParams }: PageProps<'/riwayat'
           </div>
           <WalletButton />
         </header>
-        <main className="px-4 pb-16 md:px-8">
+        <main className={`px-4 pb-16 md:px-8 ${FORK_PAGE_BOTTOM}`}>
           <HistoryView initialKind={initialKind} />
         </main>
       </div>

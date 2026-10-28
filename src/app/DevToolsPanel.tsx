@@ -109,8 +109,9 @@ export default function DevToolsPanel({ chainId }: { chainId: number }) {
   const ambiguous = ambiguousAmount(amount);
   return (
     // Desktop: kiri bawah, di atas sidebar, supaya nggak menutupi panel aksi di kanan. Mobile: kanan, di atas bar
-    // Supply/Borrow (tiket 16); sheet panel aksi (z-50) menutupinya.
-    <details className="surface fixed bottom-24 right-4 z-[45] w-80 max-w-[calc(100vw-2rem)] overflow-hidden text-sm md:bottom-4 md:left-4 md:right-auto">
+    // Supply/Borrow (tiket 16); sheet panel aksi (z-50) menutupinya. Di mobile, selama tertutup cuma pil selebar
+    // badge-nya, bukan strip 320 px yang menutupi baris tabel; halaman fork memberi ruang di bawah (`FORK_PAGE_BOTTOM`).
+    <details className="surface fixed bottom-24 right-4 z-[45] max-w-[calc(100vw-2rem)] overflow-hidden text-sm open:w-80 md:bottom-4 md:left-4 md:right-auto md:w-80">
       <summary className="hazard cursor-pointer px-3 py-1.5">
         <span className="rounded-md bg-hazard-ink px-2 py-0.5 font-mono text-xs font-bold tracking-[0.2em] text-hazard">{DEV_TOOLS.badge}</span>
       </summary>

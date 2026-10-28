@@ -6,6 +6,7 @@ import { NAV } from '@/copy';
 import { ChainDetail } from './ChainDetail';
 import { Dashboard } from './Dashboard';
 import { DevTools } from './DevTools';
+import { FORK_PAGE_BOTTOM } from './forkPage';
 import { MobileNav, Sidebar } from './Sidebar';
 import { WalletButton, WalletOverview } from './WalletStatus';
 
@@ -25,8 +26,8 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
           </div>
           <WalletButton />
         </header>
-        {/* `pb-28` mobile: ruang untuk bar Supply/Borrow yang menempel di bawah layar (tiket 16). */}
-        <main className="flex flex-col gap-8 px-4 pb-28 md:px-8 md:pb-16">
+        {/* `pb-28` mobile: ruang untuk bar Supply/Borrow yang menempel di bawah layar (tiket 16), lebih di mode fork. */}
+        <main className={`flex flex-col gap-8 px-4 pb-28 md:px-8 md:pb-16 ${FORK_PAGE_BOTTOM}`}>
           <WalletOverview chainId={selected.chainId} />
           <Dashboard selectedChainId={selected.chainId} />
           {/* Langkah ketiga animasi masuk; di luar `key` biar ganti chain nggak memutarnya lagi. `key`: pilihan
