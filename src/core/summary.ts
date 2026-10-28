@@ -1,4 +1,4 @@
-import type { AccountView, ChainView, RiskLevel } from './chainPosition';
+import { isDustPosition, type AccountView, type ChainView, type RiskLevel } from './chainPosition';
 
 /** Satu chain yang berhasil dibaca dengan wallet terhubung: `account` + `totalSupplyUsd` dari `ChainView`. */
 export type ChainAccount = { chainId: number; account: AccountView; totalSupplyUsd: number };
@@ -10,7 +10,7 @@ export type ChainAccount = { chainId: number; account: AccountView; totalSupplyU
 export type UnreadChain = { chainId: number; lastRead: { account: AccountView; readAt: number } | null };
 
 export type DashboardSummary = {
-  /** `null` = tidak ada utang di chain mana pun. */
+  /** `null` = tidak ada utang di chain mana pun (posisi debu nggak dihitung). */
   lowestHealthFactor: { chainId: number; healthFactor: number; risk: RiskLevel } | null;
   /** USD harga oracle Aave; saldo wallet nggak ikut (Q3). */
   totalSupplyUsd: number;
@@ -36,13 +36,14 @@ export type DashboardSummary = {
 
 // Ringkasan semua chain untuk hero (ADR 0001, Q3).
 export function summarizeChains(chains: ChainAccount[], unread: UnreadChain[] = []): DashboardSummary {
-  // Chain tanpa utang nggak punya HF, jadi nggak ikut HF terendah (Q3).
-  const byHealth = chains
+  // Chain tanpa utang nggak punya HF, jadi nggak ikut HF terendah (Q3); posisi debu juga nggak. Totalnya tetap ikut.
+  const indebted = chains.filter(({ account }) => !isDustPosition(account));
+  const byHealth = indebted
     .flatMap(({ chainId, account }) =>
       account.healthFactor !== null && account.risk !== null ? [{ chainId, healthFactor: account.healthFactor, risk: account.risk }] : [],
     )
     .sort((a, b) => a.healthFactor - b.healthFactor);
-  const highest = chains.reduce<DashboardSummary['highestBorrowLimitUsed']>(
+  const highest = indebted.reduce<DashboardSummary['highestBorrowLimitUsed']>(
     (top, { chainId, account }) =>
       account.borrowLimitUsed !== null && account.risk !== null && (top === null || account.borrowLimitUsed > top.used)
         ? { chainId, used: account.borrowLimitUsed, availableUsd: account.availableBorrowsUsd, risk: account.risk }
@@ -60,7 +61,7 @@ export function summarizeChains(chains: ChainAccount[], unread: UnreadChain[] = 
     dangerChains: [
       ...byHealth.map(({ chainId, healthFactor, risk }) => ({ chainId, healthFactor, risk, readAt: null })),
       ...unread.flatMap(({ chainId, lastRead }) =>
-        lastRead && lastRead.account.healthFactor !== null && lastRead.account.risk !== null
+        lastRead && !isDustPosition(lastRead.account) && lastRead.account.healthFactor !== null && lastRead.account.risk !== null
           ? [{ chainId, healthFactor: lastRead.account.healthFactor, risk: lastRead.account.risk, readAt: lastRead.readAt }]
           : [],
       ),

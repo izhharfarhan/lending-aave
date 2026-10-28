@@ -134,6 +134,51 @@ describe('summarizeChains()', () => {
     });
   });
 
+  describe('positive: posisi debu (utang < $0,01, smoke test tiket 25)', () => {
+    // Bentuk yang terlihat di mainnet: jaminan $0,00004, utang $0,00001, HF 2,66 di Ethereum.
+    const dust = { healthFactor: 2.66, risk: 'aman', totalCollateralUsd: 0.00004, totalDebtUsd: 0.00001, borrowLimitUsed: 0.3 } as const;
+
+    it('shows no lowest HF, no borrow limit bar and no banner when the only debt is dust', () => {
+      const summary = summarizeChains([chain(ETHEREUM, dust, 0.00004), chain(BASE, {}, 0)]);
+
+      expect(summary.lowestHealthFactor).toBeNull();
+      expect(summary.highestBorrowLimitUsed).toBeNull();
+      expect(summary.dangerChains).toEqual([]);
+    });
+
+    it('takes the lowest HF and borrow limit from real debt even when a dust position looks riskier', () => {
+      const summary = summarizeChains([
+        chain(ETHEREUM, { ...dust, healthFactor: 1.05, risk: 'bahaya', borrowLimitUsed: 0.95 }, 0.00004),
+        chain(BASE, { healthFactor: 2.4, risk: 'aman', totalDebtUsd: 100, borrowLimitUsed: 0.4, availableBorrowsUsd: 150 }, 500),
+      ]);
+
+      expect(summary.lowestHealthFactor).toEqual({ chainId: BASE, healthFactor: 2.4, risk: 'aman' });
+      expect(summary.highestBorrowLimitUsed).toEqual({ chainId: BASE, used: 0.4, availableUsd: 150, risk: 'aman' });
+      expect(summary.dangerChains).toEqual([]);
+    });
+
+    it('keeps dust debt in the totals: the money is still there', () => {
+      const summary = summarizeChains([chain(ETHEREUM, dust, 0.00004)]);
+
+      expect(summary.totalDebtUsd).toBe(0.00001);
+    });
+
+    it('leaves a dust position out of the banner from its last successful read too', () => {
+      const summary = summarizeChains(
+        [],
+        [{ chainId: BASE, lastRead: { account: account({ ...dust, healthFactor: 1.1, risk: 'bahaya' }), readAt: 1 } }],
+      );
+
+      expect(summary.dangerChains).toEqual([]);
+    });
+
+    it('counts debt of exactly $0,01 as a real position', () => {
+      const summary = summarizeChains([chain(ETHEREUM, { ...dust, totalDebtUsd: 0.01 }, 0.02)]);
+
+      expect(summary.lowestHealthFactor).toMatchObject({ chainId: ETHEREUM });
+    });
+  });
+
   describe('edge', () => {
     it('has no lowest HF, no borrow limit bar and no banner when no chain has debt', () => {
       const summary = summarizeChains([chain(ETHEREUM, { totalCollateralUsd: 2_000 }, 2_000), chain(BASE, {}, 0), chain(ARBITRUM, {}, 0)]);

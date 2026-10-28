@@ -113,6 +113,8 @@ export const POSITION = {
   notCounted: 'Ringkasan semua chain di atas belum menghitung chain ini.',
   retry: 'Coba lagi',
   liquidation: 'Harga likuidasi',
+  /** Posisi debu (GLOSSARY): utang di bawah satu sen. */
+  dust: 'Posisi debu: utang < $0,01, tidak dihitung di HF terendah',
   liquidationInfo:
     'Harga ETH (oracle chain ini) yang membuat health factor tepat 1, dengan harga aset lain dianggap tetap. Bunga membuat angka ini terus bergeser.',
 };
@@ -120,7 +122,7 @@ export const POSITION = {
 // Dashboard semua chain (ADR 0001, Q2, Q3, Q10, Q21, Q24).
 export const DASHBOARD = {
   lowestHf: 'Health factor terendah · semua chain',
-  lowestHfInfo: `${POSITION.hfInfo} Dihitung dari chain yang punya utang.`,
+  lowestHfInfo: `${POSITION.hfInfo} Dihitung dari chain yang punya utang, kecuali posisi debu (utang < $0,01).`,
   /** Skala HF 1,0 → 3,0+ (Q20); HF di atas 3 menempel di ujung kanan. */
   scaleTicks: [
     [1, '1,0'],

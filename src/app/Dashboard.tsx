@@ -9,7 +9,7 @@ import { useAllChainViews } from '@/aave/useChainView';
 import { useTypicalActionFees } from '@/aave/useNetworkFee';
 import { WHITELIST } from '@/config/assets';
 import { chainHref, SUPPORTED_CHAINS, type SupportedChain } from '@/config/chains';
-import { RISK_THRESHOLD, type ChainRead, type ChainView, type RiskLevel } from '@/core/chainPosition';
+import { isDustPosition, RISK_THRESHOLD, type ChainRead, type ChainView, type RiskLevel } from '@/core/chainPosition';
 import { liquidationPrice } from '@/core/simulate';
 import { elapsed } from '@/core/relativeTime';
 import { chainSegment, summarizeChains, type ChainAccount, type DashboardSummary, type UnreadChain } from '@/core/summary';
@@ -95,7 +95,7 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
               attached={banners}
               summary={summary}
               loading={queries.some((q) => q.isLoading)}
-              indebted={connected.filter(({ view }) => view.account!.healthFactor !== null)}
+              indebted={connected.filter(({ view }) => view.account!.healthFactor !== null && !isDustPosition(view.account!))}
               selectedChainId={selectedChainId}
             />
           </>
@@ -445,7 +445,8 @@ function SegmentBody({ chain, read, view, ethBalance, fee }: Loaded & { ethBalan
       </span>
     );
 
-  const liquidation = account.risk === 'bahaya' ? liquidationText(liquidationPrice(read, WHITELIST[chain.chainId])) : null;
+  const dust = isDustPosition(account);
+  const liquidation = account.risk === 'bahaya' && !dust ? liquidationText(liquidationPrice(read, WHITELIST[chain.chainId])) : null;
   return (
     <span className="mt-2 flex flex-col">
       <span className="num text-xs text-muted">{DASHBOARD.supplyDebt(usd(view.totalSupplyUsd), usd(account.totalDebtUsd))}</span>
@@ -455,6 +456,7 @@ function SegmentBody({ chain, read, view, ethBalance, fee }: Loaded & { ethBalan
         )}
       </span>
       {liquidation && <span className={`mt-2 text-xs ${liquidation.tone}`}>{liquidation.text}</span>}
+      {dust && <span className="mt-2 text-xs text-muted">{POSITION.dust}</span>}
       {badge}
     </span>
   );

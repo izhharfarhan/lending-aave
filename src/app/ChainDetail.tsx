@@ -9,6 +9,7 @@ import { useChainView } from '@/aave/useChainView';
 import { WHITELIST } from '@/config/assets';
 import { chainHref, chainName, supportedChain } from '@/config/chains';
 import {
+  isDustPosition,
   visibleSupplyMarket,
   type AccountView,
   type ChainView,
@@ -187,6 +188,7 @@ function AccountFacts({ account, liquidation }: { account: AccountView; liquidat
     <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
       <Fact label={POSITION.healthFactor} info={POSITION.hfInfo}>
         <HealthFactor value={account.healthFactor} />
+        {isDustPosition(account) && <span className="ml-2 text-xs text-muted">{POSITION.dust}</span>}
       </Fact>
       {liquidation.kind !== 'noDebt' && (
         <Fact label={POSITION.liquidation} info={POSITION.liquidationInfo}>

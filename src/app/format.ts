@@ -3,10 +3,13 @@ import { formatUnits } from 'viem';
 // Format angka gaya Indonesia (koma desimal, titik ribuan), DECISIONS.md Q8.
 const nf = (min: number, max: number) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: min, maximumFractionDigits: max });
 
-// Sen cuma buat nilai kecil; di atas $100 sen cuma bikin angka susah dibaca.
+// Sen cuma buat nilai kecil; di atas $100 sen cuma bikin angka susah dibaca. Nilai yang nggak sampai satu sen (posisi
+// debu) ditulis "< $0,01", bukan "$0,00" yang terbaca kosong. Tanda minus di depan "$" (net negatif).
 export const usd = (n: number) => {
-  const digits = n < 100 ? 2 : 0;
-  return `$${nf(digits, digits).format(n)}`;
+  const abs = Math.abs(n);
+  const digits = abs < 100 ? 2 : 0;
+  const sign = n < 0 ? '−' : '';
+  return abs > 0 && abs < 0.005 ? `${sign}< $0,01` : `${sign}$${nf(digits, digits).format(abs)}`;
 };
 // Harga oracle: harga di bawah $10 (stablecoin) butuh 4 desimal, $0,9998 bukan $1,00.
 export const price = (n: number) => `$${(n < 10 ? nf(2, 4) : nf(2, 2)).format(n)}`;

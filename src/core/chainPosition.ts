@@ -212,6 +212,11 @@ export function riskLevel(healthFactor: number): RiskLevel {
   return 'bahaya';
 }
 
+// Posisi debu (tiket 25): utang di bawah satu sen, mis. sisa bunga sesudah repay. HF-nya tetap angka asli, tapi nggak
+// berarti apa-apa, jadi nggak ikut HF terendah, banner Bahaya, dan batas pinjam tertinggi di ringkasan.
+export const DUST_DEBT_USD = 0.01;
+export const isDustPosition = (account: AccountView) => account.healthFactor !== null && account.totalDebtUsd < DUST_DEBT_USD;
+
 export function buildChainView(read: ChainRead, whitelist: WhitelistAsset[]): ChainView {
   const toUsd = baseToUsd(read.baseCurrency);
   const reserveOf = new Map(read.reserves.map((r) => [key(r.underlyingAsset), r]));

@@ -51,7 +51,11 @@ Bagian teratas dashboard: total supply, total utang, net, dan HF terendah dari s
 _Avoid_: overview, total aset
 
 **HF terendah**:
-HF paling kecil di antara posisi yang punya utang, di semua chain.
+HF paling kecil di antara posisi yang punya utang, di semua chain. Posisi debu tidak dihitung.
+
+**Posisi debu**:
+Posisi yang utangnya di bawah $0,01 di satu chain, mis. sisa bunga sesudah repay. HF-nya tetap ditampilkan apa adanya di kartu chain dan detail chain dengan catatan, tapi tidak ikut HF terendah, banner Bahaya, dan batas pinjam tertinggi; nilainya tetap masuk total. Nilai USD positif di bawah satu sen ditulis "< $0,01", bukan "$0,00".
+_Avoid_: dust, sisa utang (bentrok dengan "Sisa utang dihapus")
 
 **Ringkasan belum lengkap**:
 Keadaan ringkasan ketika posisi di satu chain atau lebih gagal dibaca. Angkanya tidak boleh dianggap final.
@@ -64,7 +68,7 @@ Chain yang detail posisinya sedang ditampilkan di app. Bisa beda dengan network 
 _Avoid_: chain aktif, network aktif
 
 **Chain berbahaya**:
-Chain yang posisinya bertingkat risiko Bahaya. Hanya chain ini yang memunculkan banner.
+Chain yang posisinya bertingkat risiko Bahaya, kecuali posisi debu. Hanya chain ini yang memunculkan banner.
 
 **Panel penyelamatan**:
 Panel yang dibuka dari "Lihat <chain>" di banner chain berbahaya, menggantikan panel aksi sampai user memilih. Menawarkan dua cara menaikkan HF, Repay atau Supply jaminan, masing-masing dengan HF sesudah MAX-nya dari aset yang paling menaikkan HF.
