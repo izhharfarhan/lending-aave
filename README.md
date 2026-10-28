@@ -57,7 +57,9 @@ kosong untuk itu; tanpa blok itu Ponder berhenti dengan `BlockNotFoundError`.
   (2026-10-28, satu key Alchemy untuk web + indexer, ±25 menit): dari 0,1 CU/s jadi rata-rata **136,5 CU/s** (5 menit),
   +±9,7K request, sempat throughput limited 6% waktu indexer mengejar blok awal. Kalau 24/7 ≈ 354 juta CU/bulan,
   jauh di atas free tier (±30 juta): habis dalam ±2–3 hari. Jalan 24/7 butuh provider/kuota terpisah untuk indexer
-  atau polling Arbitrum diperlambat (keputusan terpisah). Porsi web vs indexer belum diukur terpisah.
+  atau polling Arbitrum diperlambat (keputusan terpisah). Hampir seluruhnya indexer: web mode mainnet dengan tab
+  browser di belakang terukur 0 CU/s (polling berhenti saat halaman tersembunyi, 2026-10-29), dan throughput limited
+  muncul lagi tepat saat indexer dinyalakan dan mengejar blok.
 - URL RPC ber-key nggak pernah dicetak: `PONDER_RPC_URL_*` ada key di path, dan Ponder mencetak error RPC lengkap
   dengan URL-nya (mis. 429). `with-env.mjs` (`dev:*`, `codegen`, `test`) menyaring output Ponder: nilai env RPC/DB
   diganti nama variabelnya, URL lain berpola `/v2|v3/<key>` jadi `<url ber-key>`. Script lain di repo ini cuma
