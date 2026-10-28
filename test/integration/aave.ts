@@ -1,5 +1,5 @@
 import { AaveV3Arbitrum, AaveV3Base, AaveV3Ethereum } from '@bgd-labs/aave-address-book';
-import { createWalletClient, erc20Abi, http, maxUint256, parseAbi, toHex, type Abi, type Address, type ContractFunctionArgs, type ContractFunctionName, type WalletClient } from 'viem';
+import { createWalletClient, erc20Abi, http, maxUint256, parseAbi, toHex, type Abi, type Address, type ContractFunctionArgs, type ContractFunctionName, type TransactionReceipt, type WalletClient } from 'viem';
 
 import { INDEXED_CHAINS } from '../../src/chains';
 import { anvilUrl, TEST_ACCOUNT, TEST_CHAINS, testClients, type TestChainId } from './harness';
@@ -30,19 +30,34 @@ export function aave(chainId: TestChainId) {
   const { pool, wethGateway: gateway } = INDEXED_CHAINS[chainId];
   const { usdc, weth } = RESERVES[chainId];
 
-  // Gas limit = estimasi + 20% (pola `withGasMargin` lending-web): dengan estimasi polos, supply USDC kedua dan
-  // withdraw/repay ETH di Anvil fork bisa kehabisan gas.
+  // Gas limit = estimasi + 20% (pola `withGasMargin` lending-web), sebagai pengaman: run pertama tiket 20 gagal di 3 tx
+  // dengan estimasi polos, tapi penyebabnya belum diketahui (nggak terulang di reproduksi maupun run penuh tanpa margin).
   async function send<const abi extends Abi, name extends ContractFunctionName<abi, 'nonpayable' | 'payable'>>(
     wallet: WalletClient,
     request: { address: Address; abi: abi; functionName: name; args: ContractFunctionArgs<abi, 'nonpayable' | 'payable', name>; value?: bigint },
   ) {
     const account = wallet.account!;
+    const estimatedAt = await publicClient.getBlock();
     const estimate = await publicClient.estimateContractGas({ ...request, account } as never);
     const gas = (estimate * 12n + 9n) / 10n;
     const hash = await wallet.writeContract({ ...request, account, chain: wallet.chain, gas } as never);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    if (receipt.status !== 'success') throw new Error(`tx ${hash} gagal (gasUsed ${receipt.gasUsed} dari limit ${gas})`);
+    if (receipt.status !== 'success') throw new Error(`tx ${hash} gagal: ${await failureDetail(receipt, gas, estimate, estimatedAt.timestamp)}`);
     return receipt;
+  }
+
+  // Bukti kegagalan dikumpulkan selagi Anvil masih hidup (Anvil test mati di teardown): kehabisan gas vs revert, dan
+  // jarak timestamp blok estimasi ke blok tambang (akrual bunga di antaranya bisa menambah gas).
+  async function failureDetail(receipt: TransactionReceipt, gas: bigint, estimate: bigint, estimatedAtTimestamp: bigint) {
+    const minedAt = await publicClient.getBlock({ blockNumber: receipt.blockNumber });
+    const trace = await publicClient
+      .request({ method: 'debug_traceTransaction', params: [receipt.transactionHash, { disableStorage: true, disableStack: true, disableMemory: true }] } as never)
+      .then((t: { failed?: boolean; gas?: number; returnValue?: string; structLogs?: { op: string; gas: number; depth: number }[] }) => {
+        const last = t.structLogs?.at(-1);
+        return `trace failed=${t.failed} returnValue=${t.returnValue || '0x'} lastOp=${last?.op} gasLeft=${last?.gas} depth=${last?.depth}`;
+      })
+      .catch((err: Error) => `trace gagal: ${err.message.slice(0, 200)}`);
+    return `gasUsed ${receipt.gasUsed} dari limit ${gas} (estimasi ${estimate}); blok estimasi ts ${estimatedAtTimestamp} → blok tambang ${receipt.blockNumber} ts ${minedAt.timestamp}; ${trace}`;
   }
 
   return {
