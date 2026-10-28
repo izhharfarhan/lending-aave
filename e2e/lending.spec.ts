@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { erc20Abi, parseEther, parseUnits, type Address } from 'viem';
 
 import { AAVE } from '../src/config/contracts';
-import { CTA, GRANT } from '../src/copy';
+import { CTA, GRANT, TX_ERROR } from '../src/copy';
 import { TEST_ACCOUNT } from '../test/fork/clients';
 import { e2eClients } from './anvil';
 import { actionButton, connectAnvil, expect, expectTxSuccess, fillPanel, openDevTools, REJECTED_NOTICE, test } from './fixtures';
@@ -121,4 +121,28 @@ test('reject di wallet: credit delegation borrow ETH kembali ke langkah yang sam
   await delegateAndBorrow.click();
   // Jumlah di pesan ditulis gaya Indonesia (koma desimal, Q8).
   await expectTxSuccess(page, 'borrow', '0,1', 'ETH');
+});
+
+// Smoke test Base mainnet (tiket 25): RPC sempat menjawab 429 (kuota Alchemy) waktu receipt ditunggu, dan panel menulis
+// "Transaksi tidak terkirim" padahal tx sukses on-chain. Di sini RPC Anvil E2E dicegat di browser: beberapa
+// `eth_getTransactionReceipt` pertama dijawab 429 (lebih banyak dari retry transport viem).
+test('RPC sempat menolak (429) waktu receipt ditunggu: panel tetap sukses, tx nggak terkirim dua kali', async ({ page }) => {
+  await openEthereum(page);
+  await supplyEth(page, '1');
+
+  let throttled = 8;
+  await page.route(/:28555/, async (route) => {
+    const body = route.request().postData() ?? '';
+    if (throttled > 0 && body.includes('eth_getTransactionReceipt')) {
+      throttled -= 1;
+      await route.fulfill({ status: 429, contentType: 'application/json', body: '{"error":"Your app has exceeded its compute units per second capacity"}' });
+      return;
+    }
+    await route.continue();
+  });
+  const nonce = await sentTxCount();
+  await borrowUsdc(page, '100');
+  expect(throttled).toBe(0);
+  await expect(page.getByText(TX_ERROR.failed)).toHaveCount(0);
+  expect(await sentTxCount()).toBe(nonce + 1);
 });

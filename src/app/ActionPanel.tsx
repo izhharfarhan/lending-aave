@@ -139,7 +139,8 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   });
   const { tx } = poolTx;
   const networkFee = useNetworkFee({ chainId, user: address, asset: row?.asset ?? '0x', step: state.stepBeforeGasCheck, plan: ptx ?? idleTx(tab) });
-  const { step } = evaluate(data, tx.status === 'running', networkFee.fee);
+  // Tx yang hasilnya belum pasti juga mengunci tombol utama: jangan sampai terkirim dua kali.
+  const { step } = evaluate(data, tx.status === 'running' || tx.status === 'unconfirmed', networkFee.fee);
 
   // Sesudah sukses jumlah dikosongkan, biar tombol nggak langsung menawarkan transaksi yang sama lagi, dan izin kembali
   // ke exact (unlimited hanya pilihan sadar per transaksi, #8). Pesan sukses tetap tampil sampai user mengisi jumlah
@@ -166,7 +167,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
     setAmountText('');
     setApprovalMode('exact');
     resetRisk();
-    if (tx.status === 'success' || tx.status === 'error') poolTx.reset();
+    if (tx.status !== 'idle' && tx.status !== 'running') poolTx.reset();
   }
 
   const copy: StepCopy = {
@@ -378,6 +379,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
           tx={tx}
           tokenAmount={(a) => tokenAmount(a, progressRow.decimals)}
           onRetry={() => (isWalletStep(step) ? void poolTx.run(step) : poolTx.reset())}
+          onRecheck={poolTx.recheck}
         />
       )}
 
@@ -749,23 +751,26 @@ function TxProgress(
     tx: Exclude<TxState, { status: 'idle' }>;
     tokenAmount: (amount: bigint) => string;
     onRetry: () => void;
+    onRecheck: () => void;
   },
 ) {
   const { tx } = props;
-  // Sesudah sukses input sudah dikosongkan: judul langkah memakai jumlah yang benar-benar dikirim.
+  // Judul langkah memakai jumlah saat dikirim: sesudah tx masuk input dikosongkan dan posisi dibaca ulang, jadi hitungan
+  // panel sekarang bisa sudah lain (mis. "Repay 0 USDC" sesudah lunas).
   const done = tx.status === 'success';
-  const amount = done ? props.tokenAmount(tx.amount) : props.amount;
+  const amount = props.tokenAmount(tx.amount);
   const copy = {
     ...props,
     amount,
-    approveAmount: done && tx.approved !== undefined ? props.tokenAmount(tx.approved) : props.approveAmount,
-    unlimited: done && tx.approved !== undefined ? tx.approved === maxUint256 : props.unlimited,
+    approveAmount: tx.approved !== undefined ? props.tokenAmount(tx.approved) : props.approveAmount,
+    unlimited: tx.approved !== undefined ? tx.approved === maxUint256 : props.unlimited,
     enable: done ? tx.kind === 'collateralOn' : props.enable,
   };
   const statusOf = (i: number) => {
     if (tx.status === 'success' || i < tx.index) return <span className="text-ink">{TX.done}</span>;
     if (i > tx.index) return <span className="text-faint">{TX.pending}</span>;
     if (tx.status === 'running') return <span className="text-accent">{tx.phase === 'wallet' ? TX.waitingWallet : TX.waitingNetwork}</span>;
+    if (tx.status === 'unconfirmed') return <span className="text-warn">{TX.unconfirmedStep}</span>;
     return <span className="text-danger">{tx.kind === 'rejected' ? TX.rejectedStep : TX.failedStep}</span>;
   };
   return (
@@ -787,6 +792,14 @@ function TxProgress(
       {tx.status === 'success' && (
         <p className="mt-3 text-sm">
           <span className="text-accent">✓</span> {TX.success[tx.kind](amount, props.symbol)}
+        </p>
+      )}
+      {tx.status === 'unconfirmed' && (
+        <p className="mt-3 text-sm text-warn">
+          {TX.unconfirmed}{' '}
+          <button type="button" className="link text-ink" onClick={props.onRecheck}>
+            {TX.recheck}
+          </button>
         </p>
       )}
       {tx.status === 'error' && (

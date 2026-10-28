@@ -608,6 +608,7 @@ export const TX = {
   done: '✓ selesai',
   rejectedStep: 'ditolak di wallet',
   failedStep: 'gagal',
+  unconfirmedStep: 'belum pasti',
   success: {
     supply: (amount: string, symbol: string) => `Supply ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
     borrow: (amount: string, symbol: string) => `Borrow ${amount} ${symbol} berhasil, posisi sudah diperbarui.`,
@@ -619,6 +620,9 @@ export const TX = {
   explorer: 'explorer ↗',
   forkTx: 'tx fork lokal, tidak ada di explorer publik',
   retry: 'Coba lagi',
+  unconfirmed:
+    'Transaksi sudah terkirim, tetapi hasilnya belum bisa dipastikan (jaringan atau RPC lambat). Cek di explorer sebelum mengirim ulang.',
+  recheck: 'Cek status lagi',
 };
 
 // Error wallet & kontrak dalam bahasa yang bisa dipahami (spec 100–101, pola walletError swap-web).
@@ -628,6 +632,7 @@ export const TX_ERROR = {
   insufficient_funds: 'ETH di wallet tidak cukup untuk biaya jaringan.',
   failed: 'Transaksi tidak terkirim. Posisi Anda tidak berubah.',
   reverted: 'Transaksi gagal di jaringan. Posisi Anda tidak berubah, tetapi biaya jaringan tetap terpakai.',
+  readFailed: 'Langkah sebelumnya sudah masuk, tetapi posisi gagal dibaca ulang. Coba lagi untuk melanjutkan.',
   aave: {
     SupplyCapExceeded: 'Kuota supply aset ini penuh.',
     ReserveFrozen: 'Aset ini sedang Dibekukan: supply baru tidak diterima.',

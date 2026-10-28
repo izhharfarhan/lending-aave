@@ -5,7 +5,7 @@ import type { Config } from 'jest';
 const config: Config = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
-  roots: ['<rootDir>/src/core', '<rootDir>/src/config', '<rootDir>/src/app', '<rootDir>/src/devtools'],
+  roots: ['<rootDir>/src/core', '<rootDir>/src/config', '<rootDir>/src/app', '<rootDir>/src/devtools', '<rootDir>/src/aave'],
   testRegex: '^(?!.*\\.fork\\.spec\\.ts$).*\\.spec\\.ts$',
   extensionsToTreatAsEsm: ['.ts'],
   transform: {
