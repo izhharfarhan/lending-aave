@@ -4,6 +4,7 @@ import { parseAbi, parseEther, parseEventLogs, type Address, type Hex, type Tran
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
 import { afterAll, afterEach, beforeAll, describe, expect, inject, it } from 'vitest';
 
+import { PoolAbi } from '../../abis/PoolAbi';
 import { aave } from './aave';
 import { connectTestDb, graphql, lower, SCHEMA, usdc, waitForRows } from './harness';
 
@@ -11,11 +12,10 @@ import { connectTestDb, graphql, lower, SCHEMA, usdc, waitForRows } from './harn
 // riwayat + rincian likuidasi dibandingkan dengan receipt tx-nya. Tiap test memakai borrower dan likuidator baru.
 const usd8 = (n: number) => BigInt(Math.round(n * 1e8));
 const RAY_HF = 10n ** 18n;
-const receiptAbi = parseAbi([
-  'event LiquidationCall(address indexed collateralAsset, address indexed debtAsset, address indexed user, uint256 debtToCover, uint256 liquidatedCollateralAmount, address liquidator, bool receiveAToken)',
-  'event DeficitCreated(address indexed user, address indexed debtAsset, uint256 amountCreated)',
-  'event Transfer(address indexed from, address indexed to, uint256 value)',
-]);
+const receiptAbi = [
+  ...PoolAbi.filter((item) => item.name === 'LiquidationCall'),
+  ...parseAbi(['event DeficitCreated(address indexed user, address indexed debtAsset, uint256 amountCreated)', 'event Transfer(address indexed from, address indexed to, uint256 value)']),
+];
 
 const ethereum = aave(1);
 const onBase = aave(8453);

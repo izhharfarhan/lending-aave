@@ -2,7 +2,8 @@ import { encodeAbiParameters, encodeEventTopics, parseAbi, zeroAddress, type Add
 import { describe, expect, it } from 'vitest';
 
 import { actionAbsorbs, collateralJoins } from '../../src/core/collateralMerge';
-import { appliedLiquidationBonus, liquidationPenalty, liquidationReceiptParts, liquidationRow, type ReceiptLog } from '../../src/core/liquidation';
+import { PoolAbi } from '../../abis/PoolAbi';
+import { appliedLiquidationBonus, liquidationDetail, liquidationFeeAndDeficits, liquidationPenalty, liquidationRow, type ReceiptLog } from '../../src/core/liquidation';
 
 const WETH: Address = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
 const USDC: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
@@ -97,11 +98,10 @@ const A_WETH: Address = '0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8';
 const A_USDC: Address = '0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c';
 const TREASURY: Address = '0x464C71f6c2F760DdA6093dCB91C24c39e5d6e18c';
 const OTHER_USER: Address = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
-const eventsAbi = parseAbi([
-  'event LiquidationCall(address indexed collateralAsset, address indexed debtAsset, address indexed user, uint256 debtToCover, uint256 liquidatedCollateralAmount, address liquidator, bool receiveAToken)',
-  'event DeficitCreated(address indexed user, address indexed debtAsset, uint256 amountCreated)',
-  'event Transfer(address indexed from, address indexed to, uint256 value)',
-]);
+const eventsAbi = [
+  ...PoolAbi.filter((item) => item.name === 'LiquidationCall'),
+  ...parseAbi(['event DeficitCreated(address indexed user, address indexed debtAsset, uint256 amountCreated)', 'event Transfer(address indexed from, address indexed to, uint256 value)']),
+];
 let nextIndex = 0;
 type EventName = (typeof eventsAbi)[number]['name'];
 // Topik dari argumen indexed, data dari sisanya (urutan ABI).
@@ -115,9 +115,9 @@ const transfer = (token: Address, from: Address, to: Address, value: bigint) => 
 const deficit = (user: Address, debtAsset: Address, amountCreated: bigint) => log(POOL, 'DeficitCreated', { user, debtAsset, amountCreated });
 const liquidationCall = (user: Address) => log(POOL, 'LiquidationCall', { ...args, user, debtToCover: 1n, liquidatedCollateralAmount: 1n });
 const partsAt = (logs: ReceiptLog[], user: Address, liquidation: ReceiptLog) =>
-  liquidationReceiptParts(logs, { pool: POOL, treasury: TREASURY, collateralAToken: A_WETH, user, logIndex: liquidation.logIndex });
+  liquidationFeeAndDeficits(logs, { pool: POOL, treasury: TREASURY, collateralAToken: A_WETH, user, logIndex: liquidation.logIndex });
 
-describe('liquidationReceiptParts()', () => {
+describe('liquidationFeeAndDeficits()', () => {
   it('takes the protocol fee from the collateral aToken transfer user → treasury, ignoring treasury mints', () => {
     nextIndex = 0;
     const logs = [
@@ -172,5 +172,48 @@ describe('liquidationReceiptParts()', () => {
     const logs = [transfer(A_USDC, USER, TREASURY, 1n), transfer(A_WETH, OTHER_USER, TREASURY, 2n), deficit(OTHER_USER, USDC, 3n)];
     const liquidation = liquidationCall(USER);
     expect(partsAt([...logs, liquidation], USER, liquidation)).toEqual({ protocolFee: 0n, deficits: [] });
+  });
+});
+
+describe('liquidationDetail()', () => {
+  const reads = { reserveConfiguration: WETH_CONFIGURATION, collateralReserveId: 0, eMode: null, collateralPrice: 180_000_000_000n, healthFactorBefore: 996_202_712_199_390_900n };
+
+  it('assembles the liquidation details from the event, the receipt, and the chain reads', () => {
+    expect(liquidationDetail(args, { protocolFee: 83_316_376_427_656_815n, deficits: [] }, reads)).toEqual({
+      owner: USER,
+      liquidator: LIQUIDATOR,
+      collateralAsset: WETH,
+      debtAsset: USDC,
+      debtToCover: 15_000_000_107n,
+      liquidatedCollateralAmount: 8_664_903_148_476_308_683n,
+      protocolFee: 83_316_376_427_656_815n,
+      receiveAToken: false,
+      liquidationBonus: 10_500,
+      bonusFromEMode: false,
+      eModeCategory: 0,
+      // Penalti dari jaminan yang hilang (bagian likuidator + fee), bukan dari bagian likuidator saja.
+      penalty: 416_581_882_138_284_072n,
+      collateralPrice: 180_000_000_000n,
+      healthFactorBefore: 996_202_712_199_390_900n,
+      deficitAssets: [],
+      deficitAmounts: [],
+    });
+  });
+
+  it('pairs the deficits by index and keeps an unavailable health factor', () => {
+    const deficits = [
+      { debtAsset: USDC, amount: 704_335_473n },
+      { debtAsset: WETH, amount: 5n },
+    ];
+    expect(liquidationDetail(args, { protocolFee: 0n, deficits }, { ...reads, healthFactorBefore: null })).toMatchObject({
+      deficitAssets: [USDC, WETH],
+      deficitAmounts: [704_335_473n, 5n],
+      healthFactorBefore: null,
+    });
+  });
+
+  it('records the E-Mode category of the user, also when its bonus does not apply', () => {
+    const eMode = { categoryId: 1, liquidationBonus: 10_100, collateralBitmap: 0b10n };
+    expect(liquidationDetail(args, { protocolFee: 0n, deficits: [] }, { ...reads, eMode })).toMatchObject({ eModeCategory: 1, liquidationBonus: 10_500, bonusFromEMode: false });
   });
 });

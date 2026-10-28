@@ -3,6 +3,7 @@ import {
   encodeFunctionData,
   erc20Abi,
   getAddress,
+  isAddressEqual,
   keccak256,
   maxUint256,
   pad,
@@ -170,7 +171,7 @@ export function aave(chainId: TestChainId) {
       const mock = mockAggregatorOf(asset);
       await testClient.setStorageAt({ address: mock, index: toHex(0, { size: 32 }), value: toHex(price, { size: 32 }) });
       const current = await publicClient.readContract({ address: oracle, abi: oracleAbi, functionName: 'getSourceOfAsset', args: [asset] });
-      if (current.toLowerCase() === mock.toLowerCase()) return;
+      if (isAddressEqual(current, mock)) return;
       await testClient.setCode({ address: mock, bytecode: MOCK_AGGREGATOR_RUNTIME });
       await testClient.setStorageAt({ address: mock, index: toHex(1, { size: 32 }), value: pad(current) });
       await testClient.setBalance({ address: book.ACL_ADMIN, value: parseEther('1') });
@@ -180,7 +181,7 @@ export function aave(chainId: TestChainId) {
     async resetPrice(asset: Address) {
       const mock = mockAggregatorOf(asset);
       const current = await publicClient.readContract({ address: oracle, abi: oracleAbi, functionName: 'getSourceOfAsset', args: [asset] });
-      if (current.toLowerCase() !== mock.toLowerCase()) return;
+      if (!isAddressEqual(current, mock)) return;
       const stored = await publicClient.getStorageAt({ address: mock, slot: toHex(1, { size: 32 }) });
       await send(book.ACL_ADMIN, { address: oracle, abi: oracleAbi, functionName: 'setAssetSources', args: [[asset], [getAddress(sliceHex(stored!, 12))]] });
     },

@@ -5,7 +5,7 @@ import { isAddressEqual, type Address, type Hex } from 'viem';
 import { OracleAbi, PoolReadAbi } from '../abis/PoolAbi';
 import { INDEXED_CHAINS, type IndexedChainId } from './chains';
 import { actionAbsorbs, collateralJoins, type TxSlot } from './core/collateralMerge';
-import { appliedLiquidationBonus, liquidationPenalty, liquidationReceiptParts, liquidationRow, type LiquidationEMode } from './core/liquidation';
+import { liquidationDetail, liquidationFeeAndDeficits, liquidationRow, type LiquidationEMode } from './core/liquidation';
 import { borrowRow, collateralRow, repayRow, supplyRow, withdrawRow, type CollateralArgs, type PositionRow } from './core/positionEvent';
 
 type Db = Context<'Pool:Supply'>['db'];
@@ -106,8 +106,10 @@ ponder.on('AWeth:Transfer', async ({ event, context }) => {
 });
 
 // Likuidasi (V5, Q16). Fee dan deficit dari receipt tx-nya: satu RPC per likuidasi, mencakup semua reserve (address-book
-// nggak memuat semua aToken). Konfigurasi bonus, E-Mode, dan harga dibaca di blok likuidasi (default `context.client`);
-// HF sebelum likuidasi di blok −1.
+// nggak memuat semua aToken). Konfigurasi bonus, E-Mode, dan harga dibaca di akhir blok likuidasi (default
+// `context.client`): kompromi, karena state persis saat tx nggak bisa dibaca, dan blok −1 bisa sebelum update oracle yang
+// memicu likuidasi di blok yang sama. HF sebelum likuidasi di blok −1; cuma bacaan itu yang punya fallback (Q16), bacaan
+// di blok likuidasi selalu tersedia selama indexer mengikuti ujung chain (Q31).
 ponder.on('Pool:LiquidationCall', async ({ event, context }) => {
   const meta = metaOf(event, context.chain.id);
   const { pool, treasury, oracle } = INDEXED_CHAINS[context.chain.id as IndexedChainId];
@@ -124,31 +126,15 @@ ponder.on('Pool:LiquidationCall', async ({ event, context }) => {
   ]);
   const eMode = eModeCategory === 0n ? null : await readEMode(client, pool, Number(eModeCategory));
 
-  const { protocolFee, deficits } = liquidationReceiptParts(receipt.logs, { pool, treasury, collateralAToken, user, logIndex: event.log.logIndex });
-  const row = liquidationRow(event.args, protocolFee);
-  const { bonus, fromEMode } = appliedLiquidationBonus({ reserveConfiguration: configuration.data, collateralReserveId: reserveData.id, eMode });
+  const feeAndDeficits = liquidationFeeAndDeficits(receipt.logs, { pool, treasury, collateralAToken, user, logIndex: event.log.logIndex });
+  const reads = { reserveConfiguration: configuration.data, collateralReserveId: reserveData.id, eMode, collateralPrice, healthFactorBefore };
 
-  await recordAction(context.db, meta, row);
+  await recordAction(context.db, meta, liquidationRow(event.args, feeAndDeficits.protocolFee));
   await context.db.insert(liquidation).values({
     chainId: meta.chainId,
     txHash: meta.txHash,
     logIndex: meta.logIndex,
-    owner: user,
-    liquidator: event.args.liquidator,
-    collateralAsset,
-    debtAsset: event.args.debtAsset,
-    debtToCover: event.args.debtToCover,
-    liquidatedCollateralAmount: event.args.liquidatedCollateralAmount,
-    protocolFee,
-    receiveAToken: event.args.receiveAToken,
-    liquidationBonus: bonus,
-    bonusFromEMode: fromEMode,
-    eModeCategory: Number(eModeCategory),
-    penalty: liquidationPenalty(row.amount!, bonus),
-    collateralPrice,
-    healthFactorBefore,
-    deficitAssets: deficits.map((d) => d.debtAsset),
-    deficitAmounts: deficits.map((d) => d.amount),
+    ...liquidationDetail(event.args, feeAndDeficits, reads),
     timestamp: meta.timestamp,
   });
 });

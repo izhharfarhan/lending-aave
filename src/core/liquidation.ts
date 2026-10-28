@@ -1,5 +1,6 @@
-import { decodeEventLog, isAddressEqual, parseAbi, zeroAddress, type Address, type Hex } from 'viem';
+import { decodeEventLog, isAddressEqual, parseAbi, type Address, type Hex } from 'viem';
 
+import { PoolAbi } from '../../abis/PoolAbi';
 import type { PositionRow } from './positionEvent';
 
 /** Argumen event `LiquidationCall` Pool Aave v3.7 (V1). */
@@ -58,11 +59,11 @@ export function liquidationPenalty(collateralLost: bigint, bonus: number): bigin
 /** Log receipt tx likuidasi (bentuk log viem). */
 export type ReceiptLog = { address: Address; topics: [Hex, ...Hex[]] | []; data: Hex; logIndex: number };
 
-const receiptAbi = parseAbi([
-  'event LiquidationCall(address indexed collateralAsset, address indexed debtAsset, address indexed user, uint256 debtToCover, uint256 liquidatedCollateralAmount, address liquidator, bool receiveAToken)',
-  'event DeficitCreated(address indexed user, address indexed debtAsset, uint256 amountCreated)',
-  'event Transfer(address indexed from, address indexed to, uint256 value)',
-]);
+// `LiquidationCall` dari ABI yang di-index; `DeficitCreated` dan `Transfer` aToken cuma dibaca dari receipt.
+const receiptAbi = [
+  ...PoolAbi.filter((item) => item.name === 'LiquidationCall'),
+  ...parseAbi(['event DeficitCreated(address indexed user, address indexed debtAsset, uint256 amountCreated)', 'event Transfer(address indexed from, address indexed to, uint256 value)']),
+];
 
 function decode(log: ReceiptLog) {
   try {
@@ -72,6 +73,10 @@ function decode(log: ReceiptLog) {
   }
 }
 
+/** Sisa utang yang dihapus untuk satu aset utang (`DeficitCreated`). */
+export type Deficit = { debtAsset: Address; amount: bigint };
+export type FeeAndDeficits = { protocolFee: bigint; deficits: Deficit[] };
+
 /**
  * Protocol fee dan sisa utang yang dihapus untuk satu `LiquidationCall` (V5), dari log receipt tx-nya. Di v3.7 keduanya
  * terpancar sebelum `LiquidationCall` (dicek di fork), jadi yang dipakai cuma log sesudah `LiquidationCall` Pool
@@ -79,26 +84,58 @@ function decode(log: ReceiptLog) {
  * - Fee = `Transfer` aToken jaminan dari user ke treasury. `Transfer` dari 0x0 ke treasury = akrual treasury, bukan fee.
  * - Deficit = semua `DeficitCreated` user itu (satu per aset utang yang dihapus).
  */
-export function liquidationReceiptParts(
+export function liquidationFeeAndDeficits(
   logs: ReceiptLog[],
   { pool, treasury, collateralAToken, user, logIndex }: { pool: Address; treasury: Address; collateralAToken: Address; user: Address; logIndex: number },
-): { protocolFee: bigint; deficits: { debtAsset: Address; amount: bigint }[] } {
-  const before = logs.filter((log) => log.logIndex < logIndex).sort((a, b) => a.logIndex - b.logIndex);
+): FeeAndDeficits {
+  const earlierLogs = logs.filter((log) => log.logIndex < logIndex).sort((a, b) => a.logIndex - b.logIndex);
   // Mulai sesudah `LiquidationCall` Pool terakhir sebelum yang ini.
   let start = 0;
-  before.forEach((log, i) => {
+  earlierLogs.forEach((log, i) => {
     if (isAddressEqual(log.address, pool) && decode(log)?.eventName === 'LiquidationCall') start = i + 1;
   });
   let protocolFee = 0n;
-  const deficits: { debtAsset: Address; amount: bigint }[] = [];
-  for (const log of before.slice(start)) {
+  const deficits: Deficit[] = [];
+  for (const log of earlierLogs.slice(start)) {
     const event = decode(log);
     if (event?.eventName === 'Transfer' && isAddressEqual(log.address, collateralAToken)) {
       const { from, to, value } = event.args;
-      if (!isAddressEqual(from, zeroAddress) && isAddressEqual(from, user) && isAddressEqual(to, treasury)) protocolFee += value;
+      if (isAddressEqual(from, user) && isAddressEqual(to, treasury)) protocolFee += value;
     } else if (event?.eventName === 'DeficitCreated' && isAddressEqual(log.address, pool) && isAddressEqual(event.args.user, user)) {
       deficits.push({ debtAsset: event.args.debtAsset, amount: event.args.amountCreated });
     }
   }
   return { protocolFee, deficits };
+}
+
+/** Bacaan chain untuk satu likuidasi: konfigurasi reserve jaminan, kategori E-Mode user, harga, dan HF blok −1. */
+export type LiquidationReads = {
+  reserveConfiguration: bigint;
+  collateralReserveId: number;
+  eMode: LiquidationEMode | null;
+  collateralPrice: bigint;
+  healthFactorBefore: bigint | null;
+};
+
+/** Rincian likuidasi (tabel `liquidation`, tanpa kunci & waktu): penalti dihitung dari jaminan yang hilang. */
+export function liquidationDetail(args: LiquidationArgs, { protocolFee, deficits }: FeeAndDeficits, reads: LiquidationReads) {
+  const { bonus, fromEMode } = appliedLiquidationBonus(reads);
+  return {
+    owner: args.user,
+    liquidator: args.liquidator,
+    collateralAsset: args.collateralAsset,
+    debtAsset: args.debtAsset,
+    debtToCover: args.debtToCover,
+    liquidatedCollateralAmount: args.liquidatedCollateralAmount,
+    protocolFee,
+    receiveAToken: args.receiveAToken,
+    liquidationBonus: bonus,
+    bonusFromEMode: fromEMode,
+    eModeCategory: reads.eMode?.categoryId ?? 0,
+    penalty: liquidationPenalty(args.liquidatedCollateralAmount + protocolFee, bonus),
+    collateralPrice: reads.collateralPrice,
+    healthFactorBefore: reads.healthFactorBefore,
+    deficitAssets: deficits.map((deficit) => deficit.debtAsset),
+    deficitAmounts: deficits.map((deficit) => deficit.amount),
+  };
 }

@@ -94,6 +94,16 @@ Tabel `liquidation` (V5, Q16): rincian tiap baris `liquidation`, kunci sama deng
   state blok itu, lapisan RPC Ponder me-retry 10× dengan backoff (±1 menit) sebelum handler menyimpan "tidak tersedia",
   dan selama itu indexing chain itu tertahan. Sengaja dibiarkan: tanpa retry, error sementara (mis. rate limit) akan
   tersimpan permanen sebagai "tidak tersedia". RPC indexer memang harus archive (Q16).
+- Kompromi yang diketahui:
+  - Bonus, kategori E-Mode, dan harga dibaca di **akhir** blok likuidasi. Perubahan di blok yang sama sesudah tx
+    likuidasi (`setUserEMode`, konfigurasi, update oracle) bisa membuatnya meleset; blok −1 juga salah, karena update
+    oracle yang memicu likuidasi sering ada di blok yang sama.
+  - Cuma HF yang punya fallback. Bacaan di blok likuidasi diasumsikan selalu ada karena indexer mengikuti ujung chain
+    (Q31, tanpa backfill lama); kalau gagal, Ponder me-retry lalu indexing berhenti.
+  - Dalam tx batch, `Transfer` aToken jaminan user → treasury yang dikirim manual sebelum likuidasi ikut terhitung
+    sebagai fee.
+  - Dicek di fork: `receiveAToken = true` nggak memancarkan `ReserveUsedAsCollateralEnabled` untuk likuidator (v3.7),
+    jadi nggak ada baris collateral palsu di riwayat likuidator.
 
 Contoh query:
 
