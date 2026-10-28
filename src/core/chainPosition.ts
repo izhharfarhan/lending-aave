@@ -23,6 +23,8 @@ export type ReserveRead = {
   baseLTVasCollateral: bigint;
   /** bps. */
   reserveLiquidationThreshold: bigint;
+  /** bps, termasuk 100% (10.500 = penalti 5%). */
+  reserveLiquidationBonus: bigint;
   usageAsCollateralEnabled: boolean;
   borrowingEnabled: boolean;
   isActive: boolean;

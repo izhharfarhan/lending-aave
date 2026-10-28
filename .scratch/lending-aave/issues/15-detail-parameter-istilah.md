@@ -8,12 +8,12 @@
 
 **Blocked by:** 02 (Baca posisi Ethereum (read-only))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] "Detail parameter <chain>" ▾: LTV, liquidation threshold, liquidation penalty, utilization, reserve factor, supply/borrow cap, harga oracle, alamat reserve/aToken; status buka/tutup diingat di localStorage
-- [ ] Istilah asli Aave tetap dipakai dengan ⓘ dan penjelasan sederhana (mis. "Health factor 1,82 · Aman ⓘ")
-- [ ] APY ditulis sebagai "bunga per tahun" di tampilan awal
-- [ ] Copy UI bahasa Indonesia baku dengan "Anda", terkumpul di satu modul copy
+- [x] "Detail parameter <chain>" ▾: LTV, liquidation threshold, liquidation penalty, utilization, reserve factor, supply/borrow cap, harga oracle, alamat reserve/aToken; status buka/tutup diingat di localStorage
+- [x] Istilah asli Aave tetap dipakai dengan ⓘ dan penjelasan sederhana (mis. "Health factor 1,82 · Aman ⓘ")
+- [x] APY ditulis sebagai "bunga per tahun" di tampilan awal
+- [x] Copy UI bahasa Indonesia baku dengan "Anda", terkumpul di satu modul copy
 
 ## Comments
 

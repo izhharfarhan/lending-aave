@@ -164,9 +164,42 @@ export const E_MODE = {
   managed: 'diatur di',
 };
 
+// Istilah asli Aave tetap dipakai, dengan penjelasan sederhana di ⓘ (Q8).
+export const TERMS = {
+  apy: 'APY (annual percentage yield): bunga per tahun, sudah termasuk bunga atas bunga. Angkanya ikut berubah mengikuti pemakaian pool.',
+  ltv: 'LTV (loan to value): bagian nilai jaminan ini yang boleh Anda pinjam. LTV 80% = jaminan $100 memberi batas pinjam $80.',
+  liquidationThreshold:
+    'Liquidation threshold: kalau utang melewati bagian nilai jaminan sebesar ini, Health factor turun di bawah 1 dan posisi bisa dilikuidasi.',
+  liquidationPenalty: 'Liquidation penalty: jaminan tambahan yang diambil likuidator saat posisi dilikuidasi, di atas utang yang dilunasinya.',
+  utilization: 'Utilization: bagian likuiditas pool yang sedang dipinjam. Makin tinggi, makin tinggi bunganya dan makin sedikit yang bisa ditarik.',
+  reserveFactor: 'Reserve factor: bagian bunga pinjaman yang masuk ke kas Aave, bukan ke pemberi supply.',
+  supplyCap: 'Supply cap (kuota supply): batas total supply aset ini di pool.',
+  borrowCap: 'Borrow cap (kuota pinjaman): batas total pinjaman aset ini di pool.',
+  oracle: 'Harga oracle: harga yang dipakai Aave untuk menghitung jaminan, utang, dan Health factor.',
+};
+
+// "Detail parameter <chain>" (Q7): angka lengkap untuk user pro, tertutup di tampilan awal.
+export const DETAIL = {
+  title: (chain: string) => `Detail parameter ${chain}`,
+  ltv: 'LTV',
+  liquidationThreshold: 'Liquidation threshold',
+  liquidationPenalty: 'Liquidation penalty',
+  utilization: 'Utilization',
+  reserveFactor: 'Reserve factor',
+  supplyCap: 'Supply cap',
+  borrowCap: 'Borrow cap',
+  oracle: 'Harga oracle',
+  addresses: 'Alamat',
+  reserve: 'reserve ↗',
+  aToken: 'aToken ↗',
+  noCap: 'Tanpa batas',
+  eMode: (label: string) => `E-Mode Anda: kategori "${label}" (label on-chain).`,
+  eModeNote: 'LTV dan liquidation threshold di tabel adalah nilai reserve; untuk jaminan di kategori E-Mode Anda, nilai kategorinya yang berlaku.',
+};
+
 export const TABLE = {
   asset: 'Aset',
-  apy: 'APY',
+  apy: 'Bunga per tahun',
   balance: 'Saldo',
   collateral: 'Jaminan',
   debt: 'Utang',

@@ -17,15 +17,19 @@ import {
 import type { EModeView } from '@/core/eMode';
 import { panelAssets, type PanelTab } from '@/core/panel';
 import { liquidationPrice, type LiqPrice } from '@/core/simulate';
-import { E_MODE, PANEL, POSITION, TABLE } from '@/copy';
+import { E_MODE, PANEL, POSITION, TABLE, TERMS } from '@/copy';
 import { ActionPanel } from './ActionPanel';
 import { pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
 import { LiquidationText } from './LiquidationText';
+import { ParameterDetails } from './ParameterDetails';
 import { RescuePanel } from './RescuePanel';
+import { Term } from './Term';
 import { TokenIcon } from './TokenIcon';
 
 const AAVE_APP_URL = 'https://app.aave.com/';
+// "APY" di tampilan awal ditulis "Bunga per tahun"; istilah aslinya di ⓘ (Q7, Q8).
+const APY_HEAD = <Term info={TERMS.apy}>{TABLE.apy}</Term>;
 
 /**
  * Baris yang dibuka di panel: tab + aset. `asset` kosong = aset pertama tab itu (belum dipilih dari tabel). `rescue` =
@@ -131,6 +135,8 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
           )}
         </div>
       </div>
+      {/* Lebar penuh: sembilan kolom angka muat tanpa gulir di desktop. */}
+      <ParameterDetails chainId={chainId} chainName={name} read={data.read} whitelist={WHITELIST[chainId]} eModeLabel={view.eMode?.label ?? null} />
     </section>
   );
 }
@@ -194,10 +200,7 @@ function AccountFacts({ account, liquidation }: { account: AccountView; liquidat
 function Fact({ label, info, children }: { label: string; info?: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-1.5">
-      <dt className="text-muted" title={info}>
-        {label}
-        {info && <span className="ml-1 text-[10px] text-faint">ⓘ</span>}
-      </dt>
+      <dt className="text-muted">{info ? <Term info={info}>{label}</Term> : label}</dt>
       <dd>{children}</dd>
     </div>
   );
@@ -248,7 +251,7 @@ function PositionTables(props: {
             ),
           ],
         }))}
-        heads={[TABLE.apy, TABLE.balance, TABLE.collateral]}
+        heads={[APY_HEAD, TABLE.balance, TABLE.collateral]}
       />
       <FlatTable
         title={TABLE.borrows}
@@ -264,7 +267,7 @@ function PositionTables(props: {
             <span key="amount" className="num">{tokenAmount(row.amount, row.decimals)}</span>,
           ],
         }))}
-        heads={[TABLE.apy, TABLE.debt]}
+        heads={[APY_HEAD, TABLE.debt]}
       />
     </div>
   );
@@ -315,7 +318,7 @@ function MarketTables(props: {
             <span key="collateral" className="text-xs text-muted">{row.canBeCollateral ? TABLE.collateralYes : TABLE.none}</span>,
           ],
         }))}
-        heads={[TABLE.apy, TABLE.wallet, TABLE.collateral]}
+        heads={[APY_HEAD, TABLE.wallet, TABLE.collateral]}
       />
       <FlatTable
         title={TABLE.borrowMarket}
@@ -332,7 +335,7 @@ function MarketTables(props: {
             </span>,
           ],
         }))}
-        heads={[TABLE.apy, TABLE.canBorrow]}
+        heads={[APY_HEAD, TABLE.canBorrow]}
       />
     </div>
   );
@@ -362,7 +365,7 @@ function AssetNote({ outside, status }: { outside: boolean; status: ReserveStatu
 /** Baris tanpa `onClick` belum punya aksi (bukan sekadar nonaktif): kursor biasa, nggak bisa difokus. */
 type Row = { key: string; symbol: string; note?: ReactNode; cells: ReactNode[]; active?: boolean; onClick?: () => void };
 
-function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?: ReactNode; heads: string[]; rows: Row[]; empty: string }) {
+function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?: ReactNode; heads: ReactNode[]; rows: Row[]; empty: string }) {
   return (
     <div className="surface pt-4">
       <div className="mb-3 flex items-center justify-between px-3">
@@ -376,8 +379,8 @@ function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?
           <thead>
             <tr>
               <th>{TABLE.asset}</th>
-              {heads.map((head) => (
-                <th key={head}>{head}</th>
+              {heads.map((head, i) => (
+                <th key={i}>{head}</th>
               ))}
             </tr>
           </thead>

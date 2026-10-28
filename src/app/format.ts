@@ -8,6 +8,10 @@ export const usd = (n: number) => {
   const digits = n < 100 ? 2 : 0;
   return `$${nf(digits, digits).format(n)}`;
 };
+// Harga oracle: harga di bawah $10 (stablecoin) butuh 4 desimal, $0,9998 bukan $1,00.
+export const price = (n: number) => `$${(n < 10 ? nf(2, 4) : nf(2, 2)).format(n)}`;
+// Jumlah token utuh (supply/borrow cap).
+export const wholeTokens = (n: bigint) => nf(0, 0).format(n);
 // "Ethereum, Base, dan Arbitrum".
 const listFormat = new Intl.ListFormat('id-ID', { type: 'conjunction' });
 export const list = (items: string[]) => listFormat.format(items);
