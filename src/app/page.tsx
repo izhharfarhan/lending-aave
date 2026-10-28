@@ -26,8 +26,9 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
           <WalletOverview chainId={selected.chainId} />
           <Dashboard selectedChainId={selected.chainId} />
           {/* Langkah ketiga animasi masuk; di luar `key` biar ganti chain nggak memutarnya lagi. `key`: pilihan
-              baris/tab panel milik chain sebelumnya dibuang saat ganti chain. */}
-          <div className="reveal" style={{ ['--i' as string]: 2 } as CSSProperties}>
+              baris/tab panel milik chain sebelumnya dibuang saat ganti chain. `reveal-holds-sheet`: di mobile cuma memudar,
+              karena di dalamnya ada bottom sheet `fixed` (globals.css). */}
+          <div className="reveal reveal-holds-sheet" style={{ ['--i' as string]: 2 } as CSSProperties}>
             <ChainDetail key={selected.chainId} chainId={selected.chainId} rescue={panel === RESCUE_PANEL} />
           </div>
         </main>

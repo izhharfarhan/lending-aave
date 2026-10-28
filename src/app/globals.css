@@ -43,6 +43,12 @@
   --radius-sm: 6px;
 }
 
+/* Breakpoint mobile: di bawah `md` sidebar hilang dan panel aksi jadi bottom sheet. Harus sama dengan `MOBILE_QUERY` di
+   src/app/MobileSheet.tsx (perilaku sheet lewat JS). Ubah satu, ubah yang lain. */
+@theme {
+  --breakpoint-md: 48rem;
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-raised: var(--bg-raised);
@@ -94,17 +100,21 @@ body {
   }
 
   /* Panel aksi di dalam bottom sheet mobile (Q19): tanpa bingkai kartu, mengisi tinggi sheet, tombol utama menempel di
-     bawah sheet. */
+     bawah sheet. Di desktop `.sheet` cuma kotak biasa, jadi aturan ini khusus `max-md`. */
   .sheet aside.surface {
-    flex: 1;
-    border: 0;
-    border-radius: 0;
+    @variant max-md {
+      flex: 1;
+      border: 0;
+      border-radius: 0;
+    }
   }
   .sheet .sheet-cta {
-    margin-top: auto;
-    position: sticky;
-    bottom: max(12px, env(safe-area-inset-bottom));
-    box-shadow: 0 0 0 12px var(--panel), 0 -20px 24px 6px var(--panel);
+    @variant max-md {
+      margin-top: auto;
+      position: sticky;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      box-shadow: 0 0 0 12px var(--panel), 0 -20px 24px 6px var(--panel);
+    }
   }
 
   .num {
@@ -335,6 +345,18 @@ body {
 .reveal {
   animation: reveal 620ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
   animation-delay: calc(var(--i, 0) * 110ms);
+}
+/* Selama animasi, transform membuat `position: fixed` di dalamnya ikut kotak ini, bukan layar. Yang memuat bottom sheet
+   mobile (detail chain) cukup memudar di mobile, supaya sheet yang terbuka sejak render pertama sudah layar penuh. */
+@keyframes reveal-fade {
+  from {
+    opacity: 0;
+  }
+}
+.reveal-holds-sheet {
+  @variant max-md {
+    animation-name: reveal-fade;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

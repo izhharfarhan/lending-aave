@@ -10,6 +10,7 @@ import { PANEL, RESCUE } from '@/copy';
 import type { ChainData } from './ActionPanel';
 import { tokenAmount } from './format';
 import { HealthFactor, HealthFactorChange } from './HealthFactor';
+import { MOBILE_QUERY } from './MobileSheet';
 import { TokenIcon } from './TokenIcon';
 
 type Props = {
@@ -23,9 +24,10 @@ type Props = {
 // (modul domain `rescueOptions`). Biaya jaringan belum diketahui di sini, jadi cadangan gas MAX ETH = lantai chain.
 export function RescuePanel({ chainId, data, onChoose }: Props) {
   const ref = useRef<HTMLElement>(null);
-  // Dibuka dari banner di atas halaman: bawa panelnya ke layar.
+  // Dibuka dari banner di atas halaman: bawa panelnya ke layar. Di mobile panelnya sudah sheet layar penuh; menggulir
+  // malah menggeser halaman di belakangnya.
   useEffect(() => {
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!window.matchMedia(MOBILE_QUERY).matches) ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
   const name = chainName(chainId);
   const healthFactorNow = data.view.account?.healthFactor ?? null;

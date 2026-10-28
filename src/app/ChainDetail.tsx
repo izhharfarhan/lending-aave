@@ -149,19 +149,16 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
             onBorrow={pick('borrow')}
           />
         </div>
-        {!mobile && <div className="xl:sticky xl:top-6">{panel}</div>}
+        {/* Satu panel untuk dua tata letak: kelas `max-md:` di BottomSheet yang menjadikannya sheet di mobile. */}
+        <BottomSheet open={sheetOpen} title={SHEET.title(name)} onClose={closeSheet} className="xl:sticky xl:top-6">
+          {panel}
+        </BottomSheet>
       </div>
       {/* Lebar penuh: sembilan kolom angka muat tanpa gulir di desktop. */}
       <ParameterDetails chainId={chainId} chainName={name} read={data.read} whitelist={WHITELIST[chainId]} eModeLabel={view.eMode?.label ?? null} />
-      {mobile && (
-        <>
-          <BottomSheet open={sheetOpen} title={SHEET.title(name)} onClose={closeSheet}>
-            {panel}
-          </BottomSheet>
-          {/* Tetap terpasang di bawah sheet (yang menutupinya): fokus kembali ke tombolnya saat sheet ditutup. */}
-          <ActionBar onOpen={(tab) => choose(tab)} />
-        </>
-      )}
+      {/* Mobile saja (`md:hidden`). Tetap terpasang di bawah sheet yang menutupinya: fokus kembali ke tombolnya saat sheet
+          ditutup. */}
+      <ActionBar onOpen={(tab) => choose(tab)} />
     </section>
   );
 }
