@@ -31,5 +31,10 @@ export function eModeView(eMode: EModeRead, reserves: ReserveRead[], whitelist: 
       .map(({ r, i }) => ({ rank: i === -1 ? whitelist.length + r.id : i, symbol: i === -1 ? r.symbol : whitelist[i].symbol }))
       .sort((a, b) => a.rank - b.rank)
       .map(({ symbol }) => symbol);
-  return { label: eMode.label, collateral: symbols(eMode.collateralBitmap), borrowable: symbols(eMode.borrowableBitmap) };
+  // Aset di ltvzeroBitmap ber-LTV efektif 0: nggak bisa jadi jaminan untuk pinjaman baru (V4), jadi nggak disebut.
+  return {
+    label: eMode.label,
+    collateral: symbols(eMode.collateralBitmap & ~eMode.ltvzeroBitmap),
+    borrowable: symbols(eMode.borrowableBitmap),
+  };
 }

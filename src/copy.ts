@@ -26,6 +26,37 @@ export const FORK = {
   note: 'Transaksi tidak menyentuh mainnet',
 };
 
+// Panel Dev Tools (tiket 17, mode fork saja). Alat developer, tapi tetap bahasa Indonesia seperti sisa app.
+export const DEV_TOOLS = {
+  badge: 'DEV TOOLS',
+  rejectsLegend: 'Penolakan wallet',
+  rejectSwitchChain: 'Tolak ganti network',
+  rejectTx: 'Tolak transaksi (approve, delegasi, aksi Pool)',
+  rejectSignature: 'Tolak signature',
+  rpcLegend: 'RPC',
+  randomLatency: 'Latency acak 0–3 detik tiap bacaan posisi',
+  timeLegend: (chain: string) => `Maju waktu · ${chain}`,
+  timeSteps: { day: '+1 hari', month: '+30 hari', year: '+1 tahun' },
+  blockTime: (date: string) => `Jam blok terakhir: ${date}`,
+  faucetLegend: (chain: string) => `Faucet · ${chain}`,
+  faucetAsset: 'Aset',
+  faucetAmount: 'Jumlah',
+  faucetSubmit: 'Isi wallet',
+  needsWallet: 'Hubungkan wallet dulu.',
+  eModeLegend: (chain: string) => `E-Mode · ${chain}`,
+  eModeCategory: 'Id kategori E-Mode',
+  eModeSubmit: 'Atur E-Mode',
+  eModeHint: 'Id kategori dari app.aave.com; 0 = keluar dari E-Mode. Utang yang ada harus bisa dipinjam di kategori itu.',
+  eModeSet: (id: number) => (id === 0 ? 'Akun keluar dari E-Mode.' : `Akun masuk E-Mode kategori ${id}.`),
+  invalidCategory: 'Id kategori harus bilangan bulat 0–255.',
+  working: 'Memproses…',
+  advanced: (step: string) => `Waktu dimajukan ${step}. Posisi dibaca ulang.`,
+  funded: (amount: string, symbol: string) => `${amount} ${symbol} masuk ke wallet.`,
+  invalidAmount: (reason: string) =>
+    reason === 'too_many_decimals' ? 'Desimal melebihi presisi token.' : 'Isi jumlah lebih dari 0 (titik atau koma = desimal).',
+  failed: (message: string) => `Gagal: ${message}`,
+};
+
 export const WALLET = {
   forkConnector: 'Anvil (fork lokal)',
   forkGroup: 'Fork lokal',

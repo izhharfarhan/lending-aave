@@ -4,6 +4,7 @@ import { mock } from 'wagmi/connectors';
 
 import { TEST_ACCOUNTS } from '@/config/fork';
 import { WALLET } from '@/copy';
+import { withDevToolsRejects } from '@/devtools/withDevToolsRejects';
 
 export const FORK_CONNECTOR_ID = 'anvilFork';
 
@@ -16,17 +17,25 @@ const ICON =
   );
 
 // Connector fork lokal (pola swap-web): wagmi `mock` nerusin request ke `chain.rpcUrls.default`, jadi Anvil yang
-// sign pakai akun tes yang di-unlock. Pembungkus reject Dev Tools menyusul di tiket 17.
+// sign pakai akun tes yang di-unlock. Tiket 17: `request` provider-nya dibungkus reject Dev Tools. `switchChain` bawaan
+// mock juga lewat `this.getProvider()`, jadi reject ganti network ikut tertangkap di sini.
 export const anvilForkWallet = (): Wallet => ({
   id: FORK_CONNECTOR_ID,
   name: WALLET.forkConnector,
   iconUrl: ICON,
   iconBackground: '#f5c400',
   createConnector: (walletDetails) =>
-    createConnector((config) => ({
-      ...mock({ accounts: [TEST_ACCOUNTS.user] })(config),
-      ...walletDetails,
-      id: FORK_CONNECTOR_ID,
-      name: WALLET.forkConnector,
-    })),
+    createConnector((config) => {
+      const base = mock({ accounts: [TEST_ACCOUNTS.user] })(config);
+      return {
+        ...base,
+        ...walletDetails,
+        id: FORK_CONNECTOR_ID,
+        name: WALLET.forkConnector,
+        async getProvider(parameters) {
+          const provider = await base.getProvider.call(this, parameters);
+          return { ...provider, request: withDevToolsRejects(provider.request) };
+        },
+      };
+    }),
 });

@@ -27,10 +27,14 @@ const configuratorAbi = parseAbi([
   'function setSupplyCap(address asset, uint256 newSupplyCap)',
   'function setBorrowCap(address asset, uint256 newBorrowCap)',
   'function setReserveFreeze(address asset, bool freeze)',
+  'function configureReserveAsCollateral(address asset, uint256 ltv, uint256 liquidationThreshold, uint256 liquidationBonus)',
+  'function setAssetLtvzeroInEMode(address asset, uint8 categoryId, bool ltvzero)',
 ]);
 type ConfiguratorCall =
   | { functionName: 'setSupplyCap' | 'setBorrowCap'; args: [Address, bigint] }
-  | { functionName: 'setReserveFreeze'; args: [Address, boolean] };
+  | { functionName: 'setReserveFreeze'; args: [Address, boolean] }
+  | { functionName: 'configureReserveAsCollateral'; args: [Address, bigint, bigint, bigint] }
+  | { functionName: 'setAssetLtvzeroInEMode'; args: [Address, number, boolean] };
 
 /**
  * Panggil PoolConfigurator sebagai pool admin (executor governance Aave). Dicek dulu lewat ACLManager: V7 baru
@@ -43,6 +47,19 @@ export async function asPoolAdmin(clients: Clients, book: AdminBook, call: Confi
   await sendAs(clients, admin, () =>
     clients.walletClient.writeContract({ account: admin, address: book.POOL_CONFIGURATOR, abi: configuratorAbi, ...call } as never),
   );
+}
+
+/** Ganti LTV reserve (bps); LT dan bonus likuidasi tetap. */
+export async function setReserveLtv(
+  clients: Clients,
+  book: AdminBook,
+  reserve: Pick<ReserveRead, 'underlyingAsset' | 'reserveLiquidationThreshold' | 'reserveLiquidationBonus'>,
+  ltv: bigint,
+) {
+  await asPoolAdmin(clients, book, {
+    functionName: 'configureReserveAsCollateral',
+    args: [reserve.underlyingAsset, ltv, reserve.reserveLiquidationThreshold, reserve.reserveLiquidationBonus],
+  });
 }
 
 /**

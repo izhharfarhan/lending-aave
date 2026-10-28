@@ -139,6 +139,14 @@ describe('E-Mode (V4)', () => {
       });
     });
 
+    // "Bisa jadi jaminan" = LTV efektif ≠ 0 (V4, tiket 14). Aset di ltvzeroBitmap masih dihitung LT kategori, tapi nggak
+    // bisa menopang pinjaman baru, jadi nggak disebut sebagai jaminan kategori (ketemu di cek browser tiket 17: ETHx).
+    it('leaves ltvzeroBitmap assets out of the collateral it lists', () => {
+      const eMode = { ...ETH_CATEGORY, collateralBitmap: bit(0) | bit(33), ltvzeroBitmap: bit(33) };
+
+      expect(buildChainView(read('noDebt', eMode), WHITELIST).eMode?.collateral).toEqual(['ETH']);
+    });
+
     it('has no E-Mode line outside E-Mode or before connecting', () => {
       expect(buildChainView(read('noDebt'), WHITELIST).eMode).toBeNull();
       expect(buildChainView({ ...chain, user: null }, WHITELIST).eMode).toBeNull();

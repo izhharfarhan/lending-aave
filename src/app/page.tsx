@@ -5,6 +5,7 @@ import { NAV } from '@/copy';
 
 import { ChainDetail } from './ChainDetail';
 import { Dashboard } from './Dashboard';
+import { DevTools } from './DevTools';
 import { Sidebar } from './Sidebar';
 import { WalletButton, WalletOverview } from './WalletStatus';
 
@@ -33,6 +34,7 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
           </div>
         </main>
       </div>
+      <DevTools chainId={selected.chainId} />
     </div>
   );
 }

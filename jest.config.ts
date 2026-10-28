@@ -1,11 +1,11 @@
 import type { Config } from 'jest';
 
-// Unit test fungsi murni di src/core (+ formatter di src/app) dan config chain di src/config (DECISIONS.md Q25 seam 1–2). Test fork (*.fork.spec.ts) nanti punya config
+// Unit test fungsi murni di src/core (+ formatter di src/app, pembungkus Dev Tools di src/devtools) dan config chain di src/config (DECISIONS.md Q25 seam 1–2). Test fork (*.fork.spec.ts) nanti punya config
 // sendiri. Sengaja tanpa coverageThreshold (anti-overtesting, pola swap-web Q23).
 const config: Config = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
-  roots: ['<rootDir>/src/core', '<rootDir>/src/config', '<rootDir>/src/app'],
+  roots: ['<rootDir>/src/core', '<rootDir>/src/config', '<rootDir>/src/app', '<rootDir>/src/devtools'],
   testRegex: '^(?!.*\\.fork\\.spec\\.ts$).*\\.spec\\.ts$',
   extensionsToTreatAsEsm: ['.ts'],
   transform: {

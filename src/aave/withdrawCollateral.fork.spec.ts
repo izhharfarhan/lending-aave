@@ -1,11 +1,14 @@
-import type { Address } from 'viem';
+import { AaveV3Ethereum } from '@bgd-labs/aave-address-book';
+import { parseEther, type Address } from 'viem';
 
 import { buildChainView } from '@/core/chainPosition';
 import { aaveErrorName } from '@/core/walletError';
-import { publicClient, TEST_ACCOUNT } from '../../test/fork/clients';
+import { RISK_CONFIRM } from '@/copy';
+import { setReserveLtv } from '../../test/fork/admin';
+import { publicClient, testClient, TEST_ACCOUNT, walletClient } from '../../test/fork/clients';
 import { fundErc20 } from '../../test/fork/fund';
 import { contracts, panelState, read, runLikeTheApp, whitelist } from '../../test/fork/likeTheApp';
-import { advanceDays, units, USDC, USDT } from '../../test/fork/position';
+import { advanceDays, supplyWethCollateral, units, USDC, USDT, WETH } from '../../test/fork/position';
 import { gasLimitFor } from './gasLimit';
 import { poolRequest } from './poolTx';
 
@@ -20,8 +23,8 @@ async function usdcCollateral(supply: number, borrowUsdt = 0) {
 }
 
 // Estimasi = cara app (dan wallet) tahu kontrak menerima atau menolak transaksi itu, sebelum dikirim.
-const estimate = (step: 'withdraw' | 'setCollateral', amount: bigint, useAsCollateral = false) => {
-  const request = poolRequest({ step }, { pool: contracts.pool, asset: USDC, amount, user: TEST_ACCOUNT, useAsCollateral });
+const estimate = (step: 'withdraw' | 'setCollateral', amount: bigint, useAsCollateral = false, asset: Address = USDC) => {
+  const request = poolRequest({ step }, { pool: contracts.pool, asset, amount, user: TEST_ACCOUNT, useAsCollateral });
   return gasLimitFor(publicClient, request, TEST_ACCOUNT);
 };
 
@@ -93,6 +96,42 @@ describe('withdraw ERC20 & toggle jaminan (fork Ethereum)', () => {
       expect((await panelState('collateral', USDC, 0n)).step).toEqual({ step: 'overLtv' });
       const error = await estimate('setCollateral', 0n, false).catch((e: unknown) => e);
       expect(aaveErrorName(error)).toBe('HealthFactorLowerThanLiquidationThreshold');
+    });
+
+    // Aturan ltv0 (`validateHFAndLtvzero`, tiket 05 → 17): selama ada jaminan ber-LTV 0, withdraw dan mematikan jaminan
+    // lain ditolak `LtvValidationFailed`. Jaminan 2 ETH + 1.000 USDC, utang 500 USDT; lalu admin Aave menurunkan LTV USDC
+    // ke 0 (jaminannya tetap aktif, seperti aset yang dihapus bertahap di mainnet).
+    it('locks withdrawing or turning off other collateral while a collateral has LTV 0, exactly where the Pool refuses', async () => {
+      await supplyWethCollateral('2');
+      await usdcCollateral(1_000, 500);
+      const usdc = (await read()).reserves.find((r) => r.underlyingAsset === USDC)!;
+      await setReserveLtv({ publicClient, testClient, walletClient }, AaveV3Ethereum, usdc, 0n);
+
+      const view = buildChainView(await read(), whitelist);
+      const ltvZeroCollateral = view.supplies.filter((s) => s.collateral && !s.canBeCollateral).map((s) => s.symbol);
+      expect(ltvZeroCollateral).toEqual(['USDC']);
+      // Kalimat panel menyebut aset ber-LTV 0-nya (ActionPanel `RiskConfirm`).
+      expect(RISK_CONFIRM.ltvZero(ltvZeroCollateral.join(', '), false)).toContain('USDC');
+
+      const withdrawEth = await panelState('withdraw', WETH, parseEther('0.1'));
+      expect(withdrawEth.sim?.ltvZero).toBe(true);
+      expect(withdrawEth.step).toEqual({ step: 'ltvZero' });
+      expect(aaveErrorName(await estimate('withdraw', parseEther('0.1'), false, WETH).catch((e: unknown) => e))).toBe('LtvValidationFailed');
+
+      expect((await panelState('collateral', WETH, 0n)).step).toEqual({ step: 'ltvZero' });
+      expect(aaveErrorName(await estimate('setCollateral', 0n, false, WETH).catch((e: unknown) => e))).toBe('LtvValidationFailed');
+    });
+
+    it('still lets the LTV-0 collateral itself be withdrawn, as the Pool does', async () => {
+      await supplyWethCollateral('2');
+      await usdcCollateral(1_000, 500);
+      const usdc = (await read()).reserves.find((r) => r.underlyingAsset === USDC)!;
+      await setReserveLtv({ publicClient, testClient, walletClient }, AaveV3Ethereum, usdc, 0n);
+
+      const { sim, step } = await panelState('withdraw', USDC, units(100));
+      expect(sim?.ltvZero).toBe(false);
+      expect(step).toEqual({ step: 'withdraw' });
+      await expect(estimate('withdraw', units(100))).resolves.toBeGreaterThan(0n);
     });
   });
 });
