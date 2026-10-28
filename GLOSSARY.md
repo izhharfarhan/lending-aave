@@ -50,6 +50,10 @@ _Avoid_: chain aktif, network aktif
 **Chain berbahaya**:
 Chain yang posisinya bertingkat risiko Bahaya. Hanya chain ini yang memunculkan banner.
 
+**Panel penyelamatan**:
+Panel yang dibuka dari "Lihat <chain>" di banner chain berbahaya, menggantikan panel aksi sampai user memilih. Menawarkan dua cara menaikkan HF, Repay atau Supply jaminan, masing-masing dengan HF sesudah MAX-nya dari aset yang paling menaikkan HF.
+_Avoid_: rescue panel, panel darurat
+
 ## Transaksi
 
 **Langkah wallet**:

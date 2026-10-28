@@ -23,7 +23,7 @@ import { APPROVAL, CHAIN_PICKER, CTA, GAS, PANEL, GRANT, POSITION, RISK_CONFIRM,
 import { switchChainErrorKind, type WalletErrorKind } from '@/core/walletError';
 import { useForkGuard } from '@/wallet/useForkGuard';
 import { hf, pct, tokenAmount, usd } from './format';
-import { HealthFactor } from './HealthFactor';
+import { HealthFactorChange } from './HealthFactor';
 import { LiquidationText, liquidationText } from './LiquidationText';
 import { TokenIcon } from './TokenIcon';
 
@@ -472,10 +472,7 @@ function Outlook({ data, chainId, sim }: { data: ChainData; chainId: number; sim
         {account.healthFactor === null && (!sim || sim.account.healthFactor === null) ? (
           <span className="text-muted">{POSITION.noDebt}</span>
         ) : (
-          <span>
-            <HealthFactor value={account.healthFactor} withLabel={!sim} /> <span className="text-faint">{PANEL.arrow}</span>{' '}
-            {sim ? <HealthFactor value={sim.account.healthFactor} /> : <span className="text-faint">{PANEL.pendingAfter}</span>}
-          </span>
+          <HealthFactorChange before={account.healthFactor} after={sim ? sim.account.healthFactor : undefined} />
         )}
       </OutlookRow>
       {liquidationText(liqShown) && (

@@ -9,7 +9,7 @@ import { rescueOptions, type RescueChoice } from '@/core/rescue';
 import { PANEL, RESCUE } from '@/copy';
 import type { ChainData } from './ActionPanel';
 import { tokenAmount } from './format';
-import { HealthFactor } from './HealthFactor';
+import { HealthFactor, HealthFactorChange } from './HealthFactor';
 import { TokenIcon } from './TokenIcon';
 
 type Props = {
@@ -92,8 +92,7 @@ function Option(props: OptionProps) {
           <div className="flex items-center justify-between gap-3">
             <dt className="text-muted">{RESCUE.hfAfter}</dt>
             <dd>
-              <HealthFactor value={props.healthFactorNow} withLabel={false} /> <span className="text-faint">{PANEL.arrow}</span>{' '}
-              {choice.healthFactor === null ? <span className="text-accent">{RESCUE.paidOff}</span> : <HealthFactor value={choice.healthFactor} />}
+              <HealthFactorChange before={props.healthFactorNow} after={choice.healthFactor} />
             </dd>
           </div>
         </dl>

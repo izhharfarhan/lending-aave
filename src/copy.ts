@@ -140,7 +140,6 @@ export const RESCUE = {
   supplyNote: 'Tambah jaminan dari saldo wallet',
   using: (amount: string, symbol: string) => `MAX ${amount} ${symbol}`,
   hfAfter: 'Health factor sesudah',
-  paidOff: 'Lunas',
   /** Tanpa pilihan: saldo wallet kosong, reserve Dijeda, atau aksinya nggak menaikkan Health factor. */
   noRepay: (chain: string) => `Belum ada saldo di wallet Anda (${chain}) yang bisa dipakai repay untuk menaikkan Health factor.`,
   noSupply: (chain: string) => `Belum ada saldo di wallet Anda (${chain}) yang bisa jadi jaminan untuk menaikkan Health factor.`,
