@@ -13,7 +13,7 @@
 - [ ] Repo `lending-indexer`: Ponder + Postgres Docker + Hono GraphQL (pola swap-indexer)
 - [ ] Event `Supply` Pool Ethereum; pemilik = `onBehalfOf`; jumlah disimpan sebagai bigint mentah
 - [ ] Butuh RPC archive
-- [ ] **Sebelum implementasi**: putuskan strategi `eth_getLogs` (lihat Comments 2026-10-27) dan **ajukan pilihannya ke user dulu**
+- [x] **Sebelum implementasi**: putuskan strategi `eth_getLogs` (lihat Comments 2026-10-27) dan **ajukan pilihannya ke user dulu** → Opsi 1 (DECISIONS Q31)
 - [ ] Test Vitest + fixture Anvil terpisah tanpa revert (pola swap-indexer)
 
 ## Comments
@@ -29,3 +29,4 @@
     2. RPC lain khusus `getLogs` yang range-nya besar, terpisah dari RPC archive untuk `eth_call` (atau ganti RPC fork ke yang batas `getLogs`-nya lebih longgar).
     3. Batas range di config Ponder (mis. `ethGetLogsBlockRange: 10`). Lambat untuk range panjang.
   - Ini juga menyentuh tiket 20 (3 chain) dan 21 (likuidasi, butuh `getUserAccountData` di blok −1 lewat archive).
+- 2026-10-28 (keputusan user, DECISIONS Q31): **Opsi 1**. Index mulai blok pin + 1 di tiap chain, tanpa backfill; batas range `getLogs` 10 blok di config Ponder sebagai pengaman. Mode mainnet: start block = blok terbaru saat indexer mulai (tiket 25).

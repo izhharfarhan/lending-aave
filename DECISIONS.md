@@ -407,6 +407,18 @@ Pola mengikuti Q23 swap-web.
   dari **timestamp blok terbaru chain itu**, bukan `Date.now()`, supaya tetap benar di
   fork setelah "maju waktu" dan saat jam Anvil tertinggal.
 
+### Q31 — Strategi `eth_getLogs` indexer (diputuskan user 2026-10-28, tiket 19)
+- Alchemy free membatasi `eth_getLogs` 10 blok per request (dicek tiket 02–04). Backfill panjang mahal: 30 hari
+  ±21.600 request di Ethereum, ±130.000 di Base, ±1 juta di Arbitrum, dan memakai key yang sama dengan fork/app.
+- **Dipilih Opsi 1**: index mulai **blok pin + 1** di tiap chain, tanpa backfill. Blok sesudah pin dilayani Anvil
+  sendiri (tanpa batas range, tanpa kuota). Ponder tetap diberi batas range 10 blok sebagai pengaman, supaya request
+  yang nggak sengaja menyentuh blok sebelum pin nggak error.
+- Mode mainnet (tiket 25): start block = blok terbaru saat indexer mulai; riwayat dan banner likuidasi mulai dari
+  situ. Indexer mainnet pakai key Alchemy terpisah (`PONDER_RPC_URL_<chainId>`), supaya kuota indexer yang habis nggak
+  ikut mematikan app dan fork.
+- Ditolak: RPC `getLogs` berbayar/terpisah untuk backfill (Opsi 2, baru relevan kalau butuh riwayat mainnet lama) dan
+  backfill 10 blok per request di Alchemy free (Opsi 3, bisa menghabiskan kuota bersama).
+
 ## Hasil verifikasi (spike 2026-10-27)
 
 Sumber yang dicek:
