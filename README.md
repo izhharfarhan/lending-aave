@@ -38,8 +38,23 @@ kosong untuk itu; tanpa blok itu Ponder berhenti dengan `BlockNotFoundError`.
   kuota. Riwayat sebelum pin memang kosong untuk akun tes.
 - `ethGetLogsBlockRange: 10` di config Ponder (batas Alchemy free, terutama untuk mainnet). Efek sampingnya, Ponder
   nggak lagi mengecilkan range otomatis saat `eth_getLogs` ditolak.
-- **Mainnet** (tiket 25): `START_BLOCK_<chainId>` = blok terbaru saat indexer mulai; riwayat dan banner likuidasi mulai dari
-  situ. `PONDER_RPC_URL_*` memakai key Alchemy terpisah dari app & fork.
+- **Mainnet** (tiket 25): `START_BLOCK_<chainId>` = blok terbaru saat indexer pertama kali dijalankan. Riwayat dan
+  banner likuidasi lending-web **mulai dari situ**: transaksi dan likuidasi sebelumnya nggak tampil.
+  `PONDER_RPC_URL_*` memakai key RPC terpisah dari app & fork (lihat "Mode mainnet").
+
+## Mode mainnet
+
+1. `cp .env.example .env.mainnet`, isi `PONDER_MODE=mainnet`, `PONDER_RPC_URL_<chainId>` (key indexer sendiri),
+   `DATABASE_URL=postgresql://ponder:ponder@127.0.0.1:5434/lending_mainnet`.
+2. `pnpm start-blocks:mainnet` mencetak `START_BLOCK_<chainId>=…` dari blok terbaru; salin **sekali** ke `.env.mainnet`.
+   Jangan diganti sesudahnya: start block lain = build Ponder baru = index ulang dari blok itu, riwayat yang sudah ada
+   hilang. `startBlock: "latest"` Ponder sengaja nggak dipakai karena alasan yang sama (berubah tiap restart).
+3. `pnpm db:up && pnpm dev:mainnet` → GraphQL di http://localhost:42070/graphql (port yang sama dengan `dev:fork`, jadi
+   jalankan salah satu). Di lending-web `.env.mainnet` isi `NEXT_PUBLIC_INDEXER_URL=http://localhost:42070`, lalu
+   **restart** `pnpm dev:mainnet` di sana (env dibaca saat server mulai).
+- Kuota: sync live = polling blok baru tiap chain (Arbitrum ±4 blok/detik) + `eth_getLogs` per 10 blok + bacaan
+  `eth_call` per likuidasi. Ukur pemakaian di dashboard provider selama smoke test sebelum menjalankannya lama.
+- Jangan pernah mencetak `PONDER_RPC_URL_*` (berisi key); script di repo ini cuma mencetak nomor blok/nama error.
 
 ## Data
 

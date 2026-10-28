@@ -6,6 +6,7 @@
   "scripts": {
     "dev:fork": "node scripts/with-env.mjs .env.fork ponder dev --port 42070",
     "dev:mainnet": "node scripts/with-env.mjs .env.mainnet ponder dev --port 42070",
+    "start-blocks:mainnet": "node --env-file=.env.mainnet scripts/start-blocks.mjs",
     "codegen": "node scripts/with-env.mjs .env.fork ponder codegen",
     "db:up": "docker compose up -d --wait",
     "db:reset:fork": "docker compose exec -T postgres psql -U ponder -d postgres -c \"DROP DATABASE IF EXISTS lending_fork WITH (FORCE)\" -c \"CREATE DATABASE lending_fork\"",
