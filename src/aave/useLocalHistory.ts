@@ -1,9 +1,10 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { APP_MODE } from '@/config/appMode';
+import { SUPPORTED_CHAINS } from '@/config/chains';
 import { addEntry, localHistoryKey, parseHistory, type LocalTxEntry } from '@/core/localHistory';
 
-// Tiket 03: cuma mencatat. Tampilan Riwayat (gabung indexer) di tiket 22.
+// Tiket 03: mencatat tx dari app. Halaman Riwayat (tiket 22) membacanya lewat `useLocalHistories`.
 export function useAddLocalHistory(chainId: number, wallet: string | undefined) {
   return useCallback(
     (entry: LocalTxEntry) => {
@@ -17,4 +18,28 @@ export function useAddLocalHistory(chainId: number, wallet: string | undefined) 
     },
     [chainId, wallet],
   );
+}
+
+function readAll(wallet: string): LocalTxEntry[] {
+  try {
+    return SUPPORTED_CHAINS.flatMap((chain) => parseHistory(localStorage.getItem(localHistoryKey(APP_MODE, chain.chainId, wallet))));
+  } catch {
+    return [];
+  }
+}
+
+/** Tx lokal semua chain untuk wallet ini (halaman Riwayat); dibaca ulang kalau tab lain menulis riwayat. */
+export function useLocalHistories(wallet: string | undefined): LocalTxEntry[] {
+  const [entries, setEntries] = useState<LocalTxEntry[]>([]);
+  useEffect(() => {
+    if (!wallet) {
+      setEntries([]);
+      return;
+    }
+    const read = () => setEntries(readAll(wallet));
+    read();
+    window.addEventListener('storage', read);
+    return () => window.removeEventListener('storage', read);
+  }, [wallet]);
+  return entries;
 }

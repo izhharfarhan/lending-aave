@@ -25,6 +25,11 @@ export type SupportedChain = {
   minGasReserve: bigint;
   aave: AaveContracts;
   /**
+   * Lebih dari segini blok di belakang head RPC app = indexer "tertinggal" (footer sidebar, badge Riwayat), ≈ 1 menit
+   * per chain (Ethereum 12 detik/blok, Base 2 detik, Arbitrum 0,25 detik; pola swap-web).
+   */
+  indexerMaxLagBlocks: number;
+  /**
    * Whitelist berbasis ALAMAT underlying (DECISIONS.md #3, V6), bukan simbol: simbol bisa kembar antar reserve (USDC
    * native vs USDC.e di Arbitrum, USDC vs USDbC di Base). Urutan = urutan baris tabel. Reserve di luar whitelist tampil
    * sebagai aset luar. Parameter reserve (LTV, LT, APY, flag) sengaja nggak di sini; semuanya dibaca dari kontrak.
@@ -69,6 +74,7 @@ export const SUPPORTED_CHAINS: SupportedChain[] = [
     explorer: 'https://etherscan.io',
     minGasReserve: 500_000_000_000_000n,
     aave: aaveOf(AaveV3Ethereum),
+    indexerMaxLagBlocks: 5,
     whitelist: [
       eth(AaveV3Ethereum),
       { address: AaveV3Ethereum.ASSETS.USDC.UNDERLYING, symbol: 'USDC', native: false },
@@ -84,6 +90,7 @@ export const SUPPORTED_CHAINS: SupportedChain[] = [
     explorer: 'https://basescan.org',
     minGasReserve: L2_GAS_RESERVE,
     aave: aaveOf(AaveV3Base),
+    indexerMaxLagBlocks: 30,
     // Base tanpa USDT (V6). USDbC (USDC bridged lama) = aset luar.
     whitelist: [eth(AaveV3Base), { address: AaveV3Base.ASSETS.USDC.UNDERLYING, symbol: 'USDC', native: false }],
   },
@@ -95,6 +102,7 @@ export const SUPPORTED_CHAINS: SupportedChain[] = [
     explorer: 'https://arbiscan.io',
     minGasReserve: L2_GAS_RESERVE,
     aave: aaveOf(AaveV3Arbitrum),
+    indexerMaxLagBlocks: 240,
     whitelist: [
       eth(AaveV3Arbitrum),
       // USDC native (address-book: USDCn), tampil "USDC" (V6). USDC.e (address-book: USDC) = aset luar.

@@ -1,5 +1,7 @@
 // Semua teks UI di satu tempat, bahasa Indonesia baku dengan "Anda" (DECISIONS.md Q8).
 
+import type { HistoryKind } from './core/history';
+
 export const PAGE = {
   brand: 'LENDEX',
   title: 'Lendex',
@@ -166,6 +168,45 @@ export const AGE = {
   minute: (n: number) => `${n} menit`,
   hour: (n: number) => `${n} jam`,
   day: (n: number) => `${n} hari`,
+};
+
+// Halaman Riwayat (Q18, tiket 22). Label jenis = nama filter Q18; isi baris memakai istilah GLOSSARY.
+export const HISTORY = {
+  title: 'Riwayat',
+  connectPrompt: (chains: string) => `Hubungkan wallet untuk melihat riwayat transaksi Anda di ${chains}.`,
+  connect: 'Hubungkan wallet',
+  filterChain: 'Chain',
+  filterKind: 'Jenis',
+  all: 'Semua',
+  kinds: { supply: 'Supply', withdraw: 'Withdraw', borrow: 'Borrow', repay: 'Repay', liquidation: 'Likuidasi', collateral: 'Collateral' } as Record<HistoryKind, string>,
+  collateral: (enabled: boolean) => (enabled ? 'jaminan aktif' : 'jaminan nonaktif'),
+  liquidationSold: (amount: string) => `jaminan dijual ${amount}`,
+  deficit: 'sisa utang dihapus',
+  awaiting: 'Menunggu indexer',
+  failed: 'Gagal',
+  ago: (age: string) => `${age} lalu`,
+  unknownAge: '—',
+  explorer: 'Tx ↗',
+  explorerAria: (chain: string) => `Lihat transaksi di explorer ${chain}`,
+  loading: 'Memuat riwayat…',
+  empty: 'Belum ada transaksi.',
+  emptyFiltered: 'Tidak ada transaksi untuk filter ini.',
+  incomplete: 'Riwayat mungkin belum lengkap',
+  incompleteDetail: {
+    offline: 'Indexer tidak bisa dihubungi: yang tampil hanya transaksi yang dikirim dari browser ini.',
+    lagging: (chains: string) => `Indexer tertinggal di ${chains}: transaksi terbaru mungkin belum muncul.`,
+  },
+};
+
+// Footer sidebar (spec story 114, prototype Q22): blok terbaru per chain, status RPC, status indexer.
+export const NETWORK = {
+  title: 'Status jaringan',
+  rpcFailed: 'RPC gagal',
+  indexerSynced: 'Indexer sinkron',
+  indexerLagging: (parts: string) => `Indexer tertinggal ${parts}`,
+  laggingBlocks: (chain: string, blocks: string) => `${blocks} blok (${chain})`,
+  laggingUnknown: (chain: string) => `${chain} belum tercatat`,
+  indexerOffline: 'Indexer offline · riwayat mungkin belum lengkap',
 };
 
 // Banner Bahaya di atas hero (Q2): chain HF terendah dulu, sisanya "+N chain lain".
