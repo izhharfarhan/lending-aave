@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 
+import { createRedactor } from '../../scripts/redact.mjs';
 import { TEST_ACCOUNTS } from '../../src/config/fork';
 import { forkClients, type ForkClients, type ForkTestChainId } from './clients';
 
@@ -44,7 +45,8 @@ export async function startAnvil(chainId: ForkTestChainId, clients: ForkClients)
 
   const exited = new Promise<never>((_, reject) => {
     anvil.once('error', (err) => reject(new Error(`Gagal jalankan anvil (sudah foundryup?): ${err.message}`)));
-    anvil.once('exit', (code) => reject(new Error(`Anvil test chain ${chainId} berhenti (kode ${code}): ${stderr.trim()}`)));
+    // stderr Anvil bisa memuat URL fork (ber-key): disaring dulu (tiket 25).
+    anvil.once('exit', (code) => reject(new Error(`Anvil test chain ${chainId} berhenti (kode ${code}): ${createRedactor()(stderr.trim())}`)));
   });
   const meta = await Promise.race([waitForAnvil(clients, rpcUrl), exited]);
   const forkBlock = meta.forkedNetwork ? BigInt(meta.forkedNetwork.forkBlockNumber) : null;

@@ -3,6 +3,8 @@
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
+import { createRedactor, pipeRedacted } from './redact.mjs';
+
 const readJson = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8'));
 const forkChains = readJson('../src/config/forkChains.json');
 // Semua akun tes yang dipakai app & Dev Tools (user + likuidator). Private key-nya publik, jadi di mainnet
@@ -62,6 +64,8 @@ async function assertServesPinnedState(chainId, forkUrl, forkBlock) {
 }
 
 const entries = Object.entries(forkChains);
+// Pesan error RPC dan output Anvil disaring: URL fork ber-key nggak boleh sampai ke terminal (tiket 25).
+const redact = createRedactor();
 const forkUrlOf = (chainId) => process.env[`ANVIL_FORK_URL_${chainId}`];
 // Semua pemeriksaan di depan, sebelum satu Anvil pun dinyalakan: gagal = satu baris pesan + exit 1, bukan stack
 // trace dan bukan fork setengah jadi.
@@ -73,7 +77,7 @@ try {
     await assertServesPinnedState(chainId, forkUrl, forkBlock);
   }
 } catch (err) {
-  console.error(`[anvil-up] ${err.message}`);
+  console.error(redact(`[anvil-up] ${err.message}`));
   process.exit(1);
 }
 
@@ -84,8 +88,10 @@ const children = entries.map(([chainId, { forkBlock, port }]) => {
   const child = spawn(
     'anvil',
     ['--fork-url', forkUrl, '--fork-block-number', String(forkBlock), '--chain-id', chainId, '--port', String(port)],
-    { stdio: ['ignore', 'inherit', 'inherit'] },
+    { stdio: ['ignore', 'pipe', 'pipe'] },
   );
+  pipeRedacted(child.stdout, process.stdout, redact);
+  pipeRedacted(child.stderr, process.stderr, redact);
   child.on('error', (err) => {
     console.error(`[chain ${chainId}] gagal jalanin anvil (udah foundryup?):`, err.message);
     process.exitCode = 1;
