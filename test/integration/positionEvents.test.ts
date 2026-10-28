@@ -1,17 +1,14 @@
 import type pg from 'pg';
-import { maxUint256, parseEther, type Address, type Hex } from 'viem';
+import { maxUint256, parseEther, type Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
-import { forkStartBlock, INDEXED_CHAINS } from '../../src/chains';
+import { forkStartBlock, INDEXED_CHAINS, type IndexedChainId } from '../../src/chains';
 import { aave } from './aave';
-import { connectTestDb, graphql, OTHER_ACCOUNT, TEST_ACCOUNT, waitForRows } from './harness';
+import { connectTestDb, graphql, lower, OTHER_ACCOUNT, TEST_ACCOUNT, usdc, waitForRows } from './harness';
 
 // Tiket 20: atribusi pemilik untuk semua event (#11, V2) dan penggabungan event jaminan otomatis (V3, Q18), di Anvil
 // test 3 chain. Anvil tanpa revert: tiap test mengirim tx-nya sendiri dan mencari row lewat hash-nya.
-const usdc = (n: number) => BigInt(n) * 1_000_000n;
-const lower = (address: Address) => address.toLowerCase();
-
 const ethereum = aave(1);
 let db: pg.Client;
 
@@ -114,14 +111,14 @@ describe('position_event: event jaminan (fork Ethereum)', () => {
 describe('position_event: Base & Arbitrum', () => {
   // Gateway & aWETH beda per chain: filter `Transfer` ke gateway harus jalan di tiap chain.
   it.each([8453, 42161] as const)('records ETH deposit and withdrawal on chain %i under the user', async (chainId) => {
-    const chain = aave(chainId);
+    const l2 = aave(chainId);
 
-    const deposit = await chain.depositEth(parseEther('0.5'));
-    const withdraw = await chain.withdrawEth(parseEther('0.2'));
+    const deposit = await l2.depositEth(parseEther('0.5'));
+    const withdraw = await l2.withdrawEth(parseEther('0.2'));
 
     const [depositRow] = await waitForRows(db, deposit.transactionHash);
     const [withdrawRow] = await waitForRows(db, withdraw.transactionHash);
-    const ofUser = { chain_id: chainId, owner: lower(TEST_ACCOUNT), caller: lower(chain.gateway), reserve: lower(chain.weth) };
+    const ofUser = { chain_id: chainId, owner: lower(TEST_ACCOUNT), caller: lower(l2.gateway), reserve: lower(l2.weth) };
     expect(depositRow).toMatchObject({ ...ofUser, kind: 'supply', amount: parseEther('0.5').toString() });
     expect(withdrawRow).toMatchObject({ ...ofUser, kind: 'withdraw', amount: parseEther('0.2').toString() });
   });
@@ -132,9 +129,9 @@ describe('/graphql', () => {
 
   // Riwayat semua chain per alamat dengan filter chain + jenis (Q18).
   it('filters one owner history by chain and kind', async () => {
-    const base = aave(8453);
-    await base.depositEth(parseEther('0.1'));
-    const baseWithdraw = await base.withdrawEth(parseEther('0.1'));
+    const onBase = aave(8453);
+    await onBase.depositEth(parseEther('0.1'));
+    const baseWithdraw = await onBase.withdrawEth(parseEther('0.1'));
     const ethereumSupply = await ethereum.supplyUsdc(usdc(10), TEST_ACCOUNT);
     await waitForRows(db, baseWithdraw.transactionHash);
     await waitForRows(db, ethereumSupply.transactionHash);
@@ -161,8 +158,9 @@ describe('/graphql', () => {
 
     expect(body.errors).toBeUndefined();
     const { status } = body.data._meta;
-    for (const chainId of [1, 8453, 42161] as const) {
-      const chain = status[INDEXED_CHAINS[chainId].name];
+    for (const [id, { name }] of Object.entries(INDEXED_CHAINS)) {
+      const chainId = Number(id) as IndexedChainId;
+      const chain = status[name];
       expect(chain?.id).toBe(chainId);
       expect(chain!.block.number).toBeGreaterThanOrEqual(forkStartBlock(chainId));
     }

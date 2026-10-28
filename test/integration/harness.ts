@@ -22,6 +22,10 @@ export const TEST_ACCOUNT: Address = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 export const OTHER_ACCOUNT: Address = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 const ROW_TIMEOUT_MS = 60_000;
 
+// Jumlah USDC mentah (6 desimal) dan alamat huruf kecil seperti yang disimpan Ponder.
+export const usdc = (n: number) => BigInt(n) * 1_000_000n;
+export const lower = (address: Address) => address.toLowerCase();
+
 export const anvilUrl = (chainId: TestChainId) => `http://127.0.0.1:${TEST_CHAINS[chainId].anvilPort}`;
 
 export function testClients(chainId: TestChainId) {

@@ -3,12 +3,10 @@ import { parseEther, type Address, type Hex } from 'viem';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
 import { aave } from './aave';
-import { connectTestDb, graphql, OTHER_ACCOUNT, TEST_ACCOUNT, waitForRows } from './harness';
+import { connectTestDb, graphql, lower, OTHER_ACCOUNT, TEST_ACCOUNT, usdc, waitForRows } from './harness';
 
 // Tiket 19: Supply USDC di Anvil test Ethereum (globalSetup), lalu polling DB sampai row muncul. Anvil tanpa revert:
 // tiap test mengirim tx-nya sendiri dan mencari row lewat hash-nya.
-const usdc = (n: number) => BigInt(n) * 1_000_000n;
-
 const ethereum = aave(1);
 const { publicClient, supplyUsdc } = ethereum;
 let db: pg.Client;
@@ -32,10 +30,10 @@ describe('position_event: Supply (fork Ethereum)', () => {
     expect(row).toMatchObject({
       chain_id: 1,
       kind: 'supply',
-      owner: TEST_ACCOUNT.toLowerCase(),
-      caller: TEST_ACCOUNT.toLowerCase(),
-      tx_from: TEST_ACCOUNT.toLowerCase(),
-      reserve: ethereum.usdc.toLowerCase(),
+      owner: lower(TEST_ACCOUNT),
+      caller: lower(TEST_ACCOUNT),
+      tx_from: lower(TEST_ACCOUNT),
+      reserve: lower(ethereum.usdc),
       amount: usdc(1_000).toString(),
       timestamp: block.timestamp.toString(),
       block_number: block.number.toString(),
@@ -48,7 +46,7 @@ describe('position_event: Supply (fork Ethereum)', () => {
 
     const [row] = await waitForRows(db, receipt.transactionHash);
 
-    expect(row).toMatchObject({ owner: OTHER_ACCOUNT.toLowerCase(), caller: TEST_ACCOUNT.toLowerCase(), tx_from: TEST_ACCOUNT.toLowerCase() });
+    expect(row).toMatchObject({ owner: lower(OTHER_ACCOUNT), caller: lower(TEST_ACCOUNT), tx_from: lower(TEST_ACCOUNT) });
   });
 
   // Supply ETH lewat WrappedTokenGateway: `Supply.user` = gateway, pemilik tetap user (#11, V2).
@@ -58,10 +56,10 @@ describe('position_event: Supply (fork Ethereum)', () => {
     const [row] = await waitForRows(db, receipt.transactionHash);
 
     expect(row).toMatchObject({
-      owner: TEST_ACCOUNT.toLowerCase(),
-      caller: ethereum.gateway.toLowerCase(),
-      tx_from: TEST_ACCOUNT.toLowerCase(),
-      reserve: ethereum.weth.toLowerCase(),
+      owner: lower(TEST_ACCOUNT),
+      caller: lower(ethereum.gateway),
+      tx_from: lower(TEST_ACCOUNT),
+      reserve: lower(ethereum.weth),
       amount: parseEther('1').toString(),
     });
   });
@@ -72,11 +70,11 @@ describe('position_event: Supply (fork Ethereum)', () => {
 
     const body = await graphql<{ positionEvents: { items: { txHash: Hex; kind: string; owner: Address; amount: string }[] } }>(
       `query ($owner: String!) { positionEvents(where: { owner: $owner }, orderBy: "timestamp", orderDirection: "desc") { items { txHash kind owner amount } } }`,
-      { owner: OTHER_ACCOUNT.toLowerCase() },
+      { owner: lower(OTHER_ACCOUNT) },
     );
 
     expect(body.errors).toBeUndefined();
-    expect(body.data.positionEvents.items[0]).toEqual({ txHash: receipt.transactionHash, kind: 'supply', owner: OTHER_ACCOUNT.toLowerCase(), amount: usdc(250).toString() });
-    expect(body.data.positionEvents.items.every((item) => item.owner === OTHER_ACCOUNT.toLowerCase())).toBe(true);
+    expect(body.data.positionEvents.items[0]).toEqual({ txHash: receipt.transactionHash, kind: 'supply', owner: lower(OTHER_ACCOUNT), amount: usdc(250).toString() });
+    expect(body.data.positionEvents.items.every((item) => item.owner === lower(OTHER_ACCOUNT))).toBe(true);
   });
 });

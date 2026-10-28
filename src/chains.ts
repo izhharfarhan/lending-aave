@@ -21,7 +21,6 @@ export const INDEXED_CHAINS = {
 } as const satisfies Record<number, IndexedChain>;
 
 export type IndexedChainId = keyof typeof INDEXED_CHAINS;
-export const INDEXED_CHAIN_IDS = Object.keys(INDEXED_CHAINS).map(Number) as IndexedChainId[];
 
 /**
  * Blok awal index mode fork (Q31): blok pin + 1. Blok sesudah pin dibuat Anvil sendiri, jadi `eth_getLogs`-nya nggak

@@ -27,7 +27,7 @@ export type PositionRow = {
 
 // DECISIONS #11: pemilik posisi dari field event, bukan `tx.from`. Jumlah bigint mentah.
 
-/** Supply → `onBehalfOf` (supply ETH: `user` = gateway; supply atas nama orang lain: pemilik aToken-nya). */
+/** Supply → `onBehalfOf` (supply ETH: `user` = gateway; supply atas nama alamat lain: pemilik aToken-nya). */
 export function supplyRow({ reserve, user, onBehalfOf, amount }: SupplyArgs): PositionRow {
   return { kind: 'supply', owner: onBehalfOf, caller: user, reserve, amount, collateralEnabled: null };
 }

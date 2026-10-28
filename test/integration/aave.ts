@@ -58,8 +58,7 @@ export function aave(chainId: TestChainId) {
       return send(walletClient, { address: pool, abi: poolAbi, functionName: 'supply', args: [usdc, amount, onBehalfOf, 0] });
     },
 
-    depositEth: (value: bigint, onBehalfOf: Address = TEST_ACCOUNT) =>
-      send(walletClient, { address: gateway, abi: gatewayAbi, functionName: 'depositETH', args: [pool, onBehalfOf, 0], value }),
+    depositEth: (value: bigint) => send(walletClient, { address: gateway, abi: gatewayAbi, functionName: 'depositETH', args: [pool, TEST_ACCOUNT, 0], value }),
 
     // `maxUint256` = seluruh saldo aWETH saat eksekusi; izin aWETH ke gateway dibuat maksimal supaya bunga tercakup.
     async withdrawEth(amount: bigint) {
@@ -72,8 +71,7 @@ export function aave(chainId: TestChainId) {
       return send(walletClient, { address: gateway, abi: gatewayAbi, functionName: 'borrowETH', args: [pool, amount, 0] });
     },
 
-    repayEth: (amount: bigint, onBehalfOf: Address = TEST_ACCOUNT) =>
-      send(walletClient, { address: gateway, abi: gatewayAbi, functionName: 'repayETH', args: [pool, amount, onBehalfOf], value: amount }),
+    repayEth: (amount: bigint) => send(walletClient, { address: gateway, abi: gatewayAbi, functionName: 'repayETH', args: [pool, amount, TEST_ACCOUNT], value: amount }),
 
     // Anvil membuka semua akun bawaan, jadi pemilik lain bisa mengirim tx tanpa private key.
     setCollateral(owner: Address, asset: Address, useAsCollateral: boolean) {

@@ -57,9 +57,15 @@ Tabel `position_event`: satu baris per baris riwayat, kunci `(chainId, txHash, l
 
 - `collateralEnabled`: jaminan yang berubah di baris itu, kosong kalau nggak berubah. Event jaminan otomatis (supply
   pertama mengaktifkan; withdraw atau repay pakai aToken yang menghabiskan saldo menonaktifkan) digabung ke baris aksi
-  di tx yang sama untuk reserve dan pemilik yang sama ("Supply 1 ETH · jaminan aktif", V3/Q18), apa pun urutan log-nya.
-  Baris `collateral` (tanpa `amount`) cuma untuk toggle manual. Aturannya di `src/core/collateralMerge.ts`; tabel
-  bantu `tx_slot` dan `gateway_transfer` cuma untuk handler, bukan untuk frontend.
+  di tx yang sama untuk reserve dan pemilik yang sama ("Supply 1 ETH · jaminan aktif", V3/Q18), baik event jaminannya
+  terpancar sebelum maupun sesudah event aksinya. Baris `collateral` (tanpa `amount`) untuk event jaminan yang nggak
+  punya aksi pasangan. Aturannya di `src/core/collateralMerge.ts`; tabel bantu `tx_slot` dan `gateway_transfer` cuma
+  untuk handler, bukan untuk frontend.
+- Batasan yang diketahui (penggabungan cuma melihat tx, reserve, pemilik, dan arah; tanpa membaca saldo sebelum tx):
+  - Transfer seluruh aToken ke alamat lain (bukan withdraw) memancarkan `ReserveUsedAsCollateralDisabled` otomatis
+    tanpa aksi pasangan, jadi tercatat sebagai baris `collateral` seperti toggle manual.
+  - Dalam satu tx batch (smart wallet), toggle manual yang searah sebelum supply/withdraw di reserve yang sama ikut
+    tergabung ke baris aksi itu.
 - `amount` bigint mentah; desimal dan format urusan frontend.
 - Alamat disimpan huruf kecil, dan filter GraphQL peka huruf besar-kecil: kirim `owner` dalam huruf kecil (alamat
   checksum dari wallet mengembalikan daftar kosong tanpa error).

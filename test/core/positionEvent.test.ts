@@ -25,7 +25,7 @@ describe('supplyRow()', () => {
   // #11: pemilik bukan pemanggil Pool, juga bukan `tx.from`.
   it.each([
     ['supply ETH lewat gateway', GATEWAY, USER],
-    ['supply atas nama akun lain', USER, OTHER],
+    ['supply atas nama alamat lain', USER, OTHER],
   ] as const)('owner = onBehalfOf for %s', (_label, user, onBehalfOf) => {
     expect(supplyRow({ reserve: USDC, user, onBehalfOf, amount: 1n })).toMatchObject({ owner: onBehalfOf, caller: user });
   });
@@ -53,7 +53,7 @@ describe('repayRow()', () => {
   it.each([
     ['repay sendiri', USER, USER],
     ['repay ETH lewat gateway', USER, GATEWAY],
-    ['repay utang akun lain', OTHER, USER],
+    ['repay utang alamat lain', OTHER, USER],
   ] as const)('owner = user for %s', (_label, user, repayer) => {
     expect(repayRow({ reserve: WETH, user, repayer, amount: 7n })).toEqual({
       kind: 'repay',
