@@ -160,6 +160,9 @@ export function aave(chainId: TestChainId) {
 
     priceOf: (asset: Address) => publicClient.readContract({ address: oracle, abi: oracleAbi, functionName: 'getAssetPrice', args: [asset] }),
 
+    balanceOf: (token: Address, owner: Address, blockNumber?: bigint) =>
+      publicClient.readContract({ address: token, abi: erc20Abi, functionName: 'balanceOf', args: [owner], blockNumber }),
+
     healthFactorOf: async (user: Address, blockNumber?: bigint) =>
       (await publicClient.readContract({ address: pool, abi: poolAbi, functionName: 'getUserAccountData', args: [user], blockNumber }))[5],
 

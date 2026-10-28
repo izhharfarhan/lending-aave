@@ -89,14 +89,16 @@ Tabel `liquidation` (V5, Q16): rincian tiap baris `liquidation`, kunci sama deng
 - `liquidationBonus` (basis poin) + `bonusFromEMode`: bonus kategori E-Mode kalau user di E-Mode dan aset jaminannya di
   `collateralBitmap`, selain itu bonus reserve. `penalty` = total − total/bonus dalam token jaminan; `collateralPrice` =
   harga AaveOracle jaminan (USD 8 desimal) di blok likuidasi, untuk penalti dalam USD.
+- `debtRemaining`: saldo variable debt token user di reserve utang itu (`getReserveVariableDebtToken` + `balanceOf`)
+  di blok likuidasi; 0 = utang aset itu lunas (kalimat "utang lunas" lending-web, kasus umum utang < $2.000).
 - `deficitAssets` / `deficitAmounts`: sisa utang yang dihapus (`DeficitCreated`), berpasangan per indeks.
 - `healthFactorBefore`: `getUserAccountData` di blok −1 (1e18 = 1,0); kosong = tidak tersedia. Kalau RPC nggak punya
   state blok itu, lapisan RPC Ponder me-retry 10× dengan backoff (±1 menit) sebelum handler menyimpan "tidak tersedia",
   dan selama itu indexing chain itu tertahan. Sengaja dibiarkan: tanpa retry, error sementara (mis. rate limit) akan
   tersimpan permanen sebagai "tidak tersedia". RPC indexer memang harus archive (Q16).
 - Kompromi yang diketahui:
-  - Bonus, kategori E-Mode, dan harga dibaca di **akhir** blok likuidasi. Perubahan di blok yang sama sesudah tx
-    likuidasi (`setUserEMode`, konfigurasi, update oracle) bisa membuatnya meleset; blok −1 juga salah, karena update
+  - Bonus, kategori E-Mode, harga, dan sisa utang dibaca di **akhir** blok likuidasi. Perubahan di blok yang sama
+    sesudah tx likuidasi (`setUserEMode`, konfigurasi, update oracle, borrow/repay user) bisa membuatnya meleset; blok −1 juga salah, karena update
     oracle yang memicu likuidasi sering ada di blok yang sama.
   - Cuma HF yang punya fallback. Bacaan di blok likuidasi diasumsikan selalu ada karena indexer mengikuti ujung chain
     (Q31, tanpa backfill lama); kalau gagal, Ponder me-retry lalu indexing berhenti.
@@ -115,7 +117,7 @@ Contoh query:
   ) {
     items {
       chainId kind reserve amount collateralEnabled txHash timestamp
-      liquidation { debtAsset debtToCover protocolFee liquidationBonus penalty collateralPrice healthFactorBefore deficitAssets deficitAmounts }
+      liquidation { debtAsset debtToCover protocolFee liquidationBonus penalty collateralPrice healthFactorBefore debtRemaining deficitAssets deficitAmounts }
     }
   }
   _meta { status }

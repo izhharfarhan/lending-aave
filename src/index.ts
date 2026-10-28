@@ -1,6 +1,6 @@
 import { ponder, type Context } from 'ponder:registry';
 import { gatewayTransfer, liquidation, positionEvent, txSlot } from 'ponder:schema';
-import { isAddressEqual, type Address, type Hex } from 'viem';
+import { erc20Abi, isAddressEqual, type Address, type Hex } from 'viem';
 
 import { OracleAbi, PoolReadAbi } from '../abis/PoolAbi';
 import { INDEXED_CHAINS, type IndexedChainId } from './chains';
@@ -114,8 +114,8 @@ ponder.on('Pool:LiquidationCall', async ({ event, context }) => {
   const meta = metaOf(event, context.chain.id);
   const { pool, treasury, oracle } = INDEXED_CHAINS[context.chain.id as IndexedChainId];
   const { client } = context;
-  const { collateralAsset, user } = event.args;
-  const [collateralAToken, configuration, reserveData, eModeCategory, collateralPrice, receipt, healthFactorBefore] = await Promise.all([
+  const { collateralAsset, debtAsset, user } = event.args;
+  const [collateralAToken, configuration, reserveData, eModeCategory, collateralPrice, receipt, healthFactorBefore, debtRemaining] = await Promise.all([
     client.readContract({ address: pool, abi: PoolReadAbi, functionName: 'getReserveAToken', args: [collateralAsset] }),
     client.readContract({ address: pool, abi: PoolReadAbi, functionName: 'getConfiguration', args: [collateralAsset] }),
     client.readContract({ address: pool, abi: PoolReadAbi, functionName: 'getReserveData', args: [collateralAsset] }),
@@ -123,11 +123,12 @@ ponder.on('Pool:LiquidationCall', async ({ event, context }) => {
     client.readContract({ address: oracle, abi: OracleAbi, functionName: 'getAssetPrice', args: [collateralAsset] }),
     client.getTransactionReceipt({ hash: event.transaction.hash }),
     healthFactorAt(client, pool, user, event.block.number - 1n),
+    debtBalance(client, pool, debtAsset, user),
   ]);
   const eMode = eModeCategory === 0n ? null : await readEMode(client, pool, Number(eModeCategory));
 
   const feeAndDeficits = liquidationFeeAndDeficits(receipt.logs, { pool, treasury, collateralAToken, user, logIndex: event.log.logIndex });
-  const reads = { reserveConfiguration: configuration.data, collateralReserveId: reserveData.id, eMode, collateralPrice, healthFactorBefore };
+  const reads = { reserveConfiguration: configuration.data, collateralReserveId: reserveData.id, eMode, collateralPrice, healthFactorBefore, debtRemaining };
 
   await recordAction(context.db, meta, liquidationRow(event.args, feeAndDeficits.protocolFee));
   await context.db.insert(liquidation).values({
@@ -147,6 +148,12 @@ async function readEMode(client: Client, pool: Address, categoryId: number): Pro
     client.readContract({ address: pool, abi: PoolReadAbi, functionName: 'getEModeCategoryCollateralBitmap', args: [categoryId] }),
   ]);
   return { categoryId, liquidationBonus: config.liquidationBonus, collateralBitmap };
+}
+
+// Sisa utang user di reserve utang itu (saldo variable debt token) di blok likuidasi.
+async function debtBalance(client: Client, pool: Address, debtAsset: Address, user: Address): Promise<bigint> {
+  const debtToken = await client.readContract({ address: pool, abi: PoolReadAbi, functionName: 'getReserveVariableDebtToken', args: [debtAsset] });
+  return client.readContract({ address: debtToken, abi: erc20Abi, functionName: 'balanceOf', args: [user] });
 }
 
 // Q16: HF sebelum likuidasi dari `getUserAccountData` di blok −1 (butuh archive kalau blok itu lama). Gagal = "tidak

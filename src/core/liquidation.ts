@@ -115,6 +115,7 @@ export type LiquidationReads = {
   eMode: LiquidationEMode | null;
   collateralPrice: bigint;
   healthFactorBefore: bigint | null;
+  debtRemaining: bigint;
 };
 
 /** Rincian likuidasi (tabel `liquidation`, tanpa kunci & waktu): penalti dihitung dari jaminan yang hilang. */
@@ -135,6 +136,7 @@ export function liquidationDetail(args: LiquidationArgs, { protocolFee, deficits
     penalty: liquidationPenalty(args.liquidatedCollateralAmount + protocolFee, bonus),
     collateralPrice: reads.collateralPrice,
     healthFactorBefore: reads.healthFactorBefore,
+    debtRemaining: reads.debtRemaining,
     deficitAssets: deficits.map((deficit) => deficit.debtAsset),
     deficitAmounts: deficits.map((deficit) => deficit.amount),
   };

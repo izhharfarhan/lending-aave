@@ -67,6 +67,9 @@ export const liquidation = onchainTable(
     collateralPrice: t.bigint().notNull(),
     // `getUserAccountData` di blok −1 (1e18 = 1,0). Kosong = tidak tersedia (baca blok lama gagal, Q16).
     healthFactorBefore: t.bigint(),
+    // Saldo variable debt token user di reserve utang itu, dibaca di blok likuidasi (seperti bonus/harga): 0 = utang
+    // aset itu lunas (kalimat "utang lunas" lending-web).
+    debtRemaining: t.bigint().notNull(),
     // Sisa utang yang dihapus (`DeficitCreated`), berpasangan per indeks: aset utang dan jumlahnya.
     deficitAssets: t.hex().array().notNull(),
     deficitAmounts: t.bigint().array().notNull(),

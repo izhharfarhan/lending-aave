@@ -77,6 +77,7 @@ describe('liquidation (fork Ethereum)', () => {
 
     const truth = fromReceipt(receipt, { user: borrower, collateralAToken: AaveV3Ethereum.ASSETS.WETH.A_TOKEN, treasury: ethereum.treasury });
     const hfBefore = await ethereum.healthFactorOf(borrower, receipt.blockNumber - 1n);
+    const debtLeft = await ethereum.balanceOf(AaveV3Ethereum.ASSETS.USDC.V_TOKEN, borrower, receipt.blockNumber);
     const collateralLost = truth.call.liquidatedCollateralAmount + truth.protocolFee;
     const [row] = await waitForRows(db, receipt.transactionHash);
     const [details] = await selectLiquidation(receipt.transactionHash);
@@ -105,16 +106,36 @@ describe('liquidation (fork Ethereum)', () => {
       e_mode_category: 0,
       collateral_price: usd8(1_800).toString(),
       health_factor_before: hfBefore.toString(),
+      debt_remaining: debtLeft.toString(),
       deficit_assets: [],
       deficit_amounts: [],
     });
     expect(hfBefore).toBeLessThan(RAY_HF);
+    // Utang ≥ $2.000 dan HF > 0,95: close factor 50%, jadi utang USDC masih tersisa.
+    expect(debtLeft).toBeGreaterThan(0n);
     // Sisa sesudah penalti = nilai utang yang dilunasi dalam ETH (USDC 6 desimal, ETH 18; harga oracle 8 desimal),
     // selisihnya cuma pembulatan.
     const penalty = BigInt(details.penalty);
     const debtInWeth = (truth.call.debtToCover * (await ethereum.priceOf(ethereum.usdc)) * 10n ** 12n) / usd8(1_800);
     expect(Number(collateralLost - penalty - debtInWeth)).toBeLessThan(Number(debtInWeth / 1_000_000n));
     expect(Number(debtInWeth - (collateralLost - penalty))).toBeLessThan(Number(debtInWeth / 1_000_000n));
+  });
+
+  // 1 ETH, utang 1.000 USDC, ETH $1.100 (posisi tes dev fork): utang < $2.000 → lunas 100%, jaminan masih tersisa.
+  it('records the debt left in the liquidated reserve: zero when a small debt is repaid in full', async () => {
+    const [borrower, liquidator] = [await freshAccount(ethereum), await freshAccount(ethereum)];
+    await ethereum.depositEth(parseEther('1'), borrower);
+    await ethereum.borrow(borrower, ethereum.usdc, usdc(1_000));
+    await setPrice(ethereum, ethereum.weth, usd8(1_100));
+
+    const receipt = await ethereum.liquidate(liquidator, { user: borrower, collateral: ethereum.weth, debt: ethereum.usdc, debtAmount: usdc(2_000) });
+
+    const [row] = await waitForRows(db, receipt.transactionHash);
+    const [details] = await selectLiquidation(receipt.transactionHash);
+    expect(await ethereum.balanceOf(AaveV3Ethereum.ASSETS.USDC.V_TOKEN, borrower, receipt.blockNumber)).toBe(0n);
+    expect(await ethereum.balanceOf(AaveV3Ethereum.ASSETS.WETH.A_TOKEN, borrower, receipt.blockNumber)).toBeGreaterThan(0n);
+    expect(row).toMatchObject({ kind: 'liquidation', collateral_enabled: null });
+    expect(details).toMatchObject({ debt_remaining: '0', deficit_assets: [] });
   });
 
   // 1 ETH, utang 1.400 USDC, ETH $1.100: jaminan habis, sisa utang dihapus (`DeficitCreated`), dan jaminan nonaktif
@@ -168,11 +189,11 @@ describe('liquidation (fork Ethereum)', () => {
     const receipt = await ethereum.liquidate(liquidator, { user: borrower, collateral: ethereum.weth, debt: ethereum.usdc, debtAmount: usdc(1_400) });
     await waitForRows(db, receipt.transactionHash);
 
-    type Item = { txHash: Hex; kind: string; liquidation: { liquidationBonus: number; deficitAssets: Address[]; healthFactorBefore: string | null } | null };
+    type Item = { txHash: Hex; kind: string; liquidation: { liquidationBonus: number; deficitAssets: Address[]; healthFactorBefore: string | null; debtRemaining: string } | null };
     const body = await graphql<{ positionEvents: { items: Item[] } }>(
       `query ($owner: String!) {
         positionEvents(where: { owner: $owner, kind_in: [liquidation] }) {
-          items { txHash kind liquidation { liquidationBonus deficitAssets healthFactorBefore } }
+          items { txHash kind liquidation { liquidationBonus deficitAssets healthFactorBefore debtRemaining } }
         }
       }`,
       { owner: lower(borrower) },
@@ -186,6 +207,8 @@ describe('liquidation (fork Ethereum)', () => {
       liquidation: { liquidationBonus: 10_500, deficitAssets: [lower(ethereum.usdc)] },
     });
     expect(body.data.positionEvents.items[0]!.liquidation!.healthFactorBefore).not.toBeNull();
+    // Jaminan habis, sisa utang dihapus: utang reserve itu 0 sesudahnya.
+    expect(body.data.positionEvents.items[0]!.liquidation!.debtRemaining).toBe('0');
   });
 });
 

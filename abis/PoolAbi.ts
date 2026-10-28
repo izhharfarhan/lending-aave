@@ -15,6 +15,7 @@ export const PoolAbi = parseAbi([
 // `id`-nya yang dipakai (bit di bitmap E-Mode).
 export const PoolReadAbi = parseAbi([
   'function getReserveAToken(address asset) view returns (address)',
+  'function getReserveVariableDebtToken(address asset) view returns (address)',
   'struct ReserveConfigurationMap { uint256 data; }',
   'function getConfiguration(address asset) view returns (ReserveConfigurationMap)',
   'struct ReserveDataLegacy { ReserveConfigurationMap configuration; uint128 liquidityIndex; uint128 currentLiquidityRate; uint128 variableBorrowIndex; uint128 currentVariableBorrowRate; uint128 currentStableBorrowRate; uint40 lastUpdateTimestamp; uint16 id; address aTokenAddress; address stableDebtTokenAddress; address variableDebtTokenAddress; address interestRateStrategyAddress; uint128 accruedToTreasury; uint128 unbacked; uint128 isolationModeTotalDebt; }',

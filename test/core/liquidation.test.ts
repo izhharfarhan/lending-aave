@@ -176,7 +176,7 @@ describe('liquidationFeeAndDeficits()', () => {
 });
 
 describe('liquidationDetail()', () => {
-  const reads = { reserveConfiguration: WETH_CONFIGURATION, collateralReserveId: 0, eMode: null, collateralPrice: 180_000_000_000n, healthFactorBefore: 996_202_712_199_390_900n };
+  const reads = { reserveConfiguration: WETH_CONFIGURATION, collateralReserveId: 0, eMode: null, collateralPrice: 180_000_000_000n, healthFactorBefore: 996_202_712_199_390_900n, debtRemaining: 7_500_000_002n };
 
   it('assembles the liquidation details from the event, the receipt, and the chain reads', () => {
     expect(liquidationDetail(args, { protocolFee: 83_316_376_427_656_815n, deficits: [] }, reads)).toEqual({
@@ -195,6 +195,7 @@ describe('liquidationDetail()', () => {
       penalty: 416_581_882_138_284_072n,
       collateralPrice: 180_000_000_000n,
       healthFactorBefore: 996_202_712_199_390_900n,
+      debtRemaining: 7_500_000_002n,
       deficitAssets: [],
       deficitAmounts: [],
     });
