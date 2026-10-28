@@ -1,5 +1,10 @@
+import type { Address } from 'viem';
+
 import { addEntry, localHistoryKey, parseHistory, type LocalTxEntry } from './localHistory';
 
+const USDC: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+
+// Bentuk lama (sebelum tiket 27): aset tanpa alamat.
 const entry = (hash: `0x${string}`, overrides: Partial<LocalTxEntry> = {}): LocalTxEntry => ({
   hash,
   chainId: 1,
@@ -29,6 +34,12 @@ describe('local history', () => {
 
       expect(parseHistory(JSON.stringify(stored))).toEqual(stored);
     });
+
+    it('keeps the asset address of a new entry, so Riwayat can show its real logo', () => {
+      const stored = [entry('0x01', { asset: { address: USDC, symbol: 'USDC', decimals: 6, amount: '1' } })];
+
+      expect(parseHistory(JSON.stringify(stored))[0]?.asset.address).toBe(USDC);
+    });
   });
 
   describe('negative', () => {
@@ -45,6 +56,19 @@ describe('local history', () => {
       const text = JSON.stringify([entry('0x01'), { ...entry('0x02'), kind: 'approve' }, { ...entry('0x03'), blockTimestamp: undefined, sentAtMs: 1 }, null]);
 
       expect(parseHistory(text)).toEqual([entry('0x01')]);
+    });
+
+    it('keeps an old entry stored before asset addresses, without guessing an address from its symbol', () => {
+      const parsed = parseHistory(JSON.stringify([entry('0x01')]));
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0]?.asset.address).toBeUndefined();
+    });
+
+    it('drops an entry whose asset address is not an address', () => {
+      const text = JSON.stringify([{ ...entry('0x01'), asset: { ...entry('0x01').asset, address: 'USDC' } }, entry('0x02')]);
+
+      expect(parseHistory(text).map((e) => e.hash)).toEqual(['0x02']);
     });
   });
 });

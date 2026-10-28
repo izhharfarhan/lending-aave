@@ -52,7 +52,7 @@ export function usePoolTx({ chainId, user, asset, plan, refreshStep }: PoolTxArg
             kind: historyKind,
             status,
             blockTimestamp,
-            asset: { symbol: asset.symbol, decimals: asset.decimals, amount: String(shown) },
+            asset: { address: asset.address, symbol: asset.symbol, decimals: asset.decimals, amount: String(shown) },
           }),
         onState: setTx,
       },

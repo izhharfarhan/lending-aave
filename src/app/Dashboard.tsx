@@ -14,6 +14,7 @@ import { liquidationPrice } from '@/core/simulate';
 import { elapsed } from '@/core/relativeTime';
 import { chainSegment, summarizeChains, type ChainAccount, type DashboardSummary, type UnreadChain } from '@/core/summary';
 import { AGE, CHAIN_PICKER, DANGER, DASHBOARD, POSITION, RISK } from '@/copy';
+import { ChainIcon } from './ChainIcon';
 import { hf, list, pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
 import { LiquidationBanner, useLiquidationBanner } from './LiquidationBanner';
@@ -125,7 +126,7 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
               }`}
             >
               <span className="flex w-full items-center gap-2">
-                <ChainIcon chain={chain} />
+                <ChainIcon chainId={chain.chainId} />
                 <Link
                   href={chainHref(chain)}
                   aria-current={chain.chainId === selectedChainId ? 'page' : undefined}
@@ -203,6 +204,7 @@ function DangerBanner({ summary, dataOf }: { summary: DashboardSummary; dataOf: 
   return (
     <div role="alert" className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-danger-soft px-5 py-3 text-danger">
       <span className="display text-xs font-medium tracking-wide">{DANGER.tag}</span>
+      <ChainIcon chainId={chain.chainId} size={16} />
       <p className="flex-1 text-sm">
         {DANGER.hf(chain.name)} <b className="num">{hf(first.healthFactor)}</b>
         {first.readAt !== null && <span className="text-ink/80"> {DANGER.stale(ageText((now - first.readAt) / 1000))}</span>}.
@@ -247,7 +249,8 @@ function Hero(props: { attached: boolean; summary: DashboardSummary; loading: bo
           </p>
           <p className="pb-3 text-sm">
             <span className={lowest.risk === 'aman' ? 'text-ink' : HERO_TONE[lowest.risk]}>{RISK[lowest.risk]}</span>
-            <span className="text-muted"> · {chainNameOf(lowest.chainId)}</span>
+            <span className="text-muted"> · </span>
+            <ChainName chainId={lowest.chainId} className="text-muted" />
           </p>
         </div>
       ) : incomplete ? (
@@ -279,6 +282,16 @@ function Hero(props: { attached: boolean; summary: DashboardSummary; loading: bo
 }
 
 const chainNameOf = (chainId: number) => SUPPORTED_CHAINS.find((c) => c.chainId === chainId)!.name;
+
+// Nama chain dalam kalimat, didahului logonya (tiket 27).
+function ChainName({ chainId, className }: { chainId: number; className: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 align-[-2px] ${className}`}>
+      <ChainIcon chainId={chainId} size={14} />
+      {chainNameOf(chainId)}
+    </span>
+  );
+}
 
 // Posisi HF di skala 1,0 → 3,0+ dalam persen lebar skala; HF di atas 3 menempel di ujung kanan.
 const SCALE_MAX = 3;
@@ -406,7 +419,7 @@ function BorrowLimitBar({ top, note }: { top: NonNullable<DashboardSummary['high
     <div className="mt-7 max-w-[520px]">
       <div className="flex justify-between gap-3 text-xs">
         <span className="text-muted" title={DASHBOARD.limitInfo}>
-          {DASHBOARD.limitUsed} <span className="text-ink">{chainNameOf(top.chainId)}</span>{' '}
+          {DASHBOARD.limitUsed} <ChainName chainId={top.chainId} className="text-ink" />{' '}
           <span className="num text-ink">{usedText(top.used)}</span>
           <span className="ml-1 text-[10px] text-faint">ⓘ</span>
         </span>
@@ -462,14 +475,3 @@ function SegmentBody({ chain, read, view, ethBalance, fee }: Loaded & { ethBalan
   );
 }
 
-function ChainIcon({ chain }: { chain: SupportedChain }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-[5px] text-[9px] font-bold text-[var(--chain-ink)]"
-      style={{ background: `var(--chain-${chain.slug})` }}
-    >
-      {chain.name[0]}
-    </span>
-  );
-}

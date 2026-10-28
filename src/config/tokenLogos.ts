@@ -6,14 +6,14 @@ import { getAddress, type Address } from 'viem';
  * URL luar saat runtime: app tetap jalan offline di fork dan nggak membocorkan request ke pihak ketiga.
  * `plate` = logo yang bukan lingkaran (berlian ETH) ditaruh di atas lingkaran terang supaya kelihatan di tema gelap.
  */
-export type TokenLogo = { src: string; plate?: boolean };
+export type LogoFile = { src: string; plate?: boolean };
 
-const ETH: TokenLogo = { src: '/tokens/eth.svg', plate: true };
-const USDC: TokenLogo = { src: '/tokens/usdc.png' };
-const USDT: TokenLogo = { src: '/tokens/usdt.svg' };
-const USDT0: TokenLogo = { src: '/tokens/usdt0.svg' };
+const ETH: LogoFile = { src: '/tokens/eth.svg', plate: true };
+const USDC: LogoFile = { src: '/tokens/usdc.png' };
+const USDT: LogoFile = { src: '/tokens/usdt.svg' };
+const USDT0: LogoFile = { src: '/tokens/usdt0.svg' };
 // Aset luar (Q13) yang punya logo resmi dari penerbitnya; sisanya inisial.
-const logo = (file: string): TokenLogo => ({ src: `/tokens/${file}.svg` });
+const logo = (file: string): LogoFile => ({ src: `/tokens/${file}.svg` });
 const AAVE = logo('aave');
 const ARB = logo('arb');
 const BAL = logo('bal');
@@ -34,13 +34,13 @@ const WEETH = logo('weeth');
 const WSTETH = logo('wsteth');
 
 type Book = { ASSETS: Record<string, { UNDERLYING: Address }> };
-const byKey = (book: Book, logos: Record<string, TokenLogo>): Record<Address, TokenLogo> =>
+const byKey = (book: Book, logos: Record<string, LogoFile>): Record<Address, LogoFile> =>
   Object.fromEntries(Object.entries(logos).map(([key, logo]) => [getAddress(book.ASSETS[key].UNDERLYING), logo]));
 
 // Per chain berdasarkan ALAMAT (kunci address-book), bukan simbol, sama seperti whitelist: kunci address-book "USDC"
 // di Arbitrum = USDC.e (bridged), USDC native = "USDCn"; USDbC di Base sengaja nggak dipetakan. Token tanpa logo di
 // sini tampil sebagai lingkaran inisial.
-export const TOKEN_LOGOS: Record<number, Record<Address, TokenLogo>> = {
+export const TOKEN_LOGOS: Record<number, Record<Address, LogoFile>> = {
   1: byKey(AaveV3Ethereum, {
     WETH: ETH,
     USDC,
@@ -81,6 +81,6 @@ export const TOKEN_LOGOS: Record<number, Record<Address, TokenLogo>> = {
 };
 
 /** `null` = belum ada logo asli: tampilkan lingkaran inisial. */
-export function tokenLogo(chainId: number, asset: Address): TokenLogo | null {
+export function tokenLogo(chainId: number, asset: Address): LogoFile | null {
   return TOKEN_LOGOS[chainId]?.[getAddress(asset)] ?? null;
 }

@@ -306,6 +306,13 @@ Tiga journey. Withdraw/repay biasa ikut pola J1/J2.
   penerbit (sumber + lisensi di README folder itu), nggak pernah dari URL luar saat runtime.
   Dipetakan per alamat + chain (`src/config/tokenLogos.ts`), bukan simbol. Aset whitelist
   wajib punya logo; aset lain tanpa logo, atau file yang gagal dimuat, tetap inisial.
+- **Logo chain + ikon token di Riwayat dan banner likuidasi** (tiket 27, 2026-10-29, permintaan
+  user): logo Ethereum/Base/Arbitrum menggantikan inisial E/B/A di segmen chain, kepala detail
+  chain, hero, banner Bahaya, banner likuidasi, dan Riwayat; file lokal di `public/chains/` dari
+  brand kit resmi (sumber di README folder itu), fallback inisial, alt = nama chain. Riwayat
+  lokal menyimpan alamat aset mulai tiket 27; entri lama yang cuma punya simbol tetap inisial,
+  tanpa migrasi dan tanpa menebak alamat dari simbol. Baris indexer memakai `reserve`. Dev Tools
+  tetap tanpa ikon (`<select>` bawaan).
 
 ### Q21 — Kartu chain tanpa posisi
 - "Belum ada posisi · <saldo terbesar aset whitelist> di wallet bisa di-supply";

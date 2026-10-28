@@ -1,6 +1,6 @@
 import type { Address, Hash } from 'viem';
 
-import { filterHistory, mergeHistory, toIndexedEntry, type IndexedHistoryEntry, type RawPositionEvent } from './history';
+import { filterHistory, historyAsset, mergeHistory, toIndexedEntry, type IndexedHistoryEntry, type RawPositionEvent } from './history';
 import type { LocalTxEntry } from './localHistory';
 
 const WETH: Address = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
@@ -169,5 +169,25 @@ describe('filterHistory()', () => {
     expect(filterHistory(items, { chainId: 8453, kind: null }).map((item) => item.txHash)).toEqual(['0x03', '0x02']);
     expect(filterHistory(items, { chainId: null, kind: 'liquidation' }).map((item) => item.txHash)).toEqual(['0x01']);
     expect(filterHistory(items, { chainId: 8453, kind: 'collateral' }).map((item) => item.txHash)).toEqual(['0x03']);
+  });
+});
+
+describe('historyAsset()', () => {
+  describe('positive', () => {
+    it('takes the reserve of an indexer row, which the indexer always has', () => {
+      expect(historyAsset(mergeHistory([indexed('0x01')], [])[0]!)).toBe(WETH);
+    });
+
+    it('takes the stored asset address of a local tx', () => {
+      const tx = local('0x02', { asset: { address: USDC, symbol: 'USDC', decimals: 6, amount: '1' } });
+
+      expect(historyAsset(mergeHistory([], [tx])[0]!)).toBe(USDC);
+    });
+  });
+
+  describe('negative', () => {
+    it('has no address for an old local tx that only stored a symbol, instead of guessing one from it', () => {
+      expect(historyAsset(mergeHistory([], [local('0x03')])[0]!)).toBeNull();
+    });
   });
 });

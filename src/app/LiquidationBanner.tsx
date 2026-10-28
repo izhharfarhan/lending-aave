@@ -11,8 +11,10 @@ import { supportedChain } from '@/config/chains';
 import { LIQUIDATED } from '@/copy';
 import { bannerLiquidations, dismissKey, liquidationOutcome, type IndexedLiquidation } from '@/core/liquidation';
 
+import { ChainIcon } from './ChainIcon';
 import { dateTime, list, shortAddress } from './format';
 import { deficitAmounts, LiquidationDetails } from './LiquidationDetails';
+import { TokenIcon } from './TokenIcon';
 import { useTokenLookup, type TokenLookup } from './useTokenLookup';
 
 const DISMISSED_KEY = 'lending-web:dismissedLiquidations';
@@ -66,12 +68,14 @@ export function LiquidationBanner({ liquidations, onDismiss }: { liquidations: I
   const [first] = liquidations;
   if (!first) return null;
   const single = liquidations.length === 1;
-  const chains = [...new Set(liquidations.map((entry) => supportedChain(entry.chainId).name))];
+  const chainIds = [...new Set(liquidations.map((entry) => entry.chainId))];
+  const chains = chainIds.map((chainId) => supportedChain(chainId).name);
 
   return (
     <div className="bg-warn-soft px-5 py-3 text-sm">
       <div className="flex items-start gap-4">
         <span className="display mt-0.5 text-xs font-medium tracking-wide text-warn">{LIQUIDATED.tag}</span>
+        <LiquidationIcons liquidations={liquidations} chainIds={chainIds} tokenOf={tokenOf} />
         <p className="flex-1">
           <span className="text-warn">
             {single ? LIQUIDATED.one(supportedChain(first.chainId).name, dateTime(first.timestamp)) : LIQUIDATED.many(liquidations.length, list(chains))}
@@ -99,6 +103,23 @@ export function LiquidationBanner({ liquidations, onDismiss }: { liquidations: I
         </div>
       )}
     </div>
+  );
+}
+
+// Tiket 27: logo chain yang kena; satu likuidasi juga logo jaminan yang dijual dan utang yang dilunasi.
+function LiquidationIcons({ liquidations, chainIds, tokenOf }: { liquidations: IndexedLiquidation[]; chainIds: number[]; tokenOf: TokenLookup }) {
+  const [first] = liquidations;
+  const assets = liquidations.length === 1 && first ? [...new Set([first.reserve, first.liquidation.debtAsset])] : [];
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {chainIds.map((chainId) => (
+        <ChainIcon key={chainId} chainId={chainId} size={16} />
+      ))}
+      {first &&
+        assets.map((asset) => (
+          <TokenIcon key={asset} chainId={first.chainId} asset={asset} symbol={tokenOf(first.chainId, asset)?.symbol ?? '?'} size={16} />
+        ))}
+    </span>
   );
 }
 

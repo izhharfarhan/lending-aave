@@ -1,4 +1,4 @@
-import type { Hash } from 'viem';
+import { isAddress, type Address, type Hash } from 'viem';
 
 import type { AppMode } from './forkGuard';
 
@@ -20,7 +20,11 @@ export type LocalTxEntry = {
   status: (typeof STATUSES)[number];
   /** Unix detik dari blok tx-nya, bukan `Date.now()`: waktu relatif dihitung terhadap waktu chain (Q30). */
   blockTimestamp: number;
-  asset: { symbol: string; decimals: number; amount: string };
+  /**
+   * `address` = underlying reserve, untuk logo token di Riwayat (tiket 27). Entri dari sebelum tiket 27 nggak punya, dan
+   * sengaja nggak ditebak dari simbol (simbol bisa kembar, mis. USDC vs USDC.e): entri itu tetap tampil inisial.
+   */
+  asset: { address?: Address; symbol: string; decimals: number; amount: string };
 };
 
 // Dipisah per mode + chain + wallet: fork dan mainnet sama-sama chain 1 (pola swap-web Q17).
@@ -57,6 +61,7 @@ function isEntry(value: unknown): value is LocalTxEntry {
     typeof e.blockTimestamp === 'number' &&
     typeof e.asset?.symbol === 'string' &&
     typeof e.asset.decimals === 'number' &&
-    typeof e.asset.amount === 'string'
+    typeof e.asset.amount === 'string' &&
+    (e.asset.address === undefined || (typeof e.asset.address === 'string' && isAddress(e.asset.address, { strict: false })))
   );
 }

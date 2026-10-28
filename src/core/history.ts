@@ -171,6 +171,13 @@ function newestFirst(a: HistoryItem, b: HistoryItem): number {
   return b.entry.logIndex - a.entry.logIndex;
 }
 
+/**
+ * Aset baris riwayat untuk logo token (tiket 27): indexer selalu punya `reserve`; tx lokal cuma kalau disimpan sesudah
+ * tiket 27. `null` = entri lama yang cuma punya simbol, tampil inisial (alamat sengaja nggak ditebak dari simbol).
+ */
+export const historyAsset = (item: HistoryItem): Address | null =>
+  item.source === 'indexer' ? item.entry.reserve : (item.entry.asset.address ?? null);
+
 export type HistoryFilter = { chainId: number | null; kind: HistoryKind | null };
 
 /** Filter chain + jenis halaman Riwayat (Q18); `null` = semua. */

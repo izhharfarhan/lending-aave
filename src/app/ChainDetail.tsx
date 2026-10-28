@@ -27,6 +27,7 @@ import { ActionBar, BottomSheet, useMobile } from './MobileSheet';
 import { ParameterDetails } from './ParameterDetails';
 import { RescuePanel } from './RescuePanel';
 import { Term } from './Term';
+import { ChainIcon } from './ChainIcon';
 import { TokenIcon } from './TokenIcon';
 
 const AAVE_APP_URL = 'https://app.aave.com/';
@@ -122,7 +123,10 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <h2 className="display text-2xl font-normal">{name}</h2>
+        <h2 className="display flex items-center gap-2.5 text-2xl font-normal">
+          <ChainIcon chainId={chainId} size={24} />
+          {name}
+        </h2>
         {view.account && <AccountFacts account={view.account} liquidation={liquidationPrice(data.read, WHITELIST[chainId])} />}
       </div>
       {view.eMode && <EModeNote eMode={view.eMode} />}
