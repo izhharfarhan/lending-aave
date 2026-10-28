@@ -13,7 +13,7 @@ const HISTORY_QUERY = `query History($owner: String!) {
       chainId txHash logIndex kind reserve amount collateralEnabled timestamp blockNumber
       liquidation {
         debtAsset debtToCover liquidatedCollateralAmount protocolFee liquidationBonus bonusFromEMode eModeCategory penalty
-        collateralPrice healthFactorBefore deficitAssets deficitAmounts
+        collateralPrice healthFactorBefore debtRemaining deficitAssets deficitAmounts
       }
     }
   }

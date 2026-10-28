@@ -69,6 +69,7 @@ describe('toIndexedEntry()', () => {
       penalty: '47619047619047620',
       collateralPrice: '110000000000',
       healthFactorBefore: null,
+      debtRemaining: '0',
       deficitAssets: [USDC],
       deficitAmounts: ['352167730'],
     };
@@ -84,6 +85,7 @@ describe('toIndexedEntry()', () => {
       penalty: 47_619_047_619_047_620n,
       collateralPrice: 110_000_000_000n,
       healthFactorBefore: null,
+      debtRemaining: 0n,
       deficits: [{ debtAsset: USDC, amount: 352_167_730n }],
     });
   });

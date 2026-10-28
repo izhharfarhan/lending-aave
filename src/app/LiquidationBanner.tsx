@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import type { Address } from 'viem';
 import { useAccount } from 'wagmi';
 
 import { useHistory } from '@/aave/useHistory';
@@ -102,11 +103,14 @@ export function LiquidationBanner({ liquidations, onDismiss }: { liquidations: I
 }
 
 function outcomeText(entry: IndexedLiquidation, tokenOf: TokenLookup): string {
+  const symbolOf = (asset: Address) => tokenOf(entry.chainId, asset)?.symbol ?? shortAddress(asset);
   switch (liquidationOutcome(entry)) {
     case 'partial':
       return LIQUIDATED.outcome.partial;
+    case 'debtRepaid':
+      return LIQUIDATED.outcome.debtRepaid(symbolOf(entry.liquidation.debtAsset), symbolOf(entry.reserve));
     case 'collateralSold':
-      return LIQUIDATED.outcome.collateralSold(tokenOf(entry.chainId, entry.reserve)?.symbol ?? shortAddress(entry.reserve));
+      return LIQUIDATED.outcome.collateralSold(symbolOf(entry.reserve));
     case 'debtWrittenOff':
       return LIQUIDATED.outcome.debtWrittenOff(list(deficitAmounts(entry, tokenOf)));
   }

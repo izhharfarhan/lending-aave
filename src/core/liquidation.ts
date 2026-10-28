@@ -29,14 +29,18 @@ export function bannerLiquidations(
 }
 
 /**
- * - `partial`: jaminan reserve itu masih tersisa.
+ * - `partial`: utang dan jaminan di kedua reserve itu masih tersisa.
+ * - `debtRepaid`: utang reserve itu lunas, jaminannya masih tersisa (kasus umum utang < $2.000: close factor 100%).
  * - `collateralSold`: jaminan reserve itu habis (jaminan otomatis nonaktif di tx yang sama, V3).
  * - `debtWrittenOff`: seluruh jaminan habis dan sisa utang dihapus (`DeficitCreated`, V5).
  */
-export type LiquidationOutcome = 'partial' | 'collateralSold' | 'debtWrittenOff';
+export type LiquidationOutcome = 'partial' | 'debtRepaid' | 'collateralSold' | 'debtWrittenOff';
 
-export const liquidationOutcome = (entry: IndexedLiquidation): LiquidationOutcome =>
-  entry.liquidation.deficits.length > 0 ? 'debtWrittenOff' : entry.collateralEnabled === false ? 'collateralSold' : 'partial';
+export function liquidationOutcome(entry: IndexedLiquidation): LiquidationOutcome {
+  if (entry.liquidation.deficits.length > 0) return 'debtWrittenOff';
+  if (entry.collateralEnabled === false) return 'collateralSold';
+  return entry.liquidation.debtRemaining === 0n ? 'debtRepaid' : 'partial';
+}
 
 export type LiquidationFacts = {
   /** Jaminan yang hilang (bagian likuidator + biaya protokol), dalam token jaminan dan USD. USD `null` = desimal token belum diketahui. */

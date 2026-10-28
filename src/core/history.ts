@@ -24,6 +24,8 @@ export type LiquidationDetail = {
   collateralPrice: bigint;
   /** 1e18 = 1,0; `null` = tidak tersedia (Q16). */
   healthFactorBefore: bigint | null;
+  /** Utang user di reserve utang itu sesudah likuidasi (dibaca di blok likuidasi); 0 = lunas. */
+  debtRemaining: bigint;
   /** Sisa utang yang dihapus (`DeficitCreated`). */
   deficits: { debtAsset: Address; amount: bigint }[];
 };
@@ -57,6 +59,7 @@ export type RawLiquidation = {
   penalty: string;
   collateralPrice: string;
   healthFactorBefore: string | null;
+  debtRemaining: string;
   deficitAssets: Address[];
   deficitAmounts: string[];
 };
@@ -100,6 +103,7 @@ function toLiquidation(raw: RawLiquidation): LiquidationDetail {
     penalty: BigInt(raw.penalty),
     collateralPrice: BigInt(raw.collateralPrice),
     healthFactorBefore: raw.healthFactorBefore === null ? null : BigInt(raw.healthFactorBefore),
+    debtRemaining: BigInt(raw.debtRemaining),
     deficits: raw.deficitAssets.map((debtAsset, i) => ({ debtAsset, amount: BigInt(raw.deficitAmounts[i]!) })),
   };
 }

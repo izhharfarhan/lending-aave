@@ -251,6 +251,7 @@ export const LIQUIDATED = {
   many: (count: number, chains: string) => `Posisi Anda dilikuidasi ${count} kali dalam 30 hari terakhir, di ${chains}.`,
   outcome: {
     partial: 'Sebagian jaminan dijual untuk melunasi utang.',
+    debtRepaid: (debt: string, collateral: string) => `Utang ${debt} Anda lunas; sebagian jaminan ${collateral} dijual, sisanya tetap milik Anda.`,
     collateralSold: (symbol: string) => `Seluruh jaminan ${symbol} dijual untuk melunasi utang.`,
     debtWrittenOff: (amounts: string) => `Seluruh jaminan dijual, dan sisa utang ${amounts} dihapus.`,
   },

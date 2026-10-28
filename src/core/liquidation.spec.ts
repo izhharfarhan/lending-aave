@@ -20,6 +20,7 @@ const detail = (overrides: Partial<LiquidationDetail> = {}): LiquidationDetail =
   penalty: 50_000_000_000_000_000n,
   collateralPrice: 1_100_00000000n,
   healthFactorBefore: 970_000_000_000_000_000n,
+  debtRemaining: 600_000_000n,
   deficits: [],
   ...overrides,
 });
@@ -106,5 +107,11 @@ describe('liquidationFacts()', () => {
       liquidation: detail({ deficits: [{ debtAsset: USDC, amount: 400_000_000n }] }),
     });
     expect(liquidationOutcome(deficit)).toBe('debtWrittenOff');
+  });
+
+  it('tells when the debt in that reserve is repaid in full while that collateral remains (debt under $2.000)', () => {
+    expect(liquidationOutcome(liquidation({ liquidation: detail({ debtRemaining: 0n }) }))).toBe('debtRepaid');
+    // Jaminan reserve itu juga habis: kalimat jaminan habis yang menang.
+    expect(liquidationOutcome(liquidation({ collateralEnabled: false, liquidation: detail({ debtRemaining: 0n }) }))).toBe('collateralSold');
   });
 });

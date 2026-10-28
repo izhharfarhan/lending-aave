@@ -36,6 +36,10 @@ _Avoid_: denda, liquidation penalty, liquidation bonus, bonus likuidasi (bonus i
 Bagian penalti likuidasi yang masuk ke treasury Aave, bukan ke likuidator. Diambil dari jaminan user di transaksi yang sama, jadi ikut dihitung sebagai jaminan yang hilang.
 _Avoid_: protocol fee, liquidation protocol fee, fee treasury
 
+**Utang lunas (likuidasi)**:
+Likuidasi yang melunasi seluruh utang satu aset sementara jaminan yang dijual masih tersisa. Kasus paling umum untuk utang di bawah $2.000, yang boleh dilikuidasi 100%. Ditampilkan "Utang <aset> Anda lunas; sebagian jaminan <aset> dijual, sisanya tetap milik Anda."
+_Avoid_: posisi ditutup, likuidasi penuh (terdengar seperti seluruh jaminan hilang)
+
 **Sisa utang dihapus**:
 Utang yang masih tersisa ketika likuidasi menghabiskan seluruh jaminan sebuah posisi. Aave menghapusnya dari posisi (event `DeficitCreated`), jadi user tidak lagi menanggungnya. Ditampilkan "sisa utang <x> dihapus".
 _Avoid_: deficit, bad debt, utang macet, pemutihan
