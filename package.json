@@ -5,6 +5,7 @@
   "scripts": {
     "dev:fork": "node scripts/with-env.mjs .env.fork next dev -p 3200",
     "dev:mainnet": "node scripts/with-env.mjs .env.mainnet next dev -p 3200",
+    "check:mainnet": "tsx --env-file=.env.mainnet scripts/check-mainnet.mts",
     "anvil:up": "node --env-file=.env.fork scripts/anvil-up.mjs",
     "build": "node scripts/with-env.mjs .env.fork next build",
     "fixture:position": "tsx scripts/position-fixture.mts",
