@@ -78,9 +78,9 @@ type Props = {
   refetch: () => Promise<ChainData>;
 };
 
-// Panel aksi di samping detail chain (Q20): tab Supply, Withdraw, Borrow, Repay (ETH lewat gateway), plus mode toggle jaminan
-// (dari switch di "Supply Anda"). Panel cuma dirender sesudah data posisi siap (sebelumnya skeleton / "gagal dimuat"),
-// jadi `data` selalu `ready` di sini.
+// Panel aksi di samping detail chain (Q20; di mobile di dalam bottom sheet, Q19): tab Supply, Withdraw, Borrow, Repay
+// (ETH lewat gateway), plus mode toggle jaminan (dari switch di "Supply Anda"). Panel cuma dirender sesudah data posisi
+// siap (sebelumnya skeleton / "gagal dimuat"), jadi `data` selalu `ready` di sini.
 export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Props) {
   const { address, isConnected, chainId: walletChainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
@@ -381,7 +381,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       {row && cta && (
         <button
           type="button"
-          className="btn-accent w-full px-5 py-[15px] text-[15px]"
+          className="btn-accent sheet-cta w-full px-5 py-[15px] text-[15px]"
           disabled={!cta.enabled}
           onClick={() => {
             if (step.step === 'connect') openConnectModal?.();

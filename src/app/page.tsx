@@ -21,7 +21,8 @@ export default async function Home({ searchParams }: PageProps<'/'>) {
           <h1 className="display text-lg font-normal">{NAV.dashboard}</h1>
           <WalletButton />
         </header>
-        <main className="flex flex-col gap-8 px-4 pb-16 md:px-8">
+        {/* `pb-28` mobile: ruang untuk bar Supply/Borrow yang menempel di bawah layar (tiket 16). */}
+        <main className="flex flex-col gap-8 px-4 pb-28 md:px-8 md:pb-16">
           <WalletOverview chainId={selected.chainId} />
           <Dashboard selectedChainId={selected.chainId} />
           {/* Langkah ketiga animasi masuk; di luar `key` biar ganti chain nggak memutarnya lagi. `key`: pilihan

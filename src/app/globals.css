@@ -93,6 +93,20 @@ body {
     border-radius: var(--radius);
   }
 
+  /* Panel aksi di dalam bottom sheet mobile (Q19): tanpa bingkai kartu, mengisi tinggi sheet, tombol utama menempel di
+     bawah sheet. */
+  .sheet aside.surface {
+    flex: 1;
+    border: 0;
+    border-radius: 0;
+  }
+  .sheet .sheet-cta {
+    margin-top: auto;
+    position: sticky;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    box-shadow: 0 0 0 12px var(--panel), 0 -20px 24px 6px var(--panel);
+  }
+
   .num {
     font-family: var(--font-plex-mono), ui-monospace, monospace;
     font-variant-numeric: tabular-nums;

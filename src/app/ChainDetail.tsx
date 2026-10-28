@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import type { Address } from 'viem';
 import { useAccount } from 'wagmi';
 
@@ -17,11 +17,12 @@ import {
 import type { EModeView } from '@/core/eMode';
 import { panelAssets, type PanelTab } from '@/core/panel';
 import { liquidationPrice, type LiqPrice } from '@/core/simulate';
-import { E_MODE, PANEL, POSITION, TABLE, TERMS } from '@/copy';
+import { E_MODE, PANEL, POSITION, SHEET, TABLE, TERMS } from '@/copy';
 import { ActionPanel } from './ActionPanel';
 import { pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
 import { LiquidationText } from './LiquidationText';
+import { ActionBar, BottomSheet, useMobile } from './MobileSheet';
 import { ParameterDetails } from './ParameterDetails';
 import { RescuePanel } from './RescuePanel';
 import { Term } from './Term';
@@ -41,17 +42,31 @@ const initialPick = (rescue: boolean): Picked => ({ tab: rescue ? 'rescue' : 'su
 // Detail chain terpilih (Q20, prototype): kepala HF + harga likuidasi + sisa batas pinjam, empat tabel datar, dan panel
 // aksi di kanan. Klik baris membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Supply Anda →
 // Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. ETH di semua tab lewat gateway. `rescue` = URL
-// berisi `panel=penyelamatan` (banner Bahaya): panel penyelamatan menggantikan panel aksi sampai user memilih.
+// berisi `panel=penyelamatan` (banner Bahaya): panel penyelamatan menggantikan panel aksi sampai user memilih. Di mobile
+// panel ada di bottom sheet layar penuh yang dibuka dari baris tabel atau bar Supply/Borrow di bawah layar (Q19).
 export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: boolean }) {
   const { data, isPending, isError, refetch } = useChainView(chainId);
   const { isConnected } = useAccount();
   const router = useRouter();
   const [picked, setPicked] = useState<Picked>(() => initialPick(rescue));
+  const mobile = useMobile();
+  const [sheetOpen, setSheetOpen] = useState(rescue);
+  // Keluar dari panel penyelamatan: buang `panel=` dari URL supaya banner bisa membukanya lagi.
+  const leaveRescue = useCallback(() => {
+    if (rescue) router.replace(chainHref(supportedChain(chainId)), { scroll: false });
+  }, [rescue, router, chainId]);
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
+    leaveRescue();
+  }, [leaveRescue]);
   // Banner diklik lagi saat chain ini sudah terbuka: komponen nggak dipasang ulang, jadi buka panelnya dari sini.
   const [prevRescue, setPrevRescue] = useState(rescue);
   if (rescue !== prevRescue) {
     setPrevRescue(rescue);
-    if (rescue) setPicked(initialPick(true));
+    if (rescue) {
+      setPicked(initialPick(true));
+      setSheetOpen(true);
+    }
   }
   const name = chainName(chainId);
 
@@ -73,15 +88,35 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
     );
 
   const { view } = data;
-  // Keluar dari panel penyelamatan: buang `panel=` dari URL supaya banner bisa membukanya lagi.
   const choose = (tab: PanelTab, asset?: Address) => {
     setPicked({ tab, asset });
-    if (rescue) router.replace(chainHref(supportedChain(chainId)), { scroll: false });
+    if (mobile) setSheetOpen(true);
+    leaveRescue();
   };
-  // Panel selalu ada di kanan (prototype); baris ditandai setelah user memilihnya dari tabel.
+  // Desktop: panel selalu ada di kanan (prototype); baris ditandai setelah user memilihnya dari tabel.
   const pick = (tab: PanelTab) => (asset: Address) => choose(tab, asset);
   const active = (tab: PanelTab) => (picked.tab === tab ? picked.asset : undefined);
   const clickable = (tab: PanelTab) => new Set(panelAssets(view, tab).map((r) => r.asset));
+
+  // Tanpa utang (sudah lunas, atau URL dibuka tanpa posisi) nggak ada yang perlu diselamatkan.
+  const panel =
+    picked.tab === 'rescue' && view.account?.healthFactor != null ? (
+      <RescuePanel chainId={chainId} data={data} onChoose={choose} />
+    ) : (
+      <ActionPanel
+        chainId={chainId}
+        data={data}
+        tab={picked.tab === 'rescue' ? 'supply' : picked.tab}
+        asset={picked.asset}
+        onSelect={choose}
+        refetch={async () => {
+          const result = await refetch();
+          // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
+          if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
+          return result.data;
+        }}
+      />
+    );
 
   return (
     <section className="flex flex-col gap-4">
@@ -114,29 +149,19 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
             onBorrow={pick('borrow')}
           />
         </div>
-        <div className="xl:sticky xl:top-6">
-          {/* Tanpa utang (sudah lunas, atau URL dibuka tanpa posisi) nggak ada yang perlu diselamatkan. */}
-          {picked.tab === 'rescue' && view.account?.healthFactor != null ? (
-            <RescuePanel chainId={chainId} data={data} onChoose={choose} />
-          ) : (
-            <ActionPanel
-              chainId={chainId}
-              data={data}
-              tab={picked.tab === 'rescue' ? 'supply' : picked.tab}
-              asset={picked.asset}
-              onSelect={choose}
-              refetch={async () => {
-                const result = await refetch();
-                // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
-                if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
-                return result.data;
-              }}
-            />
-          )}
-        </div>
+        {!mobile && <div className="xl:sticky xl:top-6">{panel}</div>}
       </div>
       {/* Lebar penuh: sembilan kolom angka muat tanpa gulir di desktop. */}
       <ParameterDetails chainId={chainId} chainName={name} read={data.read} whitelist={WHITELIST[chainId]} eModeLabel={view.eMode?.label ?? null} />
+      {mobile && (
+        <>
+          <BottomSheet open={sheetOpen} title={SHEET.title(name)} onClose={closeSheet}>
+            {panel}
+          </BottomSheet>
+          {/* Tetap terpasang di bawah sheet (yang menutupinya): fokus kembali ke tombolnya saat sheet ditutup. */}
+          <ActionBar onOpen={(tab) => choose(tab)} />
+        </>
+      )}
     </section>
   );
 }
@@ -308,6 +333,8 @@ function MarketTables(props: {
         rows={visibleSupplyMarket(view.supplyMarket, showAll).map((row) => ({
           key: row.asset,
           symbol: row.symbol,
+          // Kolom "Jaminan" disembunyikan di mobile; infonya pindah ke samping nama aset.
+          note: row.canBeCollateral && <span className="text-xs text-muted md:hidden">{TABLE.collateralNote}</span>,
           active: row.asset === props.activeSupply,
           onClick: () => props.onSupply(row.asset),
           cells: [
@@ -319,6 +346,7 @@ function MarketTables(props: {
           ],
         }))}
         heads={[APY_HEAD, TABLE.wallet, TABLE.collateral]}
+        secondary={2}
       />
       <FlatTable
         title={TABLE.borrowMarket}
@@ -365,7 +393,9 @@ function AssetNote({ outside, status }: { outside: boolean; status: ReserveStatu
 /** Baris tanpa `onClick` belum punya aksi (bukan sekadar nonaktif): kursor biasa, nggak bisa difokus. */
 type Row = { key: string; symbol: string; note?: ReactNode; cells: ReactNode[]; active?: boolean; onClick?: () => void };
 
-function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?: ReactNode; heads: ReactNode[]; rows: Row[]; empty: string }) {
+/** `secondary` = indeks kolom (di `heads`/`cells`) yang disembunyikan di mobile supaya tabel ringkas. */
+function FlatTable({ title, aside, heads, secondary, rows, empty }: { title: string; aside?: ReactNode; heads: ReactNode[]; secondary?: number; rows: Row[]; empty: string }) {
+  const hide = (i: number) => (i === secondary ? 'max-md:hidden' : undefined);
   return (
     <div className="surface pt-4">
       <div className="mb-3 flex items-center justify-between px-3">
@@ -380,7 +410,9 @@ function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?
             <tr>
               <th>{TABLE.asset}</th>
               {heads.map((head, i) => (
-                <th key={i}>{head}</th>
+                <th key={i} className={hide(i)}>
+                  {head}
+                </th>
               ))}
             </tr>
           </thead>
@@ -402,7 +434,9 @@ function FlatTable({ title, aside, heads, rows, empty }: { title: string; aside?
                   </span>
                 </td>
                 {row.cells.map((cell, i) => (
-                  <td key={i}>{cell}</td>
+                  <td key={i} className={hide(i)}>
+                    {cell}
+                  </td>
                 ))}
               </tr>
             ))}

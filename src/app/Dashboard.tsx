@@ -44,6 +44,16 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
   const { isConnected } = useAccount();
   const queries = useAllChainViews();
   const fees = useTypicalActionFees(isConnected);
+  // Segmen chain terpilih (mis. dibuka dari banner Bahaya) digeser ke layar di mobile; desktop nggak menggulir.
+  const pickerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = pickerRef.current;
+    const segment = nav?.querySelector<HTMLElement>(`[data-chain="${selectedChainId}"]`);
+    if (nav && segment) nav.scrollTo({
+        left: nav.scrollLeft + segment.getBoundingClientRect().left - nav.getBoundingClientRect().left,
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      });
+  }, [selectedChainId]);
 
   // Semua chain yang punya data, termasuk data terakhir chain yang bacaan terbarunya gagal (dipakai banner Bahaya).
   const withData = SUPPORTED_CHAINS.flatMap((chain, i): Loaded[] => {
@@ -83,7 +93,13 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
           <ConnectHero />
         )}
       </div>
-      <nav aria-label={CHAIN_PICKER.label} className="reveal surface grid overflow-hidden md:grid-cols-3 md:divide-x md:divide-line" style={stagger(1)}>
+      {/* Mobile: segmen digeser horizontal (segmen berikutnya mengintip di kanan); desktop: tiga kolom. */}
+      <nav
+        ref={pickerRef}
+        aria-label={CHAIN_PICKER.label}
+        className="reveal surface flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] md:grid md:grid-cols-3 md:divide-x md:divide-line md:overflow-hidden"
+        style={stagger(1)}
+      >
         {SUPPORTED_CHAINS.map((chain, i) => {
           const query = queries[i];
           const ethBalance = query.data?.read.user?.walletBalances[WHITELIST[chain.chainId].find((a) => a.native)!.address] ?? 0n;
@@ -93,7 +109,8 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
           return (
             <div
               key={chain.slug}
-              className={`relative flex flex-col border-line px-5 py-4 transition-colors max-md:border-b max-md:last:border-b-0 ${
+              data-chain={chain.chainId}
+              className={`relative flex flex-col border-line px-5 py-4 transition-colors max-md:w-[82%] max-md:shrink-0 max-md:snap-start max-md:border-r max-md:last:border-r-0 ${
                 chain.chainId === selectedChainId ? 'bg-panel-hover shadow-[inset_0_2px_0_var(--accent)]' : 'hover:bg-panel-hover'
               }`}
             >

@@ -213,6 +213,7 @@ export const TABLE = {
   showAllLabel: 'Tampilkan semua aset',
   collateralOn: 'aktif',
   collateralYes: '✓ bisa',
+  collateralNote: '✓ bisa jaminan',
   none: '—',
   noSupplies: 'Belum ada supply di chain ini.',
   noBorrows: 'Belum ada utang di chain ini.',
@@ -225,6 +226,12 @@ export const TABLE = {
   /** Penjelasan di samping label (spec 49–50). */
   dibekukanNote: 'supply & borrow baru ditutup; withdraw dan repay tetap bisa',
   dijedaNote: 'semua aksi nonaktif sementara oleh Aave',
+};
+
+/** Bottom sheet panel aksi di mobile (Q19). */
+export const SHEET = {
+  title: (chain: string) => `Aksi di ${chain}`,
+  close: 'Tutup',
 };
 
 export const PANEL = {
