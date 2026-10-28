@@ -543,6 +543,12 @@ Diuji di Anvil fork Ethereum mainnet:
 3. `AaveOracle.setAssetSources([WETH], [mock])` berhasil. Harga WETH berubah $2.306 → $1.500.
 4. Setelah itu cukup `mock.setAnswer(...)`. Harga berubah $1.500 → $1.200 tanpa admin lagi.
 5. Akun biasa memanggil `setAssetSources` → revert (kode `5`, bukan admin).
+**Implementasi Dev Tools (tiket 18, 2026-10-28)**, setara dengan langkah di atas, dengan dua beda:
+- Mock nggak di-deploy lewat tx: runtime bytecode-nya (`latestAnswer`, `decimals` = 8, plus slot sumber asli untuk
+  "Harga asli") dipasang dengan `anvil_setCode` di alamat tetap per aset, dan harga ditulis langsung dengan
+  `anvil_setStorageAt` (pengganti `mock.setAnswer`). Sumber Solidity-nya di komentar `src/devtools/forkActions.ts`.
+- `setAssetSources` dikirim atas nama `ACL_ADMIN` lewat tx unsigned Anvil, tanpa `anvil_impersonateAccount` terpisah.
+  `ACL_ADMIN` dicek punya POOL_ADMIN di Ethereum, Base, dan Arbitrum.
 Keputusan #10 tetap. Detail tambahan:
 - **Akun dev Anvil #0, #1, #2 di Ethereum dan Base mainnet sudah punya delegasi EIP-7702**
   (`0xef0100…`). Swap-web baru membersihkan akun #0 (`anvil-up.mjs`). Lending perlu

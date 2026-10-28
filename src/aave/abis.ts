@@ -37,6 +37,7 @@ export const poolAbi = parseAbi([
   'error NotBorrowableInEMode()',
   'error InvalidDebtInEmode(address asset, uint256 categoryId)',
   'error InvalidCollateralInEmode(address asset, uint256 categoryId)',
+  'error HealthFactorNotBelowThreshold()',
   'function getUserAccountData(address user) view returns (uint256 totalCollateralBase, uint256 totalDebtBase, uint256 availableBorrowsBase, uint256 currentLiquidationThreshold, uint256 ltv, uint256 healthFactor)',
 ]);
 
