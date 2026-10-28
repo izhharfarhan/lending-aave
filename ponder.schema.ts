@@ -1,4 +1,4 @@
-import { index, onchainEnum, onchainTable, primaryKey } from 'ponder';
+import { index, onchainEnum, onchainTable, primaryKey, relations } from 'ponder';
 
 import { POSITION_EVENT_KINDS } from './src/core/positionEvent';
 
@@ -36,6 +36,56 @@ export const positionEvent = onchainTable(
     ownerTimeIdx: index().on(table.owner, table.timestamp),
   }),
 );
+
+// Rincian baris riwayat `liquidation` (V5, Q16), kunci sama dengan baris `position_event`-nya. Jaminan yang hilang =
+// `amount` baris itu (bagian likuidator + protocol fee). Semua jumlah bigint mentah dalam token-nya.
+export const liquidation = onchainTable(
+  'liquidation',
+  (t) => ({
+    chainId: t.integer().notNull(),
+    txHash: t.hex().notNull(),
+    logIndex: t.integer().notNull(),
+    owner: t.hex().notNull(),
+    liquidator: t.hex().notNull(),
+    collateralAsset: t.hex().notNull(),
+    debtAsset: t.hex().notNull(),
+    // Utang yang benar-benar dilunasi (`actualDebtToLiquidate`), bukan yang diminta likuidator.
+    debtToCover: t.bigint().notNull(),
+    // Jaminan yang diterima likuidator saja.
+    liquidatedCollateralAmount: t.bigint().notNull(),
+    // `Transfer` aToken jaminan user → treasury di tx yang sama, apa adanya (0 kalau nggak ada).
+    protocolFee: t.bigint().notNull(),
+    receiveAToken: t.boolean().notNull(),
+    // Bonus yang berlaku, basis poin (10.500 = 105%): kategori E-Mode atau reserve (V5).
+    liquidationBonus: t.integer().notNull(),
+    bonusFromEMode: t.boolean().notNull(),
+    // Kategori E-Mode user saat likuidasi (0 = di luar E-Mode).
+    eModeCategory: t.integer().notNull(),
+    // total − total/bonus, dalam token jaminan.
+    penalty: t.bigint().notNull(),
+    // Harga jaminan di AaveOracle (mata uang dasar, USD 8 desimal) di blok likuidasi: penalti dalam USD (Q16).
+    collateralPrice: t.bigint().notNull(),
+    // `getUserAccountData` di blok −1 (1e18 = 1,0). Kosong = tidak tersedia (baca blok lama gagal, Q16).
+    healthFactorBefore: t.bigint(),
+    // Sisa utang yang dihapus (`DeficitCreated`), berpasangan per indeks: aset utang dan jumlahnya.
+    deficitAssets: t.hex().array().notNull(),
+    deficitAmounts: t.bigint().array().notNull(),
+    timestamp: t.bigint().notNull(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.chainId, table.txHash, table.logIndex] }),
+    // Banner likuidasi (Q17): likuidasi satu alamat, terbaru dulu.
+    ownerTimeIdx: index().on(table.owner, table.timestamp),
+  }),
+);
+
+// GraphQL: `positionEvents { items { liquidation { … } } }`.
+export const positionEventRelations = relations(positionEvent, ({ one }) => ({
+  liquidation: one(liquidation, {
+    fields: [positionEvent.chainId, positionEvent.txHash, positionEvent.logIndex],
+    references: [liquidation.chainId, liquidation.txHash, liquidation.logIndex],
+  }),
+}));
 
 // Bantu penggabungan event jaminan (`src/core/collateralMerge.ts`): baris terakhir di satu tx untuk (reserve, pemilik).
 // Ponder cuma bisa `find` lewat primary key, jadi event jaminan dan aksinya saling menemukan lewat tabel ini.

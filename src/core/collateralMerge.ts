@@ -6,9 +6,10 @@ import type { PositionEventKind } from './positionEvent';
  */
 export type TxSlot = { logIndex: number; kind: PositionEventKind; collateralEnabled: boolean | null };
 
-// V3: arah event jaminan yang terpancar otomatis oleh tiap aksi. Supply pertama mengaktifkan; withdraw dan repay pakai
-// aToken yang menghabiskan saldo menonaktifkan. Borrow nggak pernah mengubah jaminan. Arah lain = toggle manual.
-const AUTOMATIC_COLLATERAL: Partial<Record<PositionEventKind, boolean>> = { supply: true, withdraw: false, repay: false };
+// V3: arah event jaminan yang terpancar otomatis oleh tiap aksi. Supply pertama mengaktifkan; withdraw, repay pakai
+// aToken, dan likuidasi yang menghabiskan saldo menonaktifkan. Borrow nggak pernah mengubah jaminan. Arah lain = toggle
+// manual.
+const AUTOMATIC_COLLATERAL: Partial<Record<PositionEventKind, boolean>> = { supply: true, withdraw: false, repay: false, liquidation: false };
 
 const isAutomatic = (kind: PositionEventKind, enabled: boolean) => AUTOMATIC_COLLATERAL[kind] === enabled;
 

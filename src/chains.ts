@@ -12,12 +12,16 @@ type IndexedChain = {
   wethGateway: Address;
   /** aWETH: `Transfer` ke gateway membawa pemilik withdraw ETH (V2). */
   aWeth: Address;
+  /** Treasury (Collector): penerima protocol fee likuidasi (V5); `RESERVE_TREASURY_ADDRESS` semua aToken di blok pin. */
+  treasury: Address;
+  /** AaveOracle: harga jaminan untuk penalti dalam USD (Q16). */
+  oracle: Address;
 };
 
 export const INDEXED_CHAINS = {
-  1: { name: 'mainnet', pinBlock: 26_282_000, pool: AaveV3Ethereum.POOL, wethGateway: AaveV3Ethereum.WETH_GATEWAY, aWeth: AaveV3Ethereum.ASSETS.WETH.A_TOKEN },
-  8453: { name: 'base', pinBlock: 52_975_000, pool: AaveV3Base.POOL, wethGateway: AaveV3Base.WETH_GATEWAY, aWeth: AaveV3Base.ASSETS.WETH.A_TOKEN },
-  42161: { name: 'arbitrum', pinBlock: 517_470_000, pool: AaveV3Arbitrum.POOL, wethGateway: AaveV3Arbitrum.WETH_GATEWAY, aWeth: AaveV3Arbitrum.ASSETS.WETH.A_TOKEN },
+  1: { name: 'mainnet', pinBlock: 26_282_000, pool: AaveV3Ethereum.POOL, wethGateway: AaveV3Ethereum.WETH_GATEWAY, aWeth: AaveV3Ethereum.ASSETS.WETH.A_TOKEN, treasury: AaveV3Ethereum.COLLECTOR, oracle: AaveV3Ethereum.ORACLE },
+  8453: { name: 'base', pinBlock: 52_975_000, pool: AaveV3Base.POOL, wethGateway: AaveV3Base.WETH_GATEWAY, aWeth: AaveV3Base.ASSETS.WETH.A_TOKEN, treasury: AaveV3Base.COLLECTOR, oracle: AaveV3Base.ORACLE },
+  42161: { name: 'arbitrum', pinBlock: 517_470_000, pool: AaveV3Arbitrum.POOL, wethGateway: AaveV3Arbitrum.WETH_GATEWAY, aWeth: AaveV3Arbitrum.ASSETS.WETH.A_TOKEN, treasury: AaveV3Arbitrum.COLLECTOR, oracle: AaveV3Arbitrum.ORACLE },
 } as const satisfies Record<number, IndexedChain>;
 
 export type IndexedChainId = keyof typeof INDEXED_CHAINS;

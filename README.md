@@ -1,7 +1,7 @@
 # lending-indexer
 
 Ponder indexer untuk riwayat posisi Aave v3.7 (lending-web) di Ethereum, Base, dan Arbitrum: `Supply`, `Withdraw`,
-`Borrow`, `Repay`, dan `ReserveUsedAsCollateralEnabled/Disabled` (tiket 19–20). Likuidasi menyusul di tiket 21.
+`Borrow`, `Repay`, `ReserveUsedAsCollateralEnabled/Disabled` (tiket 19–20), dan `LiquidationCall` (tiket 21).
 
 Keputusan desain ada di [`lending-web/DECISIONS.md`](../lending-web/DECISIONS.md), spec dan tiket di
 `lending-web/.scratch/lending-aave/`. Repo ini dan lending-web di-clone bersebelahan (`lending-aave/lending-web`,
@@ -22,7 +22,8 @@ pnpm test           # unit (src/core) + integrasi: Anvil + Ponder + DB sendiri, 
 ```
 
 `pnpm test` butuh `ANVIL_FORK_URL_1`, `ANVIL_FORK_URL_8453`, dan `ANVIL_FORK_URL_42161` (RPC archive, sama dengan
-lending-web); test integrasi menyalakan Anvil sendiri untuk ketiga chain (:48555/:48556/:48557). `.env.fork` tetap harus ada (salinan
+lending-web); test integrasi menyalakan Anvil sendiri untuk ketiga chain (:48555/:48556/:48557). Anvil test Base
+tanpa riwayat state (`--prune-history 0`) untuk menguji HF likuidasi "tidak tersedia". `.env.fork` tetap harus ada (salinan
 `.env.example`); nilainya bisa diisi di sana, atau dibiarkan kosong dan diambil dari env lending-web:
 `node ../lending-web/scripts/with-env.mjs ../lending-web/.env.fork pnpm test` (nilai yang sudah ada di environment
 menang atas isi file).
@@ -43,7 +44,7 @@ kosong untuk itu; tanpa blok itu Ponder berhenti dengan `BlockNotFoundError`.
 ## Data
 
 Tabel `position_event`: satu baris per baris riwayat, kunci `(chainId, txHash, logIndex)`. `kind`: `supply`,
-`withdraw`, `borrow`, `repay`, `collateral`.
+`withdraw`, `borrow`, `repay`, `collateral`, `liquidation`.
 
 - `owner` = pemilik posisi dari field event (DECISIONS #11), bukan `txFrom`. `caller` = pemanggil Pool.
 
@@ -54,9 +55,10 @@ Tabel `position_event`: satu baris per baris riwayat, kunci `(chainId, txHash, l
   | Withdraw | `user` | `user` |
   | Withdraw lewat gateway (withdrawETH) | pengirim `Transfer` aWETH → gateway di tx yang sama (V2) | gateway |
   | ReserveUsedAsCollateralEnabled/Disabled | `user` | `user` |
+  | LiquidationCall | `user` (yang dilikuidasi) | likuidator |
 
 - `collateralEnabled`: jaminan yang berubah di baris itu, kosong kalau nggak berubah. Event jaminan otomatis (supply
-  pertama mengaktifkan; withdraw atau repay pakai aToken yang menghabiskan saldo menonaktifkan) digabung ke baris aksi
+  pertama mengaktifkan; withdraw, repay pakai aToken, atau likuidasi yang menghabiskan saldo menonaktifkan) digabung ke baris aksi
   di tx yang sama untuk reserve dan pemilik yang sama ("Supply 1 ETH · jaminan aktif", V3/Q18), baik event jaminannya
   terpancar sebelum maupun sesudah event aksinya. Baris `collateral` (tanpa `amount`) untuk event jaminan yang nggak
   punya aksi pasangan. Aturannya di `src/core/collateralMerge.ts`; tabel bantu `tx_slot` dan `gateway_transfer` cuma
@@ -66,7 +68,8 @@ Tabel `position_event`: satu baris per baris riwayat, kunci `(chainId, txHash, l
     tanpa aksi pasangan, jadi tercatat sebagai baris `collateral` seperti toggle manual.
   - Dalam satu tx batch (smart wallet), toggle manual yang searah sebelum supply/withdraw di reserve yang sama ikut
     tergabung ke baris aksi itu.
-- `amount` bigint mentah; desimal dan format urusan frontend.
+- `amount` bigint mentah; desimal dan format urusan frontend. Di baris `liquidation` = jaminan yang hilang (bagian
+  likuidator + protocol fee, V5).
 - Alamat disimpan huruf kecil, dan filter GraphQL peka huruf besar-kecil: kirim `owner` dalam huruf kecil (alamat
   checksum dari wallet mengembalikan daftar kosong tanpa error).
 - Riwayat semua chain diurutkan dengan `timestamp`; `blockNumber` + `logIndex` cuma untuk urutan di dalam satu chain
@@ -75,14 +78,36 @@ Tabel `position_event`: satu baris per baris riwayat, kunci `(chainId, txHash, l
   (`mainnet`, `base`, `arbitrum`) beserta timestamp-nya. "Tertinggal N blok" = blok terbaru chain (dari RPC app)
   dikurangi angka ini.
 
+Tabel `liquidation` (V5, Q16): rincian tiap baris `liquidation`, kunci sama dengan baris riwayatnya (relasi GraphQL
+`positionEvent.liquidation`). Index `(owner, timestamp)` untuk banner likuidasi (Q17).
+
+- `debtToCover` = utang yang benar-benar dilunasi; `liquidatedCollateralAmount` = bagian likuidator saja.
+- `protocolFee` = `Transfer` aToken jaminan user → treasury di tx yang sama, apa adanya. Fee dan `DeficitCreated`
+  diambil dari receipt tx likuidasi (satu RPC per likuidasi): address-book nggak memuat semua aToken (Ethereum 63 dari
+  67 reserve), jadi mendengarkan `Transfer` per aToken bisa melewatkan fee. Di v3.7 keduanya terpancar sebelum
+  `LiquidationCall`; tiap likuidasi cuma memakai log sesudah `LiquidationCall` sebelumnya di tx itu.
+- `liquidationBonus` (basis poin) + `bonusFromEMode`: bonus kategori E-Mode kalau user di E-Mode dan aset jaminannya di
+  `collateralBitmap`, selain itu bonus reserve. `penalty` = total − total/bonus dalam token jaminan; `collateralPrice` =
+  harga AaveOracle jaminan (USD 8 desimal) di blok likuidasi, untuk penalti dalam USD.
+- `deficitAssets` / `deficitAmounts`: sisa utang yang dihapus (`DeficitCreated`), berpasangan per indeks.
+- `healthFactorBefore`: `getUserAccountData` di blok −1 (1e18 = 1,0); kosong = tidak tersedia. Kalau RPC nggak punya
+  state blok itu, lapisan RPC Ponder me-retry 10× dengan backoff (±1 menit) sebelum handler menyimpan "tidak tersedia",
+  dan selama itu indexing chain itu tertahan. Sengaja dibiarkan: tanpa retry, error sementara (mis. rate limit) akan
+  tersimpan permanen sebagai "tidak tersedia". RPC indexer memang harus archive (Q16).
+
 Contoh query:
 
 ```graphql
 {
   positionEvents(
-    where: { owner: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", chainId_in: [1, 42161], kind_in: [supply, withdraw] }
+    where: { owner: "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", chainId_in: [1, 42161], kind_in: [supply, withdraw, liquidation] }
     orderBy: "timestamp", orderDirection: "desc"
-  ) { items { chainId kind reserve amount collateralEnabled txHash timestamp } }
+  ) {
+    items {
+      chainId kind reserve amount collateralEnabled txHash timestamp
+      liquidation { debtAsset debtToCover protocolFee liquidationBonus penalty collateralPrice healthFactorBefore deficitAssets deficitAmounts }
+    }
+  }
   _meta { status }
 }
 ```

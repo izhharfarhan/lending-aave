@@ -45,6 +45,7 @@ export default async function setup(project: TestProject) {
         '--fork-block-number', String(INDEXED_CHAINS[chainId].pinBlock),
         '--chain-id', String(chainId),
         '--port', String(TEST_CHAINS[chainId].anvilPort),
+        ...TEST_CHAINS[chainId].anvilArgs,
       ]));
       const { publicClient, testClient } = testClients(chainId);
       await waitFor(`Anvil test chain ${chainId}`, () => publicClient.getChainId().then(() => true));

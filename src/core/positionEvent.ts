@@ -1,7 +1,7 @@
 import type { Address } from 'viem';
 
-/** Jenis baris riwayat (DECISIONS Q18); satu sumber untuk enum DB dan tipe baris. Tiket 21 menambah likuidasi. */
-export const POSITION_EVENT_KINDS = ['supply', 'withdraw', 'borrow', 'repay', 'collateral'] as const;
+/** Jenis baris riwayat (DECISIONS Q18); satu sumber untuk enum DB dan tipe baris. */
+export const POSITION_EVENT_KINDS = ['supply', 'withdraw', 'borrow', 'repay', 'collateral', 'liquidation'] as const;
 export type PositionEventKind = (typeof POSITION_EVENT_KINDS)[number];
 
 // Argumen event Pool Aave v3.7 (V1). Field `user` artinya beda per event: lihat aturan pemilik di bawah.

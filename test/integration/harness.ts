@@ -7,9 +7,11 @@ import { INDEXED_CHAINS } from '../../src/chains';
 // Dipakai globalSetup (menyalakan semuanya sekali) dan file test (memanggil Anvil, Ponder, DB-nya). Port khusus test:
 // beda dari `anvil:up` lending-web (855x), fork test lending-web (1855x), swap-indexer (3854x), dan `dev:fork` (42070).
 export const TEST_CHAINS = {
-  1: { chain: mainnet, anvilPort: 48555 },
-  8453: { chain: base, anvilPort: 48556 },
-  42161: { chain: arbitrum, anvilPort: 48557 },
+  1: { chain: mainnet, anvilPort: 48555, anvilArgs: [] },
+  // Base tanpa riwayat state (`--prune-history 0`): meniru RPC non-archive, jadi HF blok −1 likuidasi di Base selalu
+  // gagal dibaca dan jalur "tidak tersedia" (Q16) teruji. Baca di blok terbaru tetap jalan.
+  8453: { chain: base, anvilPort: 48556, anvilArgs: ['--prune-history', '0'] },
+  42161: { chain: arbitrum, anvilPort: 48557, anvilArgs: [] },
 } as const;
 export type TestChainId = keyof typeof TEST_CHAINS & keyof typeof INDEXED_CHAINS;
 
@@ -55,12 +57,12 @@ export async function waitFor(name: string, check: () => Promise<boolean>, timeo
 }
 
 // Polling sampai Ponder menulis row-nya, dengan timeout supaya test nggak menggantung.
-export async function waitForRows(db: pg.Client, txHash: Hex, count = 1) {
+export async function waitForRows(db: pg.Client, txHash: Hex, count = 1, timeoutMs = ROW_TIMEOUT_MS) {
   let rows: Awaited<ReturnType<typeof selectRows>> = [];
   await waitFor(`Row position_event ${txHash}`, async () => {
     rows = await selectRows(db, txHash);
     return rows.length >= count;
-  }, ROW_TIMEOUT_MS);
+  }, timeoutMs);
   // Row dobel = bug handler, bukan "belum muncul": dicek sesudah polling supaya pesannya jelas.
   if (rows.length > count) throw new Error(`${rows.length} row position_event untuk satu tx; harusnya ${count}`);
   return rows;
