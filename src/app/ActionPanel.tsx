@@ -17,7 +17,7 @@ import { explorerAddressUrl, explorerTxUrl, revokeCashUrl } from '@/config/explo
 import type { ChainRead, ChainView, SupplyRow } from '@/core/chainPosition';
 import { isWalletStep, type NextStep, type NextStepInput, type WalletStepName } from '@/core/nextStep';
 import { evaluatePanel, idleTx, PANEL_TABS, panelAssets, panelMax, panelTx, routeOf, type PanelAsset, type PanelTab, type Route } from '@/core/panel';
-import { parseAmountInput } from '@/core/parseAmountInput';
+import { ambiguousAmount, parseAmountInput } from '@/core/parseAmountInput';
 import { liquidationPrice, type Simulation } from '@/core/simulate';
 import { APPROVAL, CHAIN_PICKER, CTA, GAS, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
 import { switchChainErrorKind, type WalletErrorKind } from '@/core/walletError';
@@ -104,6 +104,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
   const progressRow = row ?? lastRow.current;
   const parsed = row ? parseAmountInput(amountText, row.decimals) : null;
   const amount = parsed?.ok ? parsed.value : null;
+  const ambiguous = ambiguousAmount(amountText);
 
   // Semua yang bergantung pada data posisi dihitung ulang dari data segar sesudah tiap langkah wallet.
   const evaluate = (fresh: ChainData, txRunning: boolean, networkFee: bigint | null) =>
@@ -115,6 +116,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
       tab,
       asset: row?.asset ?? '0x',
       amount,
+      amountText,
       riskChecked,
       riskTyped: riskTyped.trim().toLowerCase() === RISK_CONFIRM.word,
       networkFee,
@@ -275,6 +277,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
                   </select>
                 </label>
               </div>
+              {ambiguous && <p className="mt-2 text-xs text-warn">{PANEL.ambiguous(ambiguous.asDecimal, ambiguous.asThousands)}</p>}
               {parsed && !parsed.ok && parsed.reason !== 'empty' && parsed.reason !== 'zero' && (
                 <p className="mt-2 text-xs text-danger">
                   {parsed.reason === 'too_many_decimals' ? PANEL.invalid.too_many_decimals(row.decimals) : PANEL.invalid[parsed.reason]}

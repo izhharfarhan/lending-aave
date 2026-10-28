@@ -315,6 +315,9 @@ export const PANEL = {
     too_many_decimals: (decimals: number) => `Maksimal ${decimals} angka di belakang koma.`,
     overflow: 'Jumlah terlalu besar.',
   },
+  /** Titik + tepat 3 digit: app menulis titik = ribuan, input membaca titik = desimal (`ambiguousAmount`). */
+  ambiguous: (asDecimal: string, asThousands: string) =>
+    `Maksudnya ${asDecimal} atau ${asThousands}? Pakai koma untuk desimal (1,5), tanpa pemisah ribuan (1000).`,
 };
 
 export const CTA = {
@@ -324,6 +327,7 @@ export const CTA = {
   locked: 'Transaksi dikunci (pengaman fork)',
   busy: 'Sedang diproses…',
   enterAmount: 'Masukkan jumlah',
+  ambiguousAmount: 'Periksa jumlah',
   needsEthForGas: 'ETH kurang untuk biaya jaringan',
   switchChain: (chain: string) => `Ganti ke ${chain}`,
   /** Q27; kuota yang masih tersisa sebagian ditulis jumlahnya, bukan "penuh". */

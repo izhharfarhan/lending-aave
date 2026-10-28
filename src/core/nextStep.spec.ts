@@ -85,6 +85,17 @@ describe('nextStep()', () => {
       expect(nextStep(input({ amount: null }))).toEqual({ step: 'enterAmount' });
     });
 
+    // App menulis titik = ribuan (1.021,32), input membaca titik = desimal: "1.000" = 1. Aturan parse tetap; yang
+    // berbentuk ribuan dikunci sampai user menulis ulang.
+    it.each(['1.000', '12.500'])('locks the main button for "%s", which reads as thousands', (amountText) => {
+      expect(nextStep(input({ amount: USDC(1), amountText }))).toEqual({ step: 'ambiguousAmount' });
+      expect(nextStep(borrow({}, { amount: USDC(1), amountText }))).toEqual({ step: 'ambiguousAmount' });
+    });
+
+    it.each(['0.5', '1,000', '1000', '1.5', '1.0001'])('lets "%s" through: not a thousands pattern', (amountText) => {
+      expect(nextStep(input({ amount: USDC(1), amountText }))).toEqual({ step: 'approve', amount: USDC(1) });
+    });
+
     it('blocks an amount above the wallet balance before any approve is spent', () => {
       expect(nextStep(input({ amount: USDC(500) + 1n }))).toEqual({ step: 'insufficientBalance' });
     });

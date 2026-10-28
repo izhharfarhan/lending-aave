@@ -1,6 +1,7 @@
 import { maxUint256 } from 'viem';
 
 import type { Capacity } from './capacity';
+import { ambiguousAmount } from './parseAmountInput';
 import type { Gate, RepayPlan, WithdrawPlan } from './simulate';
 
 /**
@@ -47,6 +48,8 @@ export type NextStepInput = {
   paused: boolean;
   /** `null` = input kosong atau bukan jumlah yang valid. */
   amount: bigint | null;
+  /** Teks input jumlah apa adanya, untuk cek ambigu ribuan/desimal. `undefined` = aksi tanpa jumlah (toggle jaminan). */
+  amountText?: string;
   action: ActionInput;
   /** Saldo aset di wallet (supply/repay), atau saldo supply (withdraw). */
   balance: bigint;
@@ -87,6 +90,8 @@ export type NextStep =
   | { step: 'busy' }
   | { step: 'paused' }
   | { step: 'enterAmount' }
+  /** "1.000" terbaca 1 tapi bisa dimaksud seribu: tombol dikunci sampai ditulis ulang (lihat `ambiguousAmount`). */
+  | { step: 'ambiguousAmount' }
   /**
    * ETH kurang untuk biaya jaringan (supply/repay ETH: jumlah + biaya). `needed` = perkiraan total ETH yang dibutuhkan,
    * `null` kalau biayanya belum diketahui (cuma mungkin di ETH 0).
@@ -161,6 +166,7 @@ function stepOnSelectedChain(input: NextStepInput): NextStep {
   }
   const { amount, allowance } = input;
   if (amount === null) return { step: 'enterAmount' };
+  if (input.amountText !== undefined && ambiguousAmount(input.amountText)) return { step: 'ambiguousAmount' };
 
   if (action.action === 'borrow') {
     const blocked = lockStep(action) ?? capacityStep(input.capacity, amount, ['borrowCap', 'liquidity']) ?? confirmStep(action);

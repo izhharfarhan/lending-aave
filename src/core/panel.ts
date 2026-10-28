@@ -45,6 +45,8 @@ export type PanelInput = Pick<NextStepInput, 'connected' | 'txLocked' | 'txRunni
   asset: Address;
   /** `null` = input kosong atau bukan jumlah yang valid. */
   amount: bigint | null;
+  /** Teks input jumlah apa adanya (cek ambigu "1.000", lihat `nextStep`). */
+  amountText?: string;
   /** Pernyataan risiko dicentang / "confirm" diketik; masing-masing cuma berlaku untuk tier-nya. */
   riskChecked: boolean;
   riskTyped: boolean;
@@ -274,6 +276,7 @@ export function evaluatePanel(read: ChainRead, view: ChainView, whitelist: White
     data: 'ready' as const,
     txRunning: input.txRunning,
     amount: input.amount,
+    amountText: input.amountText,
     approvalMode: input.approvalMode,
     chainId: input.chainId,
     walletChainId: input.walletChainId,

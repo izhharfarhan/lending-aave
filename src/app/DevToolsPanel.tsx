@@ -8,10 +8,10 @@ import { useAccount, useBlock } from 'wagmi';
 import { WHITELIST } from '@/config/assets';
 import { AAVE } from '@/config/contracts';
 import { chainName, supportedChain } from '@/config/chains';
-import { parseAmountInput } from '@/core/parseAmountInput';
+import { ambiguousAmount, parseAmountInput } from '@/core/parseAmountInput';
 import { aaveErrorName } from '@/core/walletError';
 import { forkRpcUrl } from '@/config/fork';
-import { DEV_TOOLS } from '@/copy';
+import { DEV_TOOLS, PANEL } from '@/copy';
 import { getDevTools, setDevTools, subscribeDevTools, type DevToolsFlags } from '@/devtools/devTools';
 import { advanceTime, faucet, setUserEMode, TIME_STEPS, type ForkActionClients, type TimeStep } from '@/devtools/forkActions';
 
@@ -87,6 +87,8 @@ export default function DevToolsPanel({ chainId }: { chainId: number }) {
     });
 
   const busy = status.kind === 'working';
+  // Sama dengan panel aksi: "1.000" dikunci sampai ditulis ulang.
+  const ambiguous = ambiguousAmount(amount);
   return (
     // Desktop: kiri bawah, di atas sidebar, supaya nggak menutupi panel aksi di kanan. Mobile: kanan, di atas bar
     // Supply/Borrow (tiket 16); sheet panel aksi (z-50) menutupinya.
@@ -134,13 +136,14 @@ export default function DevToolsPanel({ chainId }: { chainId: number }) {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
-              <button type="button" className="btn-accent px-3 py-1.5 text-xs" disabled={busy} onClick={fund}>
+              <button type="button" className="btn-accent px-3 py-1.5 text-xs" disabled={busy || ambiguous !== null} onClick={fund}>
                 {DEV_TOOLS.faucetSubmit}
               </button>
             </div>
           ) : (
             <span className="text-xs text-muted">{DEV_TOOLS.needsWallet}</span>
           )}
+          {address && ambiguous && <span className="text-xs text-warn">{PANEL.ambiguous(ambiguous.asDecimal, ambiguous.asThousands)}</span>}
         </Group>
         <Group legend={DEV_TOOLS.eModeLegend(name)}>
           {address ? (

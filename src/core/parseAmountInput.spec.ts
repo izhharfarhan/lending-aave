@@ -1,5 +1,5 @@
 import { maxUint256 } from 'viem';
-import { parseAmountInput } from './parseAmountInput';
+import { ambiguousAmount, parseAmountInput } from './parseAmountInput';
 
 const USDC_DECIMALS = 6;
 const ETH_DECIMALS = 18;
@@ -82,6 +82,31 @@ describe('parseAmountInput()', () => {
 
     it('rejects any fraction for a 0-decimal token', () => {
       expect(parseAmountInput('1.5', 0)).toEqual({ ok: false, reason: 'too_many_decimals' });
+    });
+  });
+});
+
+describe('ambiguousAmount()', () => {
+  describe('positive', () => {
+    it.each([
+      ['1.000', '1', '1.000'],
+      ['12.500', '12,5', '12.500'],
+      [' 1.250 ', '1,25', '1.250'],
+    ])('reads "%s" both ways: %s or %s', (input, asDecimal, asThousands) => {
+      expect(ambiguousAmount(input)).toEqual({ asDecimal, asThousands });
+    });
+  });
+
+  describe('negative', () => {
+    it.each(['0.5', '1,000', '1000', '1.5', '1.0001', '', '1.000,5'])('is not ambiguous: "%s"', (input) => {
+      expect(ambiguousAmount(input)).toBeNull();
+    });
+  });
+
+  describe('edge cases', () => {
+    // Pemisah ribuan nggak pernah didahului 0 atau lebih dari 3 digit, jadi bentuk ini cuma bisa berarti desimal.
+    it.each(['0.500', '1234.567'])('is not ambiguous when it cannot be a thousands separator: "%s"', (input) => {
+      expect(ambiguousAmount(input)).toBeNull();
     });
   });
 });
