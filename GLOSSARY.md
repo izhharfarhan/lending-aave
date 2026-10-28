@@ -25,8 +25,20 @@ Nilai yang masih bisa dipinjam sebelum menyentuh batas LTV.
 _Avoid_: borrow power, available to borrow
 
 **Likuidasi**:
-Penjualan sebagian jaminan oleh pihak lain untuk melunasi sebagian utang posisi yang HF-nya di bawah 1, ditambah penalti.
+Penjualan jaminan oleh pihak lain untuk melunasi utang posisi yang HF-nya di bawah 1, ditambah penalti likuidasi. Bisa sebagian (paling banyak separuh total utang, kalau HF masih di atas 0,95 dan jaminan maupun utang yang dilikuidasi masing-masing minimal $2.000) atau seluruh utang aset itu.
 _Avoid_: lelang
+
+**Penalti likuidasi**:
+Bagian jaminan yang hilang di atas nilai utang yang dilunasi saat likuidasi. Dihitung dari jaminan yang hilang: total − total/bonus, dengan bonus likuidasi kategori E-Mode atau aset jaminan. Ditampilkan dalam token, USD, dan persen. Sudah termasuk biaya protokol.
+_Avoid_: denda, liquidation penalty, liquidation bonus, bonus likuidasi (bonus itu sudut pandang likuidator)
+
+**Biaya protokol**:
+Bagian penalti likuidasi yang masuk ke treasury Aave, bukan ke likuidator. Diambil dari jaminan user di transaksi yang sama, jadi ikut dihitung sebagai jaminan yang hilang.
+_Avoid_: protocol fee, liquidation protocol fee, fee treasury
+
+**Sisa utang dihapus**:
+Utang yang masih tersisa ketika likuidasi menghabiskan seluruh jaminan sebuah posisi. Aave menghapusnya dari posisi (event `DeficitCreated`), jadi user tidak lagi menanggungnya. Ditampilkan "sisa utang <x> dihapus".
+_Avoid_: deficit, bad debt, utang macet, pemutihan
 
 ## Dashboard
 
