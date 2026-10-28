@@ -33,3 +33,7 @@ export function tokenAmount(amount: bigint, decimals: number): string {
 
 /** Alamat/hash dipendekkan: `0x1234…abcd`. */
 export const shortAddress = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
+
+// "27 Okt 2026, 12.38", jam perangkat. Dipakai untuk waktu kejadian dari timestamp blok (banner likuidasi).
+const dateTimeFormat = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+export const dateTime = (unixSeconds: number) => dateTimeFormat.format(new Date(unixSeconds * 1000));

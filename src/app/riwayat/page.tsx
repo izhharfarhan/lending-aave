@@ -1,5 +1,6 @@
 import { chainFromParam } from '@/config/chains';
 import { HISTORY } from '@/copy';
+import { HISTORY_KINDS, type HistoryKind } from '@/core/history';
 
 import { DevTools } from '../DevTools';
 import { HistoryView } from '../HistoryView';
@@ -7,9 +8,10 @@ import { MobileNav, Sidebar } from '../Sidebar';
 import { WalletButton } from '../WalletStatus';
 
 // Riwayat semua chain (Q18). Dev Tools ikut supaya "maju waktu" bisa dicoba langsung di sini; chain-nya dari
-// `?chain=` seperti dashboard.
+// `?chain=` seperti dashboard. `?jenis=<jenis>` memilih filter jenis di awal (mis. dari banner likuidasi).
 export default async function HistoryPage({ searchParams }: PageProps<'/riwayat'>) {
-  const { chain } = await searchParams;
+  const { chain, jenis } = await searchParams;
+  const initialKind = HISTORY_KINDS.find((kind) => kind === jenis) ?? null;
   const selected = chainFromParam(typeof chain === 'string' ? chain : null);
   return (
     <div className="flex min-h-screen">
@@ -23,7 +25,7 @@ export default async function HistoryPage({ searchParams }: PageProps<'/riwayat'
           <WalletButton />
         </header>
         <main className="px-4 pb-16 md:px-8">
-          <HistoryView />
+          <HistoryView initialKind={initialKind} />
         </main>
       </div>
       <DevTools chainId={selected.chainId} />

@@ -2,28 +2,29 @@
 
 import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { useState } from 'react';
-import { isAddressEqual, type Address } from 'viem';
 import { useAccount } from 'wagmi';
 
-import { useAllChainViews } from '@/aave/useChainView';
 import { useHistory } from '@/aave/useHistory';
 import { indexerSummaryOf, latestBlockTimestamp, useNetworkStatus, type ChainNetworkStatus } from '@/aave/useNetworkStatus';
-import { WHITELIST } from '@/config/assets';
 import { SUPPORTED_CHAINS, supportedChain } from '@/config/chains';
 import { explorerTxUrl } from '@/config/explorer';
-import { AGE, HISTORY } from '@/copy';
-import { filterHistory, HISTORY_KINDS, type HistoryFilter, type HistoryItem } from '@/core/history';
+import { AGE, HISTORY, LIQUIDATED } from '@/copy';
+import { filterHistory, HISTORY_KINDS, type HistoryFilter, type HistoryItem, type HistoryKind } from '@/core/history';
+import { isLiquidation, type IndexedLiquidation } from '@/core/liquidation';
 import { historyAge } from '@/core/relativeTime';
 
 import { list, shortAddress, tokenAmount } from './format';
+import { deficitTexts, LiquidationDetails } from './LiquidationDetails';
+import { useTokenLookup, type TokenLookup } from './useTokenLookup';
 
 // Halaman Riwayat (Q18): semua chain satu daftar, terbaru di atas, filter chain + jenis. Indexer + tx lokal digabung
 // (`mergeHistory`); badge "Riwayat mungkin belum lengkap" kalau indexer offline atau tertinggal di chain mana pun.
-export function HistoryView() {
+// `initialKind` dari `?jenis=` ("Lihat riwayat" banner likuidasi membuka filter Likuidasi).
+export function HistoryView({ initialKind }: { initialKind: HistoryKind | null }) {
   const { address } = useAccount();
   const network = useNetworkStatus().data;
   const history = useHistory(address, network);
-  const [filter, setFilter] = useState<HistoryFilter>({ chainId: null, kind: null });
+  const [filter, setFilter] = useState<HistoryFilter>({ chainId: null, kind: initialKind });
   const tokenOf = useTokenLookup();
 
   if (!address) return <ConnectPrompt />;
@@ -117,46 +118,47 @@ function Chips<T extends string | number>({
   );
 }
 
-type TokenInfo = { symbol: string; decimals: number | null };
-type TokenLookup = (chainId: number, reserve: Address) => TokenInfo | null;
-
-// Simbol & desimal reserve dari bacaan chain dashboard (semua reserve, termasuk aset luar). Simbol whitelist menang
-// (WETH tampil sebagai ETH). Bacaan chain belum ada = jumlah belum bisa diformat.
-function useTokenLookup(): TokenLookup {
-  const views = useAllChainViews();
-  return (chainId, reserve) => {
-    const whitelisted = WHITELIST[chainId]?.find((asset) => isAddressEqual(asset.address, reserve));
-    const read = views[SUPPORTED_CHAINS.findIndex((chain) => chain.chainId === chainId)]?.data?.read;
-    const onChain = read?.reserves.find((r) => isAddressEqual(r.underlyingAsset, reserve));
-    const symbol = whitelisted?.symbol ?? onChain?.symbol;
-    return symbol ? { symbol, decimals: onChain ? Number(onChain.decimals) : null } : null;
-  };
-}
-
 function HistoryRow({ item, tokenOf, latest }: { item: HistoryItem; tokenOf: TokenLookup; latest: number | null }) {
+  const [open, setOpen] = useState(false);
   const chain = supportedChain(item.chainId);
   const age = historyAge(item.timestamp, latest);
+  const liquidation = liquidationOf(item);
   return (
-    <li className="flex flex-col gap-1 px-4 py-3 md:flex-row md:items-center md:gap-6 md:px-5">
-      <span className="w-24 shrink-0 font-medium text-ink">{HISTORY.kinds[item.kind]}</span>
-      <span className="min-w-0 flex-1 text-sm text-ink">
-        {describe(item, tokenOf)}
-        {item.source === 'local' && item.awaitingIndexer && <span className="badge badge-muted ml-2">{HISTORY.awaiting}</span>}
-        {item.source === 'local' && item.entry.status === 'failed' && <span className="badge badge-danger ml-2">{HISTORY.failed}</span>}
-      </span>
-      <span className="flex items-center gap-4 text-xs text-muted md:text-sm">
-        <span className="w-20">{chain.name}</span>
-        <span className="w-36 whitespace-nowrap">{age ? HISTORY.ago(AGE[age.unit](age.amount)) : HISTORY.unknownAge}</span>
-        <a href={explorerTxUrl(item.chainId, item.txHash)} target="_blank" rel="noreferrer" className="link" aria-label={HISTORY.explorerAria(chain.name)}>
-          {HISTORY.explorer}
-        </a>
-      </span>
+    <li className="px-4 py-3 md:px-5">
+      <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-6">
+        <span className="w-24 shrink-0 font-medium text-ink">{HISTORY.kinds[item.kind]}</span>
+        <span className="min-w-0 flex-1 text-sm text-ink">
+          {describe(item, tokenOf)}
+          {item.source === 'local' && item.awaitingIndexer && <span className="badge badge-muted ml-2">{HISTORY.awaiting}</span>}
+          {item.source === 'local' && item.entry.status === 'failed' && <span className="badge badge-danger ml-2">{HISTORY.failed}</span>}
+          {liquidation && (
+            <button type="button" className="link ml-2 text-xs text-muted" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+              {open ? LIQUIDATED.hideDetails : LIQUIDATED.showDetails}
+            </button>
+          )}
+        </span>
+        <span className="flex items-center gap-4 text-xs text-muted md:text-sm">
+          <span className="w-20">{chain.name}</span>
+          <span className="w-36 whitespace-nowrap">{age ? HISTORY.ago(AGE[age.unit](age.amount)) : HISTORY.unknownAge}</span>
+          <a href={explorerTxUrl(item.chainId, item.txHash)} target="_blank" rel="noreferrer" className="link" aria-label={HISTORY.explorerAria(chain.name)}>
+            {HISTORY.explorer}
+          </a>
+        </span>
+      </div>
+      {liquidation && open && (
+        <div className="mt-3 border-t border-line pt-3">
+          <LiquidationDetails entry={liquidation} tokenOf={tokenOf} />
+        </div>
+      )}
     </li>
   );
 }
 
+const liquidationOf = (item: HistoryItem): IndexedLiquidation | null =>
+  item.source === 'indexer' && isLiquidation(item.entry) ? item.entry : null;
+
 // "1 ETH · jaminan aktif" (Q18): jumlah + token, lalu perubahan jaminan kalau ada. Likuidasi: jaminan yang dijual
-// (bagian likuidator + biaya protokol) dan "sisa utang dihapus" kalau ada deficit; rinciannya di tiket 23.
+// (bagian likuidator + biaya protokol) dan "sisa utang <x> dihapus" kalau ada deficit; sisanya di rincian.
 function describe(item: HistoryItem, tokenOf: TokenLookup): string {
   const parts: string[] = [];
   if (item.source === 'local') {
@@ -167,7 +169,8 @@ function describe(item: HistoryItem, tokenOf: TokenLookup): string {
     const symbol = token?.symbol ?? shortAddress(item.entry.reserve);
     const amount = item.entry.amount !== null && token?.decimals != null ? `${tokenAmount(item.entry.amount, token.decimals)} ${symbol}` : symbol;
     parts.push(item.kind === 'liquidation' ? HISTORY.liquidationSold(amount) : item.kind === 'collateral' ? symbol : amount);
-    if (item.entry.liquidation?.deficits.length) parts.push(HISTORY.deficit);
+    const liquidation = liquidationOf(item);
+    if (liquidation) parts.push(...deficitTexts(liquidation, tokenOf));
   }
   if (item.collateralEnabled !== null) parts.push(HISTORY.collateral(item.collateralEnabled));
   return parts.join(' · ');

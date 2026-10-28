@@ -16,6 +16,7 @@ import { chainSegment, summarizeChains, type ChainAccount, type DashboardSummary
 import { AGE, CHAIN_PICKER, DANGER, DASHBOARD, POSITION, RISK } from '@/copy';
 import { hf, list, pct, tokenAmount, usd } from './format';
 import { HealthFactor, RISK_BAR } from './HealthFactor';
+import { LiquidationBanner, useLiquidationBanner } from './LiquidationBanner';
 import { liquidationText } from './LiquidationText';
 
 type Loaded = { chain: SupportedChain; read: ChainRead; view: ChainView };
@@ -75,14 +76,23 @@ export function Dashboard({ selectedChainId }: { selectedChainId: number }) {
     unread,
   );
   const dataOf = (chainId: number) => withData.find(({ chain }) => chain.chainId === chainId)!;
+  const liquidationBanner = useLiquidationBanner();
+  const banners = summary.dangerChains.length > 0 || liquidationBanner.liquidations.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="reveal" style={stagger(0)}>
         {isConnected ? (
           <>
-            <DangerBanner summary={summary} dataOf={dataOf} />
+            {/* Banner Bahaya lalu banner likuidasi (Q17), menempel di atas hero. */}
+            {banners && (
+              <div className="divide-y divide-line overflow-hidden rounded-t-[var(--radius)] border border-b-0 border-line">
+                <DangerBanner summary={summary} dataOf={dataOf} />
+                <LiquidationBanner liquidations={liquidationBanner.liquidations} onDismiss={liquidationBanner.dismiss} />
+              </div>
+            )}
             <Hero
+              attached={banners}
               summary={summary}
               loading={queries.some((q) => q.isLoading)}
               indebted={connected.filter(({ view }) => view.account!.healthFactor !== null)}
@@ -174,7 +184,7 @@ function ConnectHero() {
 }
 
 // Kerangka hero: isi di kiri, separuh kanan pola abstrak statis (kisi titik + garis tipis beraksen, `.hero-pattern`).
-// `attached` = banner Bahaya menempel di atasnya.
+// `attached` = banner (Bahaya/likuidasi) menempel di atasnya.
 function HeroFrame({ attached = false, children }: { attached?: boolean; children: ReactNode }) {
   return (
     <section className={`surface relative overflow-hidden ${attached ? 'rounded-t-none' : ''}`}>
@@ -191,10 +201,7 @@ function DangerBanner({ summary, dataOf }: { summary: DashboardSummary; dataOf: 
   const { chain, read } = dataOf(first.chainId);
   const liquidation = liquidationText(liquidationPrice(read, WHITELIST[first.chainId]));
   return (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-t-[var(--radius)] border border-b-0 border-line bg-danger-soft px-5 py-3 text-danger"
-    >
+    <div role="alert" className="flex flex-wrap items-center gap-x-4 gap-y-2 bg-danger-soft px-5 py-3 text-danger">
       <span className="display text-xs font-medium tracking-wide">{DANGER.tag}</span>
       <p className="flex-1 text-sm">
         {DANGER.hf(chain.name)} <b className="num">{hf(first.healthFactor)}</b>
@@ -214,7 +221,7 @@ function DangerBanner({ summary, dataOf }: { summary: DashboardSummary; dataOf: 
 // Angka hero aksen kalau Aman; ikut amber/merah kalau Waspada/Bahaya (Q20 "Show the Risk").
 const HERO_TONE: Record<RiskLevel, string> = { aman: 'text-accent', waspada: 'text-warn', bahaya: 'text-danger' };
 
-function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Loaded[]; selectedChainId: number }) {
+function Hero(props: { attached: boolean; summary: DashboardSummary; loading: boolean; indebted: Loaded[]; selectedChainId: number }) {
   const { summary, loading } = props;
   const lowest = summary.lowestHealthFactor;
   const incomplete = summary.incomplete;
@@ -222,7 +229,7 @@ function Hero(props: { summary: DashboardSummary; loading: boolean; indebted: Lo
   const money = (n: number) => (loading ? <span className="skeleton mt-1 block h-6 w-24" /> : usd(n));
 
   return (
-    <HeroFrame attached={summary.dangerChains.length > 0}>
+    <HeroFrame attached={props.attached}>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
         <span title={DASHBOARD.lowestHfInfo}>
           {DASHBOARD.lowestHf}

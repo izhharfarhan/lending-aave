@@ -16,6 +16,9 @@ import { latestBlockTimestamp, type ChainNetworkStatus } from './useNetworkStatu
 const AWAITING_POLL_MS = 3_000;
 const AWAITING_POLL_UNKNOWN_AGE_MS = 15_000;
 const AWAITING_POLL_FOR_SECONDS = 10 * 60;
+// Di luar itu tetap ditanya berkala, seirama bacaan chain dashboard: likuidasi oleh pihak lain (banner, Q17) nggak
+// pernah jadi tx lokal, jadi tanpa ini baru muncul sesudah reload atau fokus tab.
+const BACKGROUND_POLL_MS = 30_000;
 
 export type History = {
   /** Riwayat gabungan semua chain, terbaru dulu. */
@@ -43,9 +46,9 @@ export function useHistory(wallet: Address | undefined, network: ChainNetworkSta
   return { items, indexerFailed: INDEXER_URL === null || indexer.isError, loading: indexer.isLoading };
 }
 
-function pollInterval(items: HistoryItem[], network: ChainNetworkStatus[] | undefined): number | false {
+function pollInterval(items: HistoryItem[], network: ChainNetworkStatus[] | undefined): number {
   const awaiting = items.filter((item) => item.source === 'local' && item.awaitingIndexer);
   const latest = awaiting.map((item) => ({ item, latest: latestBlockTimestamp(network, item.chainId) }));
   if (latest.some(({ item, latest }) => latest !== null && latest - item.timestamp < AWAITING_POLL_FOR_SECONDS)) return AWAITING_POLL_MS;
-  return latest.some(({ latest }) => latest === null) ? AWAITING_POLL_UNKNOWN_AGE_MS : false;
+  return latest.some(({ latest }) => latest === null) ? AWAITING_POLL_UNKNOWN_AGE_MS : BACKGROUND_POLL_MS;
 }

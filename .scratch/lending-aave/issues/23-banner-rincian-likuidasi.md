@@ -8,12 +8,12 @@
 
 **Blocked by:** 21 (Indexer: likuidasi), 22 (Halaman riwayat + status jaringan), 11 (Dashboard: hero + segmen chain + banner Bahaya)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Banner untuk likuidasi 30 hari terakhir (dihitung dari timestamp blok, Q30) yang belum ditutup; ✕ menyimpan txHash + logIndex di localStorage (Q17)
-- [ ] Beberapa likuidasi digabung jadi satu banner + "Lihat riwayat"; posisinya di bawah banner Bahaya
-- [ ] Rincian: jaminan dijual (token + USD), utang dilunasi, penalti (token + USD + persen), HF sebelum likuidasi (atau "tidak tersedia"), "sisa utang <x> dihapus" kalau ada `DeficitCreated`, tautan explorer
-- [ ] Diverifikasi ujung ke ujung di fork memakai alat likuidasi Dev Tools (tiket 18)
+- [x] Banner untuk likuidasi 30 hari terakhir (dihitung dari timestamp blok, Q30) yang belum ditutup; ✕ menyimpan txHash + logIndex di localStorage (Q17)
+- [x] Beberapa likuidasi digabung jadi satu banner + "Lihat riwayat"; posisinya di bawah banner Bahaya
+- [x] Rincian: jaminan dijual (token + USD), utang dilunasi, penalti (token + USD + persen), HF sebelum likuidasi (atau "tidak tersedia"), "sisa utang <x> dihapus" kalau ada `DeficitCreated`, tautan explorer
+- [x] Diverifikasi ujung ke ujung di fork memakai alat likuidasi Dev Tools (tiket 18)
 
 ## Comments
 
@@ -35,3 +35,14 @@
     Ketiganya memenuhi semua syarat 50%. HF sesudah A/B/C = 1,1209.
   - **Pengamatan "sekali penuh, sekali 50%" (tiket 21) adalah kesalahan pengamatan, bukan perilaku kontrak.** Run "penuh" terkontaminasi: invocation pertama script gagal sesudah membuka posisi, lalu dijalankan ulang di Anvil yang sama, jadi posisinya 20 ETH / 30.000 USDC (= kasus C); burn 15.000 USDC dibaca keliru sebagai seluruh utang. Likuidator dan `receiveAToken` nggak berpengaruh.
   - Untuk teks tiket ini: banner/rincian tetap menampilkan jumlah dari indexer, tanpa "maksimal 50%" atau "separuh posisi". Verifikasi ujung ke ujung: kasus sebagian = posisi dengan jaminan & utang ≥ $2.000 dan HF di antara 0,95 dan 1 (mis. 10 ETH / 15.000 USDC di ETH $1.800); kasus habis + deficit = posisi kecil (utang < $2.000) di harga ETH rendah (mis. 1 ETH / 1.400 USDC di $1.100).
+- 2026-10-28 (selesai): core `core/liquidation.ts` (`bannerLiquidations` = likuidasi ≤ 30 hari menurut blok terbaru chain-nya + belum ditutup, `dismissKey` = chain:txHash:logIndex, `liquidationOutcome`, `liquidationFacts`). UI: `app/LiquidationBanner.tsx` (banner + `useLiquidationBanner`, ✕ di localStorage `lending-web:dismissedLiquidations`), `app/LiquidationDetails.tsx` (rincian, dipakai banner & baris Riwayat), `app/useTokenLookup.ts` (dipindah dari HistoryView). Banner Bahaya + likuidasi satu tumpukan di atas hero. Banyak likuidasi → "dilikuidasi N kali dalam 30 hari terakhir, di <chain>" + "Lihat riwayat" ke `/riwayat?jenis=liquidation` (filter Likuidasi terpilih).
+  - Kalimat hasil: sebagian → "Sebagian jaminan dijual untuk melunasi utang."; jaminan reserve itu habis (jaminan nonaktif di tx yang sama) → "Seluruh jaminan <token> dijual…"; ada `DeficitCreated` → "Seluruh jaminan dijual, dan sisa utang <x> dihapus." Nggak ada "separuh"/"50%".
+  - Persen penalti = bonus − 100% dan ditulis "5% dari utang dilunasi" (token & USD = total − total/bonus, GLOSSARY). Rincian tetap tampil sebagian kalau bacaan chain belum ada (jumlah "—", HF + tautan tx tetap).
+  - Di luar teks tiket, alasannya: (1) baris likuidasi di Riwayat juga bisa dibuka rinciannya, karena banner gabungan cuma mengarah ke Riwayat; (2) `useHistory` kini menarik indexer tiap 30 dtk (seirama bacaan chain), karena likuidasi oleh pihak lain nggak pernah jadi tx lokal; (3) likuidasi di chain yang blok terbarunya belum terbaca nggak masuk banner (umurnya nggak bisa dinilai, Q30).
+  - Belum ada: kalimat khusus "utang lunas" (utang reserve itu lunas 100% tapi jaminan tersisa). Indexer nggak menyimpan sisa utang sesudah likuidasi, jadi kasus ini tetap "Sebagian jaminan dijual…".
+  - Diverifikasi ujung ke ujung (build :3201 + Playwright, Anvil dev Ethereum di dalam `evm_snapshot`, posisi sementara 10 ETH / 15.000 USDC, likuidasi lewat Dev Tools):
+    - ETH $1.800: dilunasi 7.500 USDC, jaminan dijual 4,3741 ETH ($7.873), penalti 0,2083 ETH ($375, 5%), HF sebelum ≈ 0,99, banner tunggal di bawah banner Bahaya.
+    - ETH $500: seluruh sisa 5,6259 ETH dijual ($2.813), dilunasi 2.679,54 USDC, sisa utang 4.820,46 USDC dihapus, HF sebelum ≈ 0,31. Banner jadi gabungan "2 kali" → Lihat riwayat → dua baris dengan rincian.
+    - ✕ → hilang, tetap hilang sesudah reload. Tanpa page error.
+    - Sesudahnya `evm_revert` + `db:reset:fork` + `dev:fork` ulang: posisi kembali 1 ETH / 1.000 USDC (HF 1,915), indexer tanpa likuidasi.
+    - Perubahan teks sesudah review (persen penalti, jumlah sisa utang di kalimat banner, fallback "—") cuma dicek lewat Jest + typecheck, nggak diulang di browser.

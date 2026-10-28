@@ -181,7 +181,6 @@ export const HISTORY = {
   kinds: { supply: 'Supply', withdraw: 'Withdraw', borrow: 'Borrow', repay: 'Repay', liquidation: 'Likuidasi', collateral: 'Collateral' } as Record<HistoryKind, string>,
   collateral: (enabled: boolean) => (enabled ? 'jaminan aktif' : 'jaminan nonaktif'),
   liquidationSold: (amount: string) => `jaminan dijual ${amount}`,
-  deficit: 'sisa utang dihapus',
   awaiting: 'Menunggu indexer',
   failed: 'Gagal',
   ago: (age: string) => `${age} lalu`,
@@ -242,6 +241,34 @@ export const LIQUIDATION = {
   none: 'Tidak dipengaruhi harga ETH',
   mixed: 'Harga likuidasi tidak bisa dihitung untuk campuran aset ini, lihat Health factor',
   current: 'saat ini',
+};
+
+// Banner & rincian likuidasi (Q16, Q17, spec story 102–107). Istilah: GLOSSARY "Penalti likuidasi", "Biaya protokol",
+// "Sisa utang dihapus". Jumlah selalu dari indexer, tanpa "separuh"/"maksimal 50%" (close factor v3.7, tiket 23).
+export const LIQUIDATED = {
+  tag: 'LIKUIDASI',
+  one: (chain: string, when: string) => `Posisi Anda di ${chain} dilikuidasi pada ${when}.`,
+  many: (count: number, chains: string) => `Posisi Anda dilikuidasi ${count} kali dalam 30 hari terakhir, di ${chains}.`,
+  outcome: {
+    partial: 'Sebagian jaminan dijual untuk melunasi utang.',
+    collateralSold: (symbol: string) => `Seluruh jaminan ${symbol} dijual untuk melunasi utang.`,
+    debtWrittenOff: (amounts: string) => `Seluruh jaminan dijual, dan sisa utang ${amounts} dihapus.`,
+  },
+  showDetails: 'Apa yang terjadi?',
+  hideDetails: 'Tutup rincian',
+  viewHistory: 'Lihat riwayat →',
+  dismiss: 'Tutup pemberitahuan likuidasi',
+  unknownAmount: '—',
+  collateralLost: 'Jaminan dijual',
+  debtRepaid: 'Utang dilunasi',
+  penalty: 'Penalti likuidasi',
+  penaltyPercent: (percent: string) => `${percent} dari utang dilunasi`,
+  penaltyNote: 'termasuk biaya protokol',
+  hfBefore: 'HF sebelum likuidasi',
+  hfUnavailable: 'tidak tersedia',
+  hfNote: 'di bawah 1 = boleh dilikuidasi',
+  deficit: (amount: string) => `sisa utang ${amount} dihapus`,
+  explorer: 'Lihat transaksi ↗',
 };
 
 // E-Mode read-only (Q13, V4): diatur di app.aave.com; nama dari isi kategori, label on-chain cuma di "Detail parameter".
