@@ -8,10 +8,10 @@
 
 **Blocked by:** Semua tiket 01–24
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Mode mainnet (Alchemy) tanpa Dev Tools dan tanpa pengaman fork
-- [ ] Smoke test: supply → borrow → repay nominal kecil di Ethereum, Base, dan Arbitrum; verifikasi L1 fee Base
+- [x] Smoke test: supply → borrow → repay nominal kecil di Ethereum, Base, dan Arbitrum; verifikasi L1 fee Base. **Cakupan dipersempit ke Base** (lolos 2×); Ethereum & Arbitrum tidak diuji karena dana, lihat komentar 2026-10-29
 - [x] README lending-web + lending-indexer: setup env, `anvil:up`, menjalankan app/indexer/test, catatan RPC archive dan EIP-7702, cara memasang font lokal
 - [x] Cek `POOL_REVISION` masih 11 di ketiga chain; kalau berubah, cek ulang aturan E-Mode/event sebelum lanjut
 
@@ -44,3 +44,7 @@
   - **Kuota, pengukuran tambahan:** web mode mainnet dengan tab browser di belakang = 0 CU/s (polling berhenti saat halaman tersembunyi), jadi 136,5 CU/s sebelumnya hampir seluruhnya indexer. Throughput limited 6% muncul lagi tepat saat indexer dinyalakan dan mengejar blok, mendukung dugaan 429 sebagai pemicu bug 1.
   - **Bug 2 (posisi debu), sudah dikerjakan:** `usd()` menulis "< $0,01" untuk nilai yang nggak sampai satu sen (tanda minus di depan "$" untuk net negatif, mis. "−$12,50"). Posisi debu = utang < $0,01 di satu chain (`isDustPosition`, `DUST_DEBT_USD`): nggak ikut HF terendah, skala HF hero, banner Bahaya (termasuk dari data terakhir chain yang gagal dibaca), dan batas pinjam tertinggi; totalnya tetap ikut. Kalau semua utang debu, hero menulis "Tidak ada utang". Kartu chain dan detail chain tetap menampilkan HF asli + catatan "Posisi debu: utang < $0,01, tidak dihitung di HF terendah"; harga likuidasi di kartu chain disembunyikan untuk posisi debu. GLOSSARY: entri "Posisi debu", "HF terendah" dan "Chain berbahaya" diperbarui. Test: `format.spec.ts` (usd) + `summary.spec.ts` (posisi debu), merah sebelum perbaikan. Belum dicek visual di mainnet.
   - Ethereum & Arbitrum masih ditunda sampai saldo user diisi.
+- 2026-10-29 (keputusan user, tiket ditutup):
+  - Smoke test mainnet cukup di Base, yang sudah lolos 2× (2026-10-28 dan 2026-10-29, sesudah fix bug 1). L1 fee Base terverifikasi hampir nol.
+  - Ethereum & Arbitrum **tidak diuji** di mainnet karena dana. Yang tetap jadi pegangan: alur yang sama lolos di fork ketiga chain (E2E + test fork), `POOL_REVISION` = 11 di ketiga chain, dan tabel ketiga chain terbaca di mode mainnet. Belum terbukti di mainnet: biaya gas Ethereum (perkiraan `check:mainnet` ±$0,63) dan gas unit Arbitrum (perkiraan memakai kalibrasi Ethereum).
+  - Sisa di luar tiket: user merotasi key Alchemy.
