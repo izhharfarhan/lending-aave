@@ -8,10 +8,17 @@
 
 **Blocked by:** 19 (Indexer tracer (repo lending-indexer))
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Event `Withdraw`, `Borrow`, `Repay`, `ReserveUsedAsCollateralEnabled/Disabled` di 3 chain
-- [ ] Pemilik (#11): Supply/Borrow → `onBehalfOf`; Repay/Withdraw → `user`; withdraw ETH: `Withdraw.user` = gateway, pemilik dari `Transfer` aWETH user → gateway di tx yang sama (V2)
-- [ ] Event jaminan otomatis (supply pertama, saldo habis) digabung ke baris tx-nya; baris Collateral hanya untuk toggle manual (V3, Q18)
-- [ ] API GraphQL: riwayat semua chain per alamat dengan filter chain + jenis, plus status sinkron per chain
-- [ ] Test Vitest untuk atribusi pemilik (depositETH, borrowETH, withdrawETH) dan penggabungan event jaminan
+- [x] Event `Withdraw`, `Borrow`, `Repay`, `ReserveUsedAsCollateralEnabled/Disabled` di 3 chain
+- [x] Pemilik (#11): Supply/Borrow → `onBehalfOf`; Repay/Withdraw → `user`; withdraw ETH: `Withdraw.user` = gateway, pemilik dari `Transfer` aWETH user → gateway di tx yang sama (V2)
+- [x] Event jaminan otomatis (supply pertama, saldo habis) digabung ke baris tx-nya; baris Collateral hanya untuk toggle manual (V3, Q18)
+- [x] API GraphQL: riwayat semua chain per alamat dengan filter chain + jenis, plus status sinkron per chain
+- [x] Test Vitest untuk atribusi pemilik (depositETH, borrowETH, withdrawETH) dan penggabungan event jaminan
+
+## Comments
+
+- 2026-10-28 (selesai, lending-indexer ac4bedc + a3dcccc): `position_event` sekarang punya jenis `supply/withdraw/borrow/repay/collateral`, kolom `collateralEnabled` (null = jaminan nggak berubah), `amount` kosong di baris collateral. Aturan pemilik di `src/core/positionEvent.ts`, penggabungan di `src/core/collateralMerge.ts` (tabel bantu `tx_slot`; Ponder cuma bisa `find` lewat primary key). withdrawETH: `Transfer` aWETH difilter `to = gateway` di config Ponder (tabel `gateway_transfer`).
+  - Status sinkron per chain = `_meta { status }` bawaan Ponder, dikunci nama chain (`mainnet`/`base`/`arbitrum`), bukan chainId: tiket 22 perlu memetakannya.
+  - Test integrasi 3 Anvil (:48555/6/7). Tx test wajib gas limit estimasi + 20%: tanpa itu supply USDC kedua, repayETH, dan withdrawETH Arbitrum gagal.
+  - **Batasan (belum diputuskan user)**: transfer seluruh aToken ke alamat lain tercatat sebagai baris `collateral` seperti toggle manual; dalam tx batch smart wallet, toggle manual searah sebelum supply/withdraw di reserve yang sama ikut tergabung. Membedakannya butuh baca saldo aToken di blok −1 per event.
