@@ -130,6 +130,7 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
         <div className="flex min-w-0 flex-col gap-4">
           {view.account && (
             <PositionTables
+              chainId={chainId}
               view={view}
               activeSupply={active('withdraw') ?? active('collateral')}
               activeDebt={active('repay')}
@@ -142,6 +143,7 @@ export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: bool
             />
           )}
           <MarketTables
+            chainId={chainId}
             view={view}
             activeSupply={active('supply')}
             activeBorrow={active('borrow')}
@@ -231,6 +233,7 @@ function Fact({ label, info, children }: { label: string; info?: string; childre
 }
 
 function PositionTables(props: {
+  chainId: number;
   view: ChainView;
   activeSupply: Address | undefined;
   activeDebt: Address | undefined;
@@ -245,10 +248,11 @@ function PositionTables(props: {
   return (
     <div className="grid gap-4 2xl:grid-cols-2">
       <FlatTable
+        chainId={props.chainId}
         title={TABLE.supplies}
         empty={TABLE.noSupplies}
         rows={view.supplies.map((row) => ({
-          key: row.asset,
+          asset: row.asset,
           symbol: row.symbol,
           note: <AssetNote outside={row.outside} status={row.status} />,
           active: row.asset === props.activeSupply,
@@ -278,10 +282,11 @@ function PositionTables(props: {
         heads={[APY_HEAD, TABLE.balance, TABLE.collateral]}
       />
       <FlatTable
+        chainId={props.chainId}
         title={TABLE.borrows}
         empty={TABLE.noBorrows}
         rows={view.borrows.map((row) => ({
-          key: row.asset,
+          asset: row.asset,
           symbol: row.symbol,
           note: <AssetNote outside={row.outside} status={row.status} />,
           active: row.asset === props.activeDebt,
@@ -298,6 +303,7 @@ function PositionTables(props: {
 }
 
 function MarketTables(props: {
+  chainId: number;
   view: ChainView;
   activeSupply: Address | undefined;
   activeBorrow: Address | undefined;
@@ -312,6 +318,7 @@ function MarketTables(props: {
   return (
     <div className="grid gap-4 2xl:grid-cols-2">
       <FlatTable
+        chainId={props.chainId}
         title={TABLE.supplyMarket}
         aside={
           connected && (
@@ -330,7 +337,7 @@ function MarketTables(props: {
         }
         empty={connected ? TABLE.emptyWallet : TABLE.emptyMarket}
         rows={visibleSupplyMarket(view.supplyMarket, showAll).map((row) => ({
-          key: row.asset,
+          asset: row.asset,
           symbol: row.symbol,
           // Kolom "Jaminan" disembunyikan di mobile; infonya pindah ke samping nama aset.
           note: row.canBeCollateral && <span className="text-xs text-muted md:hidden">{TABLE.collateralNote}</span>,
@@ -348,10 +355,11 @@ function MarketTables(props: {
         secondary={2}
       />
       <FlatTable
+        chainId={props.chainId}
         title={TABLE.borrowMarket}
         empty={TABLE.emptyMarket}
         rows={view.borrowMarket.map((row) => ({
-          key: row.asset,
+          asset: row.asset,
           symbol: row.symbol,
           active: row.asset === props.activeBorrow,
           onClick: props.borrowable.has(row.asset) ? () => props.onBorrow(row.asset) : undefined,
@@ -390,10 +398,10 @@ function AssetNote({ outside, status }: { outside: boolean; status: ReserveStatu
 }
 
 /** Baris tanpa `onClick` belum punya aksi (bukan sekadar nonaktif): kursor biasa, nggak bisa difokus. */
-type Row = { key: string; symbol: string; note?: ReactNode; cells: ReactNode[]; active?: boolean; onClick?: () => void };
+type Row = { asset: Address; symbol: string; note?: ReactNode; cells: ReactNode[]; active?: boolean; onClick?: () => void };
 
 /** `secondary` = indeks kolom (di `heads`/`cells`) yang disembunyikan di mobile supaya tabel ringkas. */
-function FlatTable({ title, aside, heads, secondary, rows, empty }: { title: string; aside?: ReactNode; heads: ReactNode[]; secondary?: number; rows: Row[]; empty: string }) {
+function FlatTable({ chainId, title, aside, heads, secondary, rows, empty }: { chainId: number; title: string; aside?: ReactNode; heads: ReactNode[]; secondary?: number; rows: Row[]; empty: string }) {
   const hide = (i: number) => (i === secondary ? 'max-md:hidden' : undefined);
   return (
     <div className="surface pt-4">
@@ -418,7 +426,7 @@ function FlatTable({ title, aside, heads, secondary, rows, empty }: { title: str
           <tbody>
             {rows.map((row) => (
               <tr
-                key={row.key}
+                key={row.asset}
                 data-active={row.active ?? false}
                 className={row.onClick ? '' : '!cursor-default'}
                 onClick={row.onClick}
@@ -427,7 +435,7 @@ function FlatTable({ title, aside, heads, secondary, rows, empty }: { title: str
               >
                 <td>
                   <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <TokenIcon symbol={row.symbol} />
+                    <TokenIcon chainId={chainId} asset={row.asset} symbol={row.symbol} />
                     <span className="font-medium">{row.symbol}</span>
                     {row.note}
                   </span>

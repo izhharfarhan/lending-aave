@@ -79,7 +79,7 @@ export function ParameterDetails({ chainId, chainName, read, whitelist, eModeLab
               <tr key={row.asset} className="!cursor-default">
                 <td>
                   <span className="flex items-center gap-2.5">
-                    <TokenIcon symbol={row.symbol} />
+                    <TokenIcon chainId={chainId} asset={row.asset} symbol={row.symbol} />
                     <span className="font-medium">{row.symbol}</span>
                   </span>
                 </td>

@@ -212,7 +212,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
           {row.tab === 'collateral' ? (
             <div>
               <p className="flex items-center gap-2.5 text-base font-medium">
-                <TokenIcon symbol={row.symbol} /> {PANEL.collateralTitle(row.symbol)}
+                <TokenIcon chainId={chainId} asset={row.asset} symbol={row.symbol} /> {PANEL.collateralTitle(row.symbol)}
               </p>
               <p className="mt-2 text-sm leading-relaxed text-muted">
                 {row.collateral ? PANEL.collateralOn(row.symbol) : PANEL.collateralOff(row.symbol)}
@@ -262,7 +262,7 @@ export function ActionPanel({ chainId, data, tab, asset, onSelect, refetch }: Pr
                   </button>
                 )}
                 <label className="btn-ghost flex shrink-0 items-center gap-2 py-1.5 pl-2 pr-1">
-                  <TokenIcon symbol={row.symbol} size={20} />
+                  <TokenIcon chainId={chainId} asset={row.asset} symbol={row.symbol} size={20} />
                   <select
                     value={row.asset}
                     disabled={tx.status === 'running'}

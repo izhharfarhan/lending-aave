@@ -31,6 +31,8 @@
   --tok-usdt: #23a07a;
   --tok-wsteth: #3aa3e8;
   --tok-other: #6b726d;
+  /* Alas terang untuk logo yang bukan lingkaran (berlian ETH), biar kelihatan di tema gelap. */
+  --tok-plate: #e8eaf1;
   /* Inisial di ikon chain (latar warna chain yang terang). */
   --chain-ink: #000;
   --chain-ethereum: #b4bccb;

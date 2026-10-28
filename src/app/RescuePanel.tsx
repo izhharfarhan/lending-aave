@@ -46,6 +46,7 @@ export function RescuePanel({ chainId, data, onChoose }: Props) {
         </p>
       </div>
       <Option
+        chainId={chainId}
         title={PANEL.tabs.repay}
         note={RESCUE.repayNote}
         choice={options.repay}
@@ -54,6 +55,7 @@ export function RescuePanel({ chainId, data, onChoose }: Props) {
         onChoose={() => onChoose('repay', options.repay?.asset)}
       />
       <Option
+        chainId={chainId}
         title={RESCUE.supply}
         note={RESCUE.supplyNote}
         choice={options.supply}
@@ -66,6 +68,7 @@ export function RescuePanel({ chainId, data, onChoose }: Props) {
 }
 
 type OptionProps = {
+  chainId: number;
   title: string;
   note: string;
   choice: RescueChoice | null;
@@ -87,7 +90,7 @@ function Option(props: OptionProps) {
           <div className="flex items-center justify-between gap-3">
             <dt className="text-muted">{PANEL.amount}</dt>
             <dd className="flex items-center gap-2">
-              <TokenIcon symbol={choice.symbol} />
+              <TokenIcon chainId={props.chainId} asset={choice.asset} symbol={choice.symbol} />
               <span className="num">{RESCUE.using(tokenAmount(choice.amount, choice.decimals), choice.symbol)}</span>
             </dd>
           </div>

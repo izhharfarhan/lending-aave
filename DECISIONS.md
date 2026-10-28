@@ -301,6 +301,11 @@ Tiga journey. Withdraw/repay biasa ikut pola J1/J2.
   Aturannya tetap: satu aksen untuk aksi, pilihan aktif, dan angka hero (kalau Aman);
   Aman netral, Waspada amber, Bahaya merah. Warna chain Ethereum dan logo ETH digeser ke
   abu-biru supaya nggak tertukar dengan aksen.
+- **Logo token asli** (tiket 26, 2026-10-29, permintaan user): menggantikan "inisial dalam
+  lingkaran berwarna, tanpa aset bermerek". File lokal di `public/tokens/` dari sumber resmi
+  penerbit (sumber + lisensi di README folder itu), nggak pernah dari URL luar saat runtime.
+  Dipetakan per alamat + chain (`src/config/tokenLogos.ts`), bukan simbol. Aset whitelist
+  wajib punya logo; aset lain tanpa logo, atau file yang gagal dimuat, tetap inisial.
 
 ### Q21 — Kartu chain tanpa posisi
 - "Belum ada posisi · <saldo terbesar aset whitelist> di wallet bisa di-supply";

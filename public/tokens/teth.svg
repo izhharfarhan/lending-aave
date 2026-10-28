@@ -1,0 +1,31 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 8C0 3.58172 3.58172 0 8 0H16C20.4183 0 24 3.58172 24 8V16C24 20.4183 20.4183 24 16 24H8C3.58172 24 0 20.4183 0 16V8Z" fill="#191918"/>
+<path d="M11.9997 18.75L10.0433 14.3908L8.08276 13.234L11.9997 18.75Z" fill="#007FED"/>
+<path d="M15.9169 13.234L12 18.75L13.9563 14.3908L15.9169 13.234Z" fill="url(#paint0_linear_2508_4590)"/>
+<path d="M11.9997 10.9139L8.08276 13.2318L10.0433 14.3885L11.9997 13.2318L13.956 14.3885L15.9165 13.2318L11.9997 10.9139Z" fill="url(#paint1_linear_2508_4590)"/>
+<path d="M11.9988 11.7484V5.25L10.0425 12.9052L11.9988 11.7484Z" fill="#008CA3"/>
+<path d="M12 11.7484V5.25L13.9563 12.9052L12 11.7484Z" fill="#28ACAC"/>
+<path d="M8.08276 11.7484L11.9997 5.25L10.0433 12.9052L8.08276 11.7484Z" fill="#28ACAC"/>
+<path d="M15.9169 11.7484L12 5.25L13.9563 12.9052L15.9169 11.7484Z" fill="#008CA3"/>
+<path d="M11.9988 18.75L10.0425 14.3908L11.9988 13.234V18.75Z" fill="url(#paint2_linear_2508_4590)"/>
+<path d="M12 18.75L13.9563 14.3908L12 13.234V18.75Z" fill="#007FED"/>
+<path d="M11.9997 9.43085L8.08276 11.7487L10.0433 12.9054L11.9997 11.7487L13.956 12.9054L15.9165 11.7487L11.9997 9.43085Z" fill="url(#paint3_linear_2508_4590)"/>
+<defs>
+<linearGradient id="paint0_linear_2508_4590" x1="12" y1="15.992" x2="15.9169" y2="15.992" gradientUnits="userSpaceOnUse">
+<stop offset="0.000235553" stop-color="#0069E0"/>
+<stop offset="0.9848" stop-color="#0069E0"/>
+</linearGradient>
+<linearGradient id="paint1_linear_2508_4590" x1="11.9997" y1="16.1024" x2="11.9997" y2="12.6278" gradientUnits="userSpaceOnUse">
+<stop offset="0.25" stop-color="#00A5E6"/>
+<stop offset="1" stop-color="#0098E6"/>
+</linearGradient>
+<linearGradient id="paint2_linear_2508_4590" x1="10.0425" y1="15.992" x2="11.9988" y2="15.992" gradientUnits="userSpaceOnUse">
+<stop offset="0.000235553" stop-color="#0069E0"/>
+<stop offset="0.9848" stop-color="#0069E0"/>
+</linearGradient>
+<linearGradient id="paint3_linear_2508_4590" x1="11.9997" y1="12.9054" x2="11.9997" y2="9.43085" gradientUnits="userSpaceOnUse">
+<stop stop-color="#00A5E6" stop-opacity="0.8"/>
+<stop offset="0.6" stop-color="#42E4AE" stop-opacity="0.6"/>
+</linearGradient>
+</defs>
+</svg>
