@@ -7,12 +7,14 @@ import { mergeHistory, type HistoryItem } from '@/core/history';
 
 import { fetchIndexerHistory } from './fetchIndexer';
 import { useLocalHistories } from './useLocalHistory';
-import type { ChainNetworkStatus } from './useNetworkStatus';
+import { latestBlockTimestamp, type ChainNetworkStatus } from './useNetworkStatus';
 
 // Selama ada tx yang "menunggu indexer", indexer ditanya ulang segini sekali (pola swap-web). Tx yang sudah lebih
 // lama dari `AWAITING_POLL_FOR_SECONDS` (waktu chain, Q30) dan belum juga muncul nggak dipolling lagi, mis. hash sesi
-// fork lama sesudah Anvil + database indexer di-reset.
+// fork lama sesudah Anvil + database indexer di-reset. Blok terbaru chain-nya belum terbaca (RPC gagal, status belum
+// dimuat) = umurnya nggak bisa dinilai: tetap ditanya, tapi pelan.
 const AWAITING_POLL_MS = 3_000;
+const AWAITING_POLL_UNKNOWN_AGE_MS = 15_000;
 const AWAITING_POLL_FOR_SECONDS = 10 * 60;
 
 export type History = {
@@ -33,7 +35,7 @@ export function useHistory(wallet: Address | undefined, network: ChainNetworkSta
     // Gagal = offline; jangan menunggu 3× retry dulu baru badge muncul.
     retry: false,
     refetchOnWindowFocus: true,
-    refetchInterval: (query) => (stillAwaiting(mergeHistory(query.state.data ?? [], local), network) ? AWAITING_POLL_MS : false),
+    refetchInterval: (query) => pollInterval(mergeHistory(query.state.data ?? [], local), network),
   });
 
   const entries = indexer.data;
@@ -41,10 +43,9 @@ export function useHistory(wallet: Address | undefined, network: ChainNetworkSta
   return { items, indexerFailed: INDEXER_URL === null || indexer.isError, loading: indexer.isLoading };
 }
 
-function stillAwaiting(items: HistoryItem[], network: ChainNetworkStatus[] | undefined): boolean {
-  return items.some((item) => {
-    if (item.source !== 'local' || !item.awaitingIndexer) return false;
-    const head = network?.find((chain) => chain.chainId === item.chainId)?.head;
-    return !head || head.timestamp - item.timestamp < AWAITING_POLL_FOR_SECONDS;
-  });
+function pollInterval(items: HistoryItem[], network: ChainNetworkStatus[] | undefined): number | false {
+  const awaiting = items.filter((item) => item.source === 'local' && item.awaitingIndexer);
+  const latest = awaiting.map((item) => ({ item, latest: latestBlockTimestamp(network, item.chainId) }));
+  if (latest.some(({ item, latest }) => latest !== null && latest - item.timestamp < AWAITING_POLL_FOR_SECONDS)) return AWAITING_POLL_MS;
+  return latest.some(({ latest }) => latest === null) ? AWAITING_POLL_UNKNOWN_AGE_MS : false;
 }

@@ -22,7 +22,7 @@ import { liquidationPrice, type Simulation } from '@/core/simulate';
 import { APPROVAL, CHAIN_PICKER, CTA, GAS, PANEL, GRANT, POSITION, RISK_CONFIRM, STEPS, TABLE, TX, TX_ERROR } from '@/copy';
 import { switchChainErrorKind, type WalletErrorKind } from '@/core/walletError';
 import { useForkGuard } from '@/wallet/useForkGuard';
-import { hf, pct, tokenAmount, usd } from './format';
+import { hf, pct, shortAddress, tokenAmount, usd } from './format';
 import { HealthFactorChange } from './HealthFactor';
 import { LiquidationText, liquidationText } from './LiquidationText';
 import { TokenIcon } from './TokenIcon';
@@ -611,7 +611,6 @@ function ApprovalSettings(props: {
   );
 }
 
-const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
 type StepCopy = {
   symbol: string;
@@ -705,7 +704,7 @@ function WalletSteps(props: StepCopy & { chainId: number; steps: WalletStepName[
 function OfficialAddress(props: { chainId: number; label: string; address: Address }) {
   return (
     <p className="mt-1 text-xs text-muted">
-      {props.label} <span className="num text-ink">{short(props.address)}</span> · <span className="text-ink">{STEPS.official}</span> ·{' '}
+      {props.label} <span className="num text-ink">{shortAddress(props.address)}</span> · <span className="text-ink">{STEPS.official}</span> ·{' '}
       <a className="link" href={explorerAddressUrl(props.chainId, props.address)} target="_blank" rel="noreferrer">
         {STEPS.explorer}
       </a>
@@ -806,7 +805,7 @@ function TxProgress(
 function TxLink({ chainId, hash }: { chainId: number; hash: Hash }) {
   return (
     <span className="num mt-1 block pl-5 text-xs text-muted">
-      {short(hash)} ·{' '}
+      {shortAddress(hash)} ·{' '}
       {IS_FORK ? (
         TX.forkTx
       ) : (

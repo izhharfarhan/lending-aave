@@ -1,4 +1,4 @@
-import { historyMayBeIncomplete, indexerChainStatus } from './indexerStatus';
+import { indexerChainStatus, indexerSummary } from './indexerStatus';
 
 const health = (overrides: Partial<Parameters<typeof indexerChainStatus>[0]> = {}) => ({
   online: true,
@@ -41,10 +41,35 @@ describe('indexerChainStatus()', () => {
   });
 });
 
-describe('historyMayBeIncomplete()', () => {
-  it('flags the history once any chain is offline or lagging', () => {
-    expect(historyMayBeIncomplete([{ kind: 'synced' }, { kind: 'synced' }])).toBe(false);
-    expect(historyMayBeIncomplete([{ kind: 'synced' }, { kind: 'lagging', blocks: 40n }])).toBe(true);
-    expect(historyMayBeIncomplete([{ kind: 'offline' }])).toBe(true);
+describe('indexerSummary()', () => {
+  // Satu ringkasan untuk footer sidebar dan badge "Riwayat mungkin belum lengkap" (Q18).
+  it('is synced only when every chain is synced', () => {
+    expect(indexerSummary([{ chainId: 1, status: { kind: 'synced' } }, { chainId: 8453, status: { kind: 'synced' } }])).toEqual({ kind: 'synced' });
+  });
+
+  it('lists every lagging chain with its gap', () => {
+    expect(
+      indexerSummary([
+        { chainId: 1, status: { kind: 'synced' } },
+        { chainId: 8453, status: { kind: 'lagging', blocks: 40n } },
+        { chainId: 42161, status: { kind: 'lagging', blocks: null } },
+      ]),
+    ).toEqual({
+      kind: 'lagging',
+      chains: [
+        { chainId: 8453, blocks: 40n },
+        { chainId: 42161, blocks: null },
+      ],
+    });
+  });
+
+  // Indexer yang sama untuk semua chain: offline di satu = offline.
+  it('is offline when the indexer is offline, even if another chain looks lagging', () => {
+    expect(indexerSummary([{ chainId: 1, status: { kind: 'lagging', blocks: 9n } }, { chainId: 8453, status: { kind: 'offline' } }])).toEqual({ kind: 'offline' });
+  });
+
+  // Riwayat gagal diambil walau `_meta` masih menjawab.
+  it('is offline when the history itself could not be fetched', () => {
+    expect(indexerSummary([{ chainId: 1, status: { kind: 'synced' } }], { historyFailed: true })).toEqual({ kind: 'offline' });
   });
 });

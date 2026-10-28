@@ -7,16 +7,15 @@ import { useAccount } from 'wagmi';
 
 import { useAllChainViews } from '@/aave/useChainView';
 import { useHistory } from '@/aave/useHistory';
-import { useNetworkStatus, type ChainNetworkStatus } from '@/aave/useNetworkStatus';
+import { indexerSummaryOf, latestBlockTimestamp, useNetworkStatus, type ChainNetworkStatus } from '@/aave/useNetworkStatus';
 import { WHITELIST } from '@/config/assets';
 import { SUPPORTED_CHAINS, supportedChain } from '@/config/chains';
 import { explorerTxUrl } from '@/config/explorer';
 import { AGE, HISTORY } from '@/copy';
 import { filterHistory, HISTORY_KINDS, type HistoryFilter, type HistoryItem } from '@/core/history';
-import { historyMayBeIncomplete } from '@/core/indexerStatus';
 import { historyAge } from '@/core/relativeTime';
 
-import { list, tokenAmount } from './format';
+import { list, shortAddress, tokenAmount } from './format';
 
 // Halaman Riwayat (Q18): semua chain satu daftar, terbaru di atas, filter chain + jenis. Indexer + tx lokal digabung
 // (`mergeHistory`); badge "Riwayat mungkin belum lengkap" kalau indexer offline atau tertinggal di chain mana pun.
@@ -54,7 +53,7 @@ export function HistoryView() {
       ) : (
         <ul className="surface divide-y divide-line">
           {items.map((item) => (
-            <HistoryRow key={rowKey(item)} item={item} tokenOf={tokenOf} latest={network?.find((chain) => chain.chainId === item.chainId)?.head?.timestamp ?? null} />
+            <HistoryRow key={rowKey(item)} item={item} tokenOf={tokenOf} latest={latestBlockTimestamp(network, item.chainId)} />
           ))}
         </ul>
       )}
@@ -77,14 +76,16 @@ function ConnectPrompt() {
 }
 
 function IncompleteBadge({ network, indexerFailed }: { network: ChainNetworkStatus[] | undefined; indexerFailed: boolean }) {
-  const statuses = (network ?? []).map((chain) => chain.indexer);
-  const offline = indexerFailed || statuses.some((status) => status.kind === 'offline');
-  if (!offline && !historyMayBeIncomplete(statuses)) return null;
-  const lagging = (network ?? []).filter((chain) => chain.indexer.kind === 'lagging').map((chain) => supportedChain(chain.chainId).name);
+  const summary = indexerSummaryOf(network ?? [], { historyFailed: indexerFailed });
+  if (summary.kind === 'synced') return null;
   return (
     <div role="status" className="flex flex-col gap-1">
       <span className="badge badge-warn self-start">{HISTORY.incomplete}</span>
-      <p className="text-xs text-muted">{offline ? HISTORY.incompleteDetail.offline : HISTORY.incompleteDetail.lagging(list(lagging))}</p>
+      <p className="text-xs text-muted">
+        {summary.kind === 'offline'
+          ? HISTORY.incompleteDetail.offline
+          : HISTORY.incompleteDetail.lagging(list(summary.chains.map((chain) => supportedChain(chain.chainId).name)))}
+      </p>
     </div>
   );
 }
@@ -172,4 +173,3 @@ function describe(item: HistoryItem, tokenOf: TokenLookup): string {
   return parts.join(' · ');
 }
 
-const shortAddress = (address: Address) => `${address.slice(0, 6)}…${address.slice(-4)}`;

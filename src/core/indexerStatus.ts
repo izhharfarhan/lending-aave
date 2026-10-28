@@ -24,7 +24,17 @@ export function indexerChainStatus({ online, indexedBlock, headBlock, maxLagBloc
   return behind > BigInt(maxLagBlocks) ? { kind: 'lagging', blocks: behind } : { kind: 'synced' };
 }
 
-/** Badge "Riwayat mungkin belum lengkap" (Q18): ada chain yang indexer-nya offline atau tertinggal. */
-export function historyMayBeIncomplete(statuses: IndexerChainStatus[]): boolean {
-  return statuses.some((status) => status.kind !== 'synced');
+export type IndexerSummary =
+  | { kind: 'synced' }
+  | { kind: 'offline' }
+  | { kind: 'lagging'; chains: { chainId: number; blocks: bigint | null }[] };
+
+/**
+ * Satu ringkasan untuk footer sidebar dan badge "Riwayat mungkin belum lengkap" (Q18): offline (indexer yang sama untuk
+ * semua chain, atau riwayatnya sendiri gagal diambil) > tertinggal (semua chain yang tertinggal) > sinkron.
+ */
+export function indexerSummary(chains: { chainId: number; status: IndexerChainStatus }[], { historyFailed = false } = {}): IndexerSummary {
+  if (historyFailed || chains.some(({ status }) => status.kind === 'offline')) return { kind: 'offline' };
+  const lagging = chains.flatMap(({ chainId, status }) => (status.kind === 'lagging' ? [{ chainId, blocks: status.blocks }] : []));
+  return lagging.length > 0 ? { kind: 'lagging', chains: lagging } : { kind: 'synced' };
 }

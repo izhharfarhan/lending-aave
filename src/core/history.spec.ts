@@ -57,7 +57,7 @@ describe('toIndexedEntry()', () => {
   });
 
   // Tiket 21: rincian likuidasi lewat relasi `positionEvent.liquidation`; deficit berpasangan per indeks.
-  it('pairs the liquidation deficits and keeps an unavailable health factor as null', () => {
+  it('pairs the debt written off per asset and keeps an unavailable health factor as null', () => {
     const liquidation = {
       debtAsset: USDC,
       debtToCover: '1047832271',

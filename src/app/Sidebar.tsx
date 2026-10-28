@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { useNetworkStatus, type ChainNetworkStatus } from '@/aave/useNetworkStatus';
+import { indexerSummaryOf, useNetworkStatus, type ChainNetworkStatus } from '@/aave/useNetworkStatus';
 import { IS_FORK } from '@/config/appMode';
 import { supportedChain } from '@/config/chains';
 import { NAV, NETWORK, PAGE } from '@/copy';
@@ -70,17 +70,17 @@ function NetworkFooter() {
 
 // Satu baris untuk semua chain: offline (indexer sama untuk ketiganya) > tertinggal (chain mana saja) > sinkron.
 function IndexerLine({ chains }: { chains: ChainNetworkStatus[] }) {
-  const offline = chains.some((chain) => chain.indexer.kind === 'offline');
-  const lagging = chains.flatMap((chain) => {
-    if (chain.indexer.kind !== 'lagging') return [];
+  const summary = indexerSummaryOf(chains);
+  const lagging = (chain: { chainId: number; blocks: bigint | null }) => {
     const name = supportedChain(chain.chainId).name;
-    return [chain.indexer.blocks === null ? NETWORK.laggingUnknown(name) : NETWORK.laggingBlocks(name, chain.indexer.blocks.toLocaleString('id-ID'))];
-  });
-  const [text, tone, dot] = offline
-    ? [NETWORK.indexerOffline, 'text-danger', 'bg-danger']
-    : lagging.length > 0
-      ? [NETWORK.indexerLagging(lagging.join(', ')), 'text-warn', 'bg-warn']
-      : [NETWORK.indexerSynced, 'text-muted', 'bg-muted'];
+    return chain.blocks === null ? NETWORK.laggingUnknown(name) : NETWORK.laggingBlocks(name, chain.blocks.toLocaleString('id-ID'));
+  };
+  const [text, tone, dot] =
+    summary.kind === 'offline'
+      ? [NETWORK.indexerOffline, 'text-danger', 'bg-danger']
+      : summary.kind === 'lagging'
+        ? [NETWORK.indexerLagging(summary.chains.map(lagging).join(', ')), 'text-warn', 'bg-warn']
+        : [NETWORK.indexerSynced, 'text-muted', 'bg-muted'];
   return (
     <p className={`mt-3 flex items-start gap-2 text-xs ${tone}`}>
       <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />

@@ -174,7 +174,7 @@ export const AGE = {
 export const HISTORY = {
   title: 'Riwayat',
   connectPrompt: (chains: string) => `Hubungkan wallet untuk melihat riwayat transaksi Anda di ${chains}.`,
-  connect: 'Hubungkan wallet',
+  connect: WALLET.connect,
   filterChain: 'Chain',
   filterKind: 'Jenis',
   all: 'Semua',

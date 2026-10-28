@@ -4,7 +4,7 @@ import { getPublicClient } from 'wagmi/actions';
 
 import { SUPPORTED_CHAINS } from '@/config/chains';
 import { INDEXER_URL } from '@/config/indexer';
-import { indexerChainStatus, type IndexerChainStatus } from '@/core/indexerStatus';
+import { indexerChainStatus, indexerSummary, type IndexerChainStatus } from '@/core/indexerStatus';
 
 import { fetchIndexedBlocks } from './fetchIndexer';
 
@@ -50,3 +50,11 @@ export function useNetworkStatus() {
     refetchOnWindowFocus: true,
   });
 }
+
+/** Timestamp blok terbaru chain itu (acuan waktu relatif, Q30); `null` = belum terbaca atau RPC gagal. */
+export const latestBlockTimestamp = (network: ChainNetworkStatus[] | undefined, chainId: number) =>
+  network?.find((chain) => chain.chainId === chainId)?.head?.timestamp ?? null;
+
+/** Ringkasan indexer semua chain untuk footer dan badge Riwayat. */
+export const indexerSummaryOf = (network: ChainNetworkStatus[], options?: { historyFailed?: boolean }) =>
+  indexerSummary(network.map((chain) => ({ chainId: chain.chainId, status: chain.indexer })), options);

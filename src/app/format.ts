@@ -30,3 +30,6 @@ export function tokenAmount(amount: bigint, decimals: number): string {
   if (amount > 0n && value < 10 ** -digits) return `< ${nf(digits, digits).format(10 ** -digits)}`;
   return nf(0, digits).format(value);
 }
+
+/** Alamat/hash dipendekkan: `0x1234…abcd`. */
+export const shortAddress = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
