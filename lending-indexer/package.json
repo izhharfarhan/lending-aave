@@ -1,0 +1,33 @@
+{
+  "name": "lending-indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:fork": "node scripts/with-env.mjs .env.fork ponder dev --port 42070",
+    "dev:mainnet": "node scripts/with-env.mjs .env.mainnet ponder dev --port 42070",
+    "start-blocks:mainnet": "node --env-file=.env.mainnet scripts/start-blocks.mjs",
+    "codegen": "node scripts/with-env.mjs .env.fork ponder codegen",
+    "db:up": "docker compose up -d --wait",
+    "db:reset:fork": "docker compose exec -T postgres psql -U ponder -d postgres -c \"DROP DATABASE IF EXISTS lending_fork WITH (FORCE)\" -c \"CREATE DATABASE lending_fork\"",
+    "typecheck": "tsc",
+    "test": "node scripts/with-env.mjs .env.fork vitest run"
+  },
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@bgd-labs/aave-address-book": "4.44.22",
+    "hono": "^4.13.14",
+    "ponder": "0.18.2",
+    "viem": "~2.57.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

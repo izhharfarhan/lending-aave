@@ -1,0 +1,21 @@
+# Postgres untuk Ponder. Port host 5434: 5432 dipakai project lain, 5433 dipakai swap-indexer.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ponder
+      POSTGRES_PASSWORD: ponder
+      POSTGRES_DB: postgres
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Database fork & mainnet dipisah; cuma jalan waktu volume masih kosong.
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ponder"]
+      interval: 2s
+      retries: 15
+
+volumes:
+  pgdata:
