@@ -1,0 +1,459 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useCallback, useState, type ReactNode } from 'react';
+import type { Address } from 'viem';
+import { useAccount } from 'wagmi';
+
+import { useChainView } from '@/aave/useChainView';
+import { WHITELIST } from '@/config/assets';
+import { chainHref, chainName, supportedChain } from '@/config/chains';
+import {
+  isDustPosition,
+  visibleSupplyMarket,
+  type AccountView,
+  type ChainView,
+  type ReserveStatus,
+} from '@/core/chainPosition';
+import type { EModeView } from '@/core/eMode';
+import { panelAssets, type PanelTab } from '@/core/panel';
+import { liquidationPrice, type LiqPrice } from '@/core/simulate';
+import { E_MODE, PANEL, POSITION, SHEET, TABLE, TERMS } from '@/copy';
+import { ActionPanel } from './ActionPanel';
+import { pct, tokenAmount, usd } from './format';
+import { HealthFactor, RISK_BAR } from './HealthFactor';
+import { LiquidationText } from './LiquidationText';
+import { ActionBar, BottomSheet, useMobile } from './MobileSheet';
+import { ParameterDetails } from './ParameterDetails';
+import { RescuePanel } from './RescuePanel';
+import { Term } from './Term';
+import { ChainIcon } from './ChainIcon';
+import { TokenIcon } from './TokenIcon';
+
+const AAVE_APP_URL = 'https://app.aave.com/';
+// "APY" di tampilan awal ditulis "Bunga per tahun"; istilah aslinya di ⓘ (Q7, Q8).
+const APY_HEAD = <Term info={TERMS.apy}>{TABLE.apy}</Term>;
+
+/**
+ * Baris yang dibuka di panel: tab + aset. `asset` kosong = aset pertama tab itu (belum dipilih dari tabel). `rescue` =
+ * panel penyelamatan (Q29), dibuka dari "Lihat <chain>" di banner Bahaya.
+ */
+type Picked = { tab: PanelTab; asset?: Address } | { tab: 'rescue'; asset?: undefined };
+const initialPick = (rescue: boolean): Picked => ({ tab: rescue ? 'rescue' : 'supply' });
+
+// Detail chain terpilih (Q20, prototype): kepala HF + harga likuidasi + sisa batas pinjam, empat tabel datar, dan panel
+// aksi di kanan. Klik baris membuka tab yang sesuai: Pasar supply → Supply, Pasar pinjam → Borrow, Supply Anda →
+// Withdraw (switch jaminannya → mode jaminan), Utang Anda → Repay. ETH di semua tab lewat gateway. `rescue` = URL
+// berisi `panel=penyelamatan` (banner Bahaya): panel penyelamatan menggantikan panel aksi sampai user memilih. Di mobile
+// panel ada di bottom sheet layar penuh yang dibuka dari baris tabel atau bar Supply/Borrow di bawah layar (Q19).
+export function ChainDetail({ chainId, rescue }: { chainId: number; rescue: boolean }) {
+  const { data, isPending, isError, refetch } = useChainView(chainId);
+  const { isConnected } = useAccount();
+  const router = useRouter();
+  const [picked, setPicked] = useState<Picked>(() => initialPick(rescue));
+  const mobile = useMobile();
+  const [sheetOpen, setSheetOpen] = useState(rescue);
+  // Keluar dari panel penyelamatan: buang `panel=` dari URL supaya banner bisa membukanya lagi.
+  const leaveRescue = useCallback(() => {
+    if (rescue) router.replace(chainHref(supportedChain(chainId)), { scroll: false });
+  }, [rescue, router, chainId]);
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
+    leaveRescue();
+  }, [leaveRescue]);
+  // Banner diklik lagi saat chain ini sudah terbuka: komponen nggak dipasang ulang, jadi buka panelnya dari sini.
+  const [prevRescue, setPrevRescue] = useState(rescue);
+  if (rescue !== prevRescue) {
+    setPrevRescue(rescue);
+    if (rescue) {
+      setPicked(initialPick(true));
+      setSheetOpen(true);
+    }
+  }
+  const name = chainName(chainId);
+
+  if (isPending)
+    return (
+      <div aria-label={POSITION.loading} className="flex flex-col gap-3">
+        <span className="skeleton block h-7 w-48" />
+        <span className="skeleton block h-40 w-full" />
+      </div>
+    );
+  if (isError)
+    return (
+      <div role="alert" className="surface bg-danger-soft p-5 text-sm text-danger">
+        {POSITION.failed(name)} {isConnected && `${POSITION.notCounted} `}
+        <button type="button" className="link text-ink" onClick={() => refetch()}>
+          {POSITION.retry}
+        </button>
+      </div>
+    );
+
+  const { view } = data;
+  const choose = (tab: PanelTab, asset?: Address) => {
+    setPicked({ tab, asset });
+    if (mobile) setSheetOpen(true);
+    leaveRescue();
+  };
+  // Desktop: panel selalu ada di kanan (prototype); baris ditandai setelah user memilihnya dari tabel.
+  const pick = (tab: PanelTab) => (asset: Address) => choose(tab, asset);
+  const active = (tab: PanelTab) => (picked.tab === tab ? picked.asset : undefined);
+  const clickable = (tab: PanelTab) => new Set(panelAssets(view, tab).map((r) => r.asset));
+
+  // Tanpa utang (sudah lunas, atau URL dibuka tanpa posisi) nggak ada yang perlu diselamatkan.
+  const panel =
+    picked.tab === 'rescue' && view.account?.healthFactor != null ? (
+      <RescuePanel chainId={chainId} data={data} onChoose={choose} />
+    ) : (
+      <ActionPanel
+        chainId={chainId}
+        data={data}
+        tab={picked.tab === 'rescue' ? 'supply' : picked.tab}
+        asset={picked.asset}
+        onSelect={choose}
+        refetch={async () => {
+          const result = await refetch();
+          // Refetch gagal tetap mengembalikan data lama; izin basi bisa memicu approve dua kali.
+          if (result.isError || !result.data) throw result.error ?? new Error('Posisi gagal dibaca ulang');
+          return result.data;
+        }}
+      />
+    );
+
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <h2 className="display flex items-center gap-2.5 text-2xl font-normal">
+          <ChainIcon chainId={chainId} size={24} />
+          {name}
+        </h2>
+        {view.account && <AccountFacts account={view.account} liquidation={liquidationPrice(data.read, WHITELIST[chainId])} />}
+      </div>
+      {view.eMode && <EModeNote eMode={view.eMode} />}
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          {view.account && (
+            <PositionTables
+              chainId={chainId}
+              view={view}
+              activeSupply={active('withdraw') ?? active('collateral')}
+              activeDebt={active('repay')}
+              withdrawable={clickable('withdraw')}
+              togglable={clickable('collateral')}
+              onWithdraw={pick('withdraw')}
+              onToggle={pick('collateral')}
+              repayable={clickable('repay')}
+              onRepay={pick('repay')}
+            />
+          )}
+          <MarketTables
+            chainId={chainId}
+            view={view}
+            activeSupply={active('supply')}
+            activeBorrow={active('borrow')}
+            borrowable={clickable('borrow')}
+            onSupply={pick('supply')}
+            onBorrow={pick('borrow')}
+          />
+        </div>
+        {/* Satu panel untuk dua tata letak: kelas `max-md:` di BottomSheet yang menjadikannya sheet di mobile. */}
+        <BottomSheet open={sheetOpen} title={SHEET.title(name)} onClose={closeSheet} className="xl:sticky xl:top-6">
+          {panel}
+        </BottomSheet>
+      </div>
+      {/* Lebar penuh: sembilan kolom angka muat tanpa gulir di desktop. */}
+      <ParameterDetails chainId={chainId} chainName={name} read={data.read} whitelist={WHITELIST[chainId]} eModeLabel={view.eMode?.label ?? null} />
+      {/* Mobile saja (`md:hidden`). Tetap terpasang di bawah sheet yang menutupinya: fokus kembali ke tombolnya saat sheet
+          ditutup. */}
+      <ActionBar onOpen={(tab) => choose(tab)} />
+    </section>
+  );
+}
+
+// Read-only: E-Mode diaktifkan dan diubah di app.aave.com; app ini cuma menghitung dengan nilainya (V4). Label on-chain
+// kategori nggak di sini, cuma di "Detail parameter" (tiket 15).
+function EModeNote({ eMode }: { eMode: EModeView }) {
+  const names = (symbols: string[]) => (symbols.length > 0 ? symbols.join(', ') : E_MODE.none);
+  return (
+    <p className="-mt-2 flex flex-wrap items-center gap-x-2 text-sm text-muted">
+      <span className="badge badge-muted">{E_MODE.active}</span>
+      <span>· {E_MODE.collateral(names(eMode.collateral))}</span>
+      <span>· {E_MODE.borrowable(names(eMode.borrowable))}</span>
+      <span>
+        · {E_MODE.managed}{' '}
+        <a className="link" href={AAVE_APP_URL} target="_blank" rel="noreferrer">
+          {TABLE.aaveApp}
+        </a>
+      </span>
+    </p>
+  );
+}
+
+function AccountFacts({ account, liquidation }: { account: AccountView; liquidation: LiqPrice }) {
+  return (
+    <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+      <Fact label={POSITION.healthFactor} info={POSITION.hfInfo}>
+        <HealthFactor value={account.healthFactor} />
+        {isDustPosition(account) && <span className="ml-2 text-xs text-muted">{POSITION.dust}</span>}
+      </Fact>
+      {liquidation.kind !== 'noDebt' && (
+        <Fact label={POSITION.liquidation} info={POSITION.liquidationInfo}>
+          <LiquidationText liq={liquidation} current />
+        </Fact>
+      )}
+      <Fact label={POSITION.available}>
+        <span className="num">{usd(account.availableBorrowsUsd)}</span>
+      </Fact>
+      <Fact label={POSITION.collateral}>
+        <span className="num">{usd(account.totalCollateralUsd)}</span>
+      </Fact>
+      <Fact label={POSITION.debt}>
+        <span className="num">{usd(account.totalDebtUsd)}</span>
+      </Fact>
+      {account.borrowLimitUsed !== null && account.risk !== null && (
+        <Fact label={POSITION.used}>
+          <span className="flex items-center gap-2">
+            <span className="num">{Number.isFinite(account.borrowLimitUsed) ? pct(account.borrowLimitUsed, 0) : POSITION.overLimit}</span>
+            <span aria-hidden className="h-1 w-16 overflow-hidden rounded-full bg-line-strong">
+              <span
+                className={`block h-full ${RISK_BAR[account.risk]}`}
+                style={{ width: `${Math.min(account.borrowLimitUsed, 1) * 100}%` }}
+              />
+            </span>
+          </span>
+        </Fact>
+      )}
+    </dl>
+  );
+}
+
+function Fact({ label, info, children }: { label: string; info?: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <dt className="text-muted">{info ? <Term info={info}>{label}</Term> : label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+function PositionTables(props: {
+  chainId: number;
+  view: ChainView;
+  activeSupply: Address | undefined;
+  activeDebt: Address | undefined;
+  withdrawable: Set<Address>;
+  togglable: Set<Address>;
+  repayable: Set<Address>;
+  onWithdraw: (asset: Address) => void;
+  onToggle: (asset: Address) => void;
+  onRepay: (asset: Address) => void;
+}) {
+  const { view } = props;
+  return (
+    <div className="grid gap-4 2xl:grid-cols-2">
+      <FlatTable
+        chainId={props.chainId}
+        title={TABLE.supplies}
+        empty={TABLE.noSupplies}
+        rows={view.supplies.map((row) => ({
+          asset: row.asset,
+          symbol: row.symbol,
+          note: <AssetNote outside={row.outside} status={row.status} />,
+          active: row.asset === props.activeSupply,
+          onClick: props.withdrawable.has(row.asset) ? () => props.onWithdraw(row.asset) : undefined,
+          cells: [
+            <span key="apy" className="num">{pct(row.apy)}</span>,
+            <span key="amount" className="num">{tokenAmount(row.amount, row.decimals)}</span>,
+            props.togglable.has(row.asset) ? (
+              // Switch menunjukkan status sekarang; klik membuka panel penjelasan + HF sesudah, bukan langsung mengubah.
+              <button
+                key="collateral"
+                type="button"
+                role="switch"
+                aria-checked={row.collateral}
+                aria-label={PANEL.collateralTitle(row.symbol)}
+                className="switch align-middle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onToggle(row.asset);
+                }}
+              />
+            ) : (
+              <span key="collateral" className="text-xs text-muted">{row.collateral ? TABLE.collateralOn : TABLE.none}</span>
+            ),
+          ],
+        }))}
+        heads={[APY_HEAD, TABLE.balance, TABLE.collateral]}
+      />
+      <FlatTable
+        chainId={props.chainId}
+        title={TABLE.borrows}
+        empty={TABLE.noBorrows}
+        rows={view.borrows.map((row) => ({
+          asset: row.asset,
+          symbol: row.symbol,
+          note: <AssetNote outside={row.outside} status={row.status} />,
+          active: row.asset === props.activeDebt,
+          onClick: props.repayable.has(row.asset) ? () => props.onRepay(row.asset) : undefined,
+          cells: [
+            <span key="apy" className="num">{pct(row.apy)}</span>,
+            <span key="amount" className="num">{tokenAmount(row.amount, row.decimals)}</span>,
+          ],
+        }))}
+        heads={[APY_HEAD, TABLE.debt]}
+      />
+    </div>
+  );
+}
+
+function MarketTables(props: {
+  chainId: number;
+  view: ChainView;
+  activeSupply: Address | undefined;
+  activeBorrow: Address | undefined;
+  borrowable: Set<Address>;
+  onSupply: (asset: Address) => void;
+  onBorrow: (asset: Address) => void;
+}) {
+  const { view } = props;
+  const [showAll, setShowAll] = useState(false);
+  const connected = view.account !== null;
+
+  return (
+    <div className="grid gap-4 2xl:grid-cols-2">
+      <FlatTable
+        chainId={props.chainId}
+        title={TABLE.supplyMarket}
+        aside={
+          connected && (
+            <span className="flex items-center gap-2 text-xs text-muted">
+              {TABLE.showAll}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showAll}
+                aria-label={TABLE.showAllLabel}
+                className="switch"
+                onClick={() => setShowAll(!showAll)}
+              />
+            </span>
+          )
+        }
+        empty={connected ? TABLE.emptyWallet : TABLE.emptyMarket}
+        rows={visibleSupplyMarket(view.supplyMarket, showAll).map((row) => ({
+          asset: row.asset,
+          symbol: row.symbol,
+          // Kolom "Jaminan" disembunyikan di mobile; infonya pindah ke samping nama aset.
+          note: row.canBeCollateral && <span className="text-xs text-muted md:hidden">{TABLE.collateralNote}</span>,
+          active: row.asset === props.activeSupply,
+          onClick: () => props.onSupply(row.asset),
+          cells: [
+            <span key="apy" className="num">{pct(row.apy)}</span>,
+            <span key="wallet" className="num text-muted">
+              {row.walletBalance === null ? TABLE.none : tokenAmount(row.walletBalance, row.decimals)}
+            </span>,
+            <span key="collateral" className="text-xs text-muted">{row.canBeCollateral ? TABLE.collateralYes : TABLE.none}</span>,
+          ],
+        }))}
+        heads={[APY_HEAD, TABLE.wallet, TABLE.collateral]}
+        secondary={2}
+      />
+      <FlatTable
+        chainId={props.chainId}
+        title={TABLE.borrowMarket}
+        empty={TABLE.emptyMarket}
+        rows={view.borrowMarket.map((row) => ({
+          asset: row.asset,
+          symbol: row.symbol,
+          active: row.asset === props.activeBorrow,
+          onClick: props.borrowable.has(row.asset) ? () => props.onBorrow(row.asset) : undefined,
+          cells: [
+            <span key="apy" className="num">{pct(row.apy)}</span>,
+            <span key="borrowable" className="num text-muted">
+              {row.borrowable === null ? TABLE.none : tokenAmount(row.borrowable, row.decimals)}
+            </span>,
+          ],
+        }))}
+        heads={[APY_HEAD, TABLE.canBorrow]}
+      />
+    </div>
+  );
+}
+
+function AssetNote({ outside, status }: { outside: boolean; status: ReserveStatus }) {
+  return (
+    <>
+      {status !== 'aktif' && (
+        <>
+          <span className="badge badge-muted">{TABLE[status]}</span>
+          <span className="text-xs text-muted">{status === 'dijeda' ? TABLE.dijedaNote : TABLE.dibekukanNote}</span>
+        </>
+      )}
+      {outside && (
+        <span className="text-xs text-muted">
+          {TABLE.outside}{' '}
+          <a className="link" href={AAVE_APP_URL} target="_blank" rel="noreferrer">
+            {TABLE.aaveApp}
+          </a>
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Baris tanpa `onClick` belum punya aksi (bukan sekadar nonaktif): kursor biasa, nggak bisa difokus. */
+type Row = { asset: Address; symbol: string; note?: ReactNode; cells: ReactNode[]; active?: boolean; onClick?: () => void };
+
+/** `secondary` = indeks kolom (di `heads`/`cells`) yang disembunyikan di mobile supaya tabel ringkas. */
+function FlatTable({ chainId, title, aside, heads, secondary, rows, empty }: { chainId: number; title: string; aside?: ReactNode; heads: ReactNode[]; secondary?: number; rows: Row[]; empty: string }) {
+  const hide = (i: number) => (i === secondary ? 'max-md:hidden' : undefined);
+  return (
+    <div className="surface pt-4">
+      <div className="mb-3 flex items-center justify-between px-3">
+        <h3 className="font-medium">{title}</h3>
+        {aside}
+      </div>
+      {rows.length === 0 ? (
+        <p className="border-t border-line px-3 py-4 text-sm text-muted">{empty}</p>
+      ) : (
+        <table className="table-flat w-full text-sm">
+          <thead>
+            <tr>
+              <th>{TABLE.asset}</th>
+              {heads.map((head, i) => (
+                <th key={i} className={hide(i)}>
+                  {head}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.asset}
+                data-active={row.active ?? false}
+                className={row.onClick ? '' : '!cursor-default'}
+                onClick={row.onClick}
+                tabIndex={row.onClick ? 0 : undefined}
+                onKeyDown={row.onClick ? (e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), row.onClick?.()) : undefined}
+              >
+                <td>
+                  <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <TokenIcon chainId={chainId} asset={row.asset} symbol={row.symbol} />
+                    <span className="font-medium">{row.symbol}</span>
+                    {row.note}
+                  </span>
+                </td>
+                {row.cells.map((cell, i) => (
+                  <td key={i} className={hide(i)}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}

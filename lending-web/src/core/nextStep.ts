@@ -1,0 +1,240 @@
+import { maxUint256 } from 'viem';
+
+import type { Capacity } from './capacity';
+import { ambiguousAmount } from './parseAmountInput';
+import type { Gate, RepayPlan, WithdrawPlan } from './simulate';
+
+/**
+ * Langkah yang dikirim ke wallet. `approve` = ERC20 ke Pool, atau aWETH ke gateway (withdraw ETH); `delegate` = izin
+ * gateway berutang atas nama user (`approveDelegation`, borrow ETH).
+ */
+export type WalletStepName = 'resetApproval' | 'approve' | 'delegate' | 'supply' | 'withdraw' | 'borrow' | 'repay' | 'setCollateral';
+
+/** Hasil simulasi + konfirmasi user untuk aksi yang bisa memperburuk posisi (borrow, withdraw, mematikan jaminan). */
+type RiskInput = {
+  /** Tingkat konfirmasi #9 dari simulasi aksi ini. */
+  gate: Gate;
+  /** Aturan ltv0 kontrak menolak aksi ini (lihat `Simulation.ltvZero`). */
+  ltvZero: boolean;
+  /** Pernyataan risiko dicentang (cuma berlaku untuk tier `check`). */
+  riskChecked: boolean;
+  /** "confirm" sudah diketik (cuma berlaku untuk tier `type`). */
+  riskTyped: boolean;
+};
+
+/** Bagian masukan yang khusus per tab aksi. */
+export type ActionInput =
+  | { action: 'supply' }
+  | ({
+      action: 'borrow';
+      /** Ada jaminan di chain ini. */
+      hasCollateral: boolean;
+    } & RiskInput)
+  /** `plan` = `repayPlan` untuk jumlah yang diisi; `null` kalau jumlah kosong. */
+  | { action: 'repay'; plan: RepayPlan | null }
+  /** `plan` = `withdrawPlan` untuk jumlah yang diisi; `NextStepInput.balance` diisi saldo supply. */
+  | ({ action: 'withdraw'; plan: WithdrawPlan | null } & RiskInput)
+  /** Toggle jaminan: tanpa jumlah. `canEnable` = LTV aset ≠ 0 (kontrak menolak menyalakan aset ber-LTV 0). */
+  | ({ action: 'collateral'; enable: boolean; canEnable: boolean } & RiskInput);
+
+export type NextStepInput = {
+  connected: boolean;
+  /** Pengaman fork (tiket 01) belum aman: semua aksi transaksi dikunci. */
+  txLocked: boolean;
+  /** Data posisi chain ini. */
+  data: 'loading' | 'error' | 'ready';
+  txRunning: boolean;
+  /** Reserve aset ini Dijeda: semua aksi nonaktif sementara (spec 50). */
+  paused: boolean;
+  /** `null` = input kosong atau bukan jumlah yang valid. */
+  amount: bigint | null;
+  /** Teks input jumlah apa adanya, untuk cek ambigu ribuan/desimal. `undefined` = aksi tanpa jumlah (toggle jaminan). */
+  amountText?: string;
+  action: ActionInput;
+  /** Saldo aset di wallet (supply/repay), atau saldo supply (withdraw). */
+  balance: bigint;
+  /**
+   * Izin on-chain untuk aksi ini, dibaca di blok yang sama dengan saldo: ERC20 `allowance(user, Pool)`; withdraw ETH
+   * `aWETH.allowance(user, gateway)`; borrow ETH `borrowAllowance(user, gateway)`. Supply/repay ETH nggak memakainya.
+   */
+  allowance: bigint;
+  /** Default exact; unlimited hanya kalau user memilih (#8, pola Q7 swap). */
+  approvalMode: 'exact' | 'unlimited';
+  /** Token yang menolak approve dari izin ≠ 0 ke nilai ≠ 0 (USDT Ethereum). */
+  requiresApprovalReset: boolean;
+  /**
+   * ETH lewat WrappedTokenGateway: supply/repay dikirim sebagai `value` tanpa approve (`balance` = saldo ETH); withdraw
+   * butuh izin aWETH ke gateway, borrow butuh credit delegation ke gateway.
+   */
+  native: boolean;
+  /** Saldo ETH wallet di chain ini, yang membayar biaya jaringan. */
+  ethBalance: bigint;
+  /**
+   * Biaya jaringan semua transaksi yang tersisa (izin + aksi utama), wei. `null` = belum diketahui (belum ada jumlah,
+   * sedang dimuat, atau estimasi gagal): cek dilewati, kecuali ETH 0 (pola Q19 swap).
+   */
+  networkFee: bigint | null;
+  /** Sisa kapasitas pool reserve ini (Q27): supply cap, borrow cap, likuiditas. */
+  capacity: Capacity;
+  /** Chain terpilih (`?chain=`, Q5). */
+  chainId: number;
+  /** Network wallet saat ini; `undefined` = network yang nggak dikenal app. */
+  walletChainId: number | undefined;
+};
+
+export type NextStep =
+  | { step: 'connect' }
+  | { step: 'loading' }
+  | { step: 'loadFailed' }
+  | { step: 'locked' }
+  | { step: 'busy' }
+  | { step: 'paused' }
+  | { step: 'enterAmount' }
+  /** "1.000" terbaca 1 tapi bisa dimaksud seribu: tombol dikunci sampai ditulis ulang (lihat `ambiguousAmount`). */
+  | { step: 'ambiguousAmount' }
+  /**
+   * ETH kurang untuk biaya jaringan (supply/repay ETH: jumlah + biaya). `needed` = perkiraan total ETH yang dibutuhkan,
+   * `null` kalau biayanya belum diketahui (cuma mungkin di ETH 0).
+   */
+  | { step: 'needsEthForGas'; needed: bigint | null }
+  /** Borrow tanpa jaminan: "Supply jaminan dulu" membuka tab Supply (Q11). */
+  | { step: 'needCollateral' }
+  /** Melewati batas LTV: "Melebihi batas pinjam" / "Jaminan ini masih dibutuhkan". */
+  | { step: 'overLtv' }
+  /** Aturan ltv0: jaminan ber-LTV 0 harus ditarik/dimatikan dulu. */
+  | { step: 'ltvZero' }
+  /** Menyalakan jaminan aset ber-LTV 0. */
+  | { step: 'cannotBeCollateral' }
+  | { step: 'insufficientBalance' }
+  /** Melewati kapasitas pool (Q27): "Kuota supply/pinjaman aset ini penuh" / "Likuiditas pool tidak cukup, tersedia X". */
+  | { step: 'overCapacity'; limit: keyof Capacity; available: bigint }
+  | { step: 'confirmRisk'; gate: 'check' | 'type' }
+  /** Wallet di network lain: "Ganti ke <chain>" (`switchChain`, bisa ditolak) sebelum langkah wallet pertama. */
+  | { step: 'switchChain'; chainId: number }
+  /** `approve(Pool, 0)` dulu: approve langsung bakal revert selama izin lama ≠ 0. */
+  | { step: 'resetApproval' }
+  | { step: 'approve'; amount: bigint }
+  /** `approveDelegation(gateway, amount)` di variableDebtWETH: gateway boleh berutang ETH atas nama user. */
+  | { step: 'delegate'; amount: bigint }
+  | { step: 'supply' }
+  | { step: 'withdraw' }
+  | { step: 'borrow' }
+  | { step: 'repay' }
+  | { step: 'setCollateral' };
+
+const WALLET_STEP_NAMES: ReadonlySet<NextStep['step']> = new Set<WalletStepName>([
+  'resetApproval',
+  'approve',
+  'delegate',
+  'supply',
+  'withdraw',
+  'borrow',
+  'repay',
+  'setCollateral',
+]);
+/** Langkah yang dikirim ke wallet (bukan tombol yang cuma mengunci / mengarahkan). */
+export const isWalletStep = (step: NextStep): step is Extract<NextStep, { step: WalletStepName }> => WALLET_STEP_NAMES.has(step.step);
+
+// Tombol utama dan langkah wallet berikutnya, dihitung dari state on-chain, bukan dari "langkah ke berapa" yang
+// diingat UI (pola swap-web Q6). Urutan prioritas: spec "nextStep". Error wallet terakhir ditampilkan panel lewat
+// status tx, jadi nggak ikut di sini.
+export function nextStep(input: NextStepInput): NextStep {
+  const step = stepOnSelectedChain(input);
+  // Q5/spec #12: ganti network baru diminta tepat sebelum permintaan wallet pertama, sesudah semua cek lain lolos.
+  if (isWalletStep(step) && input.walletChainId !== input.chainId) return { step: 'switchChain', chainId: input.chainId };
+  return step;
+}
+
+function stepOnSelectedChain(input: NextStepInput): NextStep {
+  if (!input.connected) return { step: 'connect' };
+  if (input.data === 'loading') return { step: 'loading' };
+  if (input.data === 'error') return { step: 'loadFailed' };
+  if (input.txRunning) return { step: 'busy' };
+  if (input.paused) return { step: 'paused' };
+  if (input.txLocked) return { step: 'locked' };
+  // Sebelum langkah lain: tiap transaksi (termasuk izin) dibayar dari saldo ETH.
+  // ETH 0 pasti kurang walau biayanya belum diketahui (spec 85: tetap tampilkan perkiraannya kalau sudah ada).
+  if (input.ethBalance === 0n || (input.networkFee !== null && input.ethBalance < input.networkFee)) {
+    return { step: 'needsEthForGas', needed: input.networkFee };
+  }
+
+  const { action } = input;
+  if (action.action === 'borrow' && !action.hasCollateral) return { step: 'needCollateral' };
+  if (action.action === 'collateral') {
+    if (action.enable && !action.canEnable) return { step: 'cannotBeCollateral' };
+    return riskStep(action) ?? { step: 'setCollateral' };
+  }
+  const { amount, allowance } = input;
+  if (amount === null) return { step: 'enterAmount' };
+  if (input.amountText !== undefined && ambiguousAmount(input.amountText)) return { step: 'ambiguousAmount' };
+
+  if (action.action === 'borrow') {
+    const blocked = lockStep(action) ?? capacityStep(input.capacity, amount, ['borrowCap', 'liquidity']) ?? confirmStep(action);
+    if (blocked) return blocked;
+    // Delegation selalu exact, abaikan approvalMode: delegation terbuka = pihak lain bisa berutang atas nama user.
+    if (input.native && allowance < amount) return { step: 'delegate', amount };
+    return { step: 'borrow' };
+  }
+  if (action.action === 'withdraw') {
+    // Withdraw semua: yang ditarik dari pool = seluruh saldo supply.
+    const blocked = lockStep(action) ?? capacityStep(input.capacity, action.plan?.all ? input.balance : amount, ['liquidity']);
+    if (blocked) return blocked;
+    if (amount > input.balance && !action.plan?.all) return { step: 'insufficientBalance' };
+    const confirm = confirmStep(action);
+    if (confirm) return confirm;
+    // Withdraw semua ETH: izin aWETH berbantalan, karena gateway menarik saldo aWETH saat tx dieksekusi (V2, #8).
+    const plan = action.plan;
+    if (input.native && allowance < (plan ? plan.required : amount)) {
+      return { step: 'approve', amount: permitAmount(input, plan ? plan.spend : amount) };
+    }
+    return { step: 'withdraw' };
+  }
+
+  // Yang keluar dari wallet: repay lunas penuh = utang + bantalan bunga, selain itu jumlah yang diisi.
+  const plan = action.action === 'repay' ? action.plan : null;
+  const spend = plan ? plan.spend : amount;
+  if (action.action === 'supply') {
+    const full = capacityStep(input.capacity, amount, ['supplyCap']);
+    if (full) return full;
+  }
+  // Sebelum approve: approve cuma buang gas kalau transaksinya nggak mungkin jalan.
+  if (spend > input.balance) return { step: 'insufficientBalance' };
+  // Supply/repay ETH: jumlah yang dikirim dan biaya jaringan diambil dari saldo ETH yang sama.
+  if (input.native && input.networkFee !== null && spend + input.networkFee > input.ethBalance) {
+    return { step: 'needsEthForGas', needed: spend + input.networkFee };
+  }
+
+  if (!input.native && allowance < (plan ? plan.required : amount)) {
+    if (input.requiresApprovalReset && allowance > 0n) return { step: 'resetApproval' };
+    return { step: 'approve', amount: permitAmount(input, spend) };
+  }
+  return { step: action.action };
+}
+
+// Exact = yang dibutuhkan aksi ini; unlimited hanya kalau user memilih (#8). Berlaku juga untuk aWETH dan delegation.
+const permitAmount = (input: NextStepInput, exact: bigint) => (input.approvalMode === 'unlimited' ? maxUint256 : exact);
+
+// Urutan spec: kunci (melewati batas LTV, aturan ltv0) sebelum saldo, konfirmasi risiko sesudahnya.
+function lockStep(risk: RiskInput): NextStep | null {
+  if (risk.ltvZero) return { step: 'ltvZero' };
+  if (risk.gate === 'locked') return { step: 'overLtv' };
+  return null;
+}
+
+// Konfirmasi terikat pada tier-nya: centang untuk `check` nggak meloloskan `type` kalau tier naik (refetch / oracle).
+function confirmStep(risk: RiskInput): NextStep | null {
+  if (risk.gate === 'check' && !risk.riskChecked) return { step: 'confirmRisk', gate: 'check' };
+  if (risk.gate === 'type' && !risk.riskTyped) return { step: 'confirmRisk', gate: 'type' };
+  return null;
+}
+
+const riskStep = (risk: RiskInput) => lockStep(risk) ?? confirmStep(risk);
+
+// Q27: batas yang relevan untuk aksi ini, urut; `null` di Capacity = tanpa cap.
+function capacityStep(capacity: Capacity, amount: bigint, limits: Extract<NextStep, { step: 'overCapacity' }>['limit'][]): NextStep | null {
+  for (const limit of limits) {
+    const available = capacity[limit];
+    if (available !== null && amount > available) return { step: 'overCapacity', limit, available };
+  }
+  return null;
+}
