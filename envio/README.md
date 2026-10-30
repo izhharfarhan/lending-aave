@@ -140,6 +140,24 @@ HyperIndex timing split: logs come from HyperSync; the only RPC work is the 78
 liquidations of the slice. The port limits that effect to 4 liquidations per
 second per chain because unthrottled bursts made the free endpoints fail.
 
+### Full v3.7 history
+
+All three chains from the upgrade blocks to head (Ethereum 26,305,052, Base
+53,283,852, Arbitrum 519,653,316 on 2026-10-30; 154 days), empty database:
+**46 min 29 s** from "Starting indexing" to "Ready" (09:57:55 to 10:44:24 UTC),
+with the same free public RPCs, 4,363 RPC retries and no failed request. It
+wrote 2,629,989 `PositionEvent` rows (Ethereum 718,911, Base 1,233,105,
+Arbitrum 677,973), 6,866 `Liquidation` rows (the same count as `LiquidationCall`
+logs seen in HyperSync), 2,497,851 `TxSlot` and 76,256 `GatewayTransfer` rows,
+in a 3.0 GB database.
+
+Almost all of that time is the free RPC, not the indexer: handlers waited
+2,736 s on the liquidation reads (`envio_preload_seconds`), against 34 s of
+handler processing, 14 s stalled on HyperSync and 2 s on database writes. With a
+dedicated archive RPC the run should be much shorter. This run was not compared
+row by row with Ponder (Ponder could not reach this range); it was checked
+against HyperSync counts only.
+
 ## Parity
 
 Compared with the Ponder run above, row by row and field by field, up to the
