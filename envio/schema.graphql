@@ -1,0 +1,85 @@
+# HyperIndex port of lending-indexer/ponder.schema.ts. Same tables, columns and ids.
+# Differences from the Ponder schema (see README.md):
+#   - entities are PascalCase (HyperIndex uses the entity name as the table name)
+#   - Ponder's composite primary key (chainId, txHash, logIndex) becomes the pair (id, chainId)
+#     with id = "<txHash>-<logIndex>"; chainId is a reserved column filled by HyperIndex
+#   - hex columns are text, as in Ponder's hex type (lowercase 0x strings)
+
+enum PositionEventKind {
+  supply
+  withdraw
+  borrow
+  repay
+  collateral
+  liquidation
+}
+
+# One row per history line, all chains in one table. Raw bigint amounts.
+type PositionEvent @index(fields: ["owner", "timestamp"]) {
+  id: ID! # "<txHash>-<logIndex>"
+  txHash: String!
+  # Log of the action event (or of the collateral event for collateral rows).
+  logIndex: Int!
+  kind: PositionEventKind!
+  # Position owner from the event fields, not txFrom.
+  owner: String!
+  # Pool caller, e.g. WrappedTokenGateway for ETH.
+  caller: String!
+  txFrom: String!
+  reserve: String!
+  # Null only on collateral rows.
+  amount: BigInt
+  # Collateral flag changed by this row: on an action row the merged automatic event, on a collateral row the manual toggle direction. Null = unchanged.
+  collateralEnabled: Boolean
+  # Block timestamp, seconds.
+  timestamp: BigInt!
+  blockNumber: BigInt!
+}
+
+# Detail of a `liquidation` history row; same id as its PositionEvent row.
+type Liquidation @index(fields: ["owner", "timestamp"]) {
+  id: ID! # "<txHash>-<logIndex>"
+  txHash: String!
+  logIndex: Int!
+  owner: String!
+  liquidator: String!
+  collateralAsset: String!
+  debtAsset: String!
+  # Debt actually repaid (actualDebtToLiquidate).
+  debtToCover: BigInt!
+  # Collateral received by the liquidator only.
+  liquidatedCollateralAmount: BigInt!
+  # Collateral aToken Transfer user -> treasury in the same tx.
+  protocolFee: BigInt!
+  receiveAToken: Boolean!
+  # Applied bonus in basis points (10500 = 105%).
+  liquidationBonus: Int!
+  bonusFromEMode: Boolean!
+  eModeCategory: Int!
+  penalty: BigInt!
+  # AaveOracle price of the collateral at the liquidation block (USD, 8 decimals).
+  collateralPrice: BigInt!
+  # getUserAccountData health factor at block - 1 (1e18 = 1.0). Null = unavailable.
+  healthFactorBefore: BigInt
+  # Variable debt token balance of the user in the debt reserve at the liquidation block.
+  debtRemaining: BigInt!
+  deficitAssets: [String!]!
+  deficitAmounts: [BigInt!]!
+  timestamp: BigInt!
+}
+
+# Helper for merging collateral events (src/lib/collateralMerge.ts): last row in a tx for (reserve, owner).
+type TxSlot {
+  id: ID! # "<txHash>-<reserve>-<owner>"
+  txHash: String!
+  reserve: String!
+  owner: String!
+  logIndex: Int!
+}
+
+# aWETH Transfer to the WETH gateway: owner of an ETH withdraw, paired with Withdraw(user = gateway) in the same tx.
+type GatewayTransfer {
+  id: ID! # "<txHash>"
+  txHash: String!
+  from: String!
+}
